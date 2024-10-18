@@ -4,7 +4,7 @@ from ember_json.value import Null
 from testing import *
 
 def test_object():
-    var s = '{"thing": 123}'
+    var s = '{"thing":123}'
     var ob = Object.from_string(s)
     assert_true("thing" in ob)
     assert_equal(ob["thing"].int(), 123)
@@ -42,7 +42,7 @@ def test_multiple_keys():
     assert_true("k2" in ob)
     assert_equal(ob["k1"].int(), 123)
     assert_equal(ob["k2"].int(), 456)
-    assert_equal(str(ob), '{"k1": 123, "k2": 456}')
+    assert_equal(str(ob), '{"k1":123,"k2":456}')
 
 def test_invalid_key():
     var s = '{key: 123}'

@@ -10,7 +10,7 @@ def test_array():
     assert_equal(arr[0].get[Int](), 1)
     assert_equal(arr[1].get[Int](), 2)
     assert_equal(arr[2].get[String](), "foo")
-    assert_equal(str(arr), '[1, 2, "foo"]')
+    assert_equal(str(arr), '[1,2,"foo"]')
 
 def test_array_no_space():
     var s = '[1,2,"foo"]'

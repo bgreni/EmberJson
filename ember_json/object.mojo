@@ -52,9 +52,9 @@ struct Object(EqualityComparableCollectionElement, Sized, Formattable, Stringabl
         var done = 0
         for k in self._data:
             try:
-                writer.write('"', k[], '"', ": ", self._data[k[]])
+                writer.write('"', k[], '"', ":", self._data[k[]])
                 if done < len(self._data) - 1:
-                    writer.write(", ")
+                    writer.write(",")
                 done += 1
             except:
                 # Can't happen

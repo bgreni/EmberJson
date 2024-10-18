@@ -51,7 +51,7 @@ struct Array(EqualityComparableCollectionElement, Sized, Formattable, Stringable
         for i in range(len(self._data)):
             writer.write(self._data[i])
             if i != len(self._data) - 1:
-                writer.write(", ")
+                writer.write(",")
         writer.write("]")
 
     @always_inline
