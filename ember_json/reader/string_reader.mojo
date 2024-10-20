@@ -3,6 +3,7 @@ from ..constants import *
 from sys.intrinsics import likely
 from ..utils import *
 
+
 struct Reader:
     var _data: Bytes
     var _index: Int
@@ -46,6 +47,7 @@ struct Reader:
     @always_inline
     fn read_word(inout self) -> Span[Byte, __origin_of(self._data)]:
         var end_chars = ByteVec[4](COMMA, RCURLY, RBRACKET)
+
         @always_inline
         @parameter
         fn func(c: Byte) -> Bool:

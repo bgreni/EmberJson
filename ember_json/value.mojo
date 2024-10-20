@@ -30,6 +30,7 @@ struct Null(JsonValue):
     fn write_to[W: Writer](self, inout writer: W):
         writer.write(self.__str__())
 
+
 @always_inline
 fn validate_string[origin: MutableOrigin](b: Span[Byte, origin]) raises:
     alias SOL = to_byte("/")
@@ -81,6 +82,7 @@ var NULL = SIMD[DType.uint8, 4](to_byte("n"), to_byte("u"), to_byte("l"), to_byt
 fn is_numerical_component(char: Byte) -> Bool:
     var componenents = ByteVec[8](DOT, LOW_E, UPPER_E, PLUS, NEG)
     return isdigit(char) or char in componenents
+
 
 @always_inline
 fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
@@ -208,9 +210,9 @@ struct Value(JsonValue):
         elif self.isa[Float64]():
             self.float().write_to(writer)
         elif self.isa[String]():
-            ('"').write_to(writer)    
+            ('"').write_to(writer)
             self.string().write_to(writer)
-            ('"').write_to(writer)    
+            ('"').write_to(writer)
         elif self.isa[Bool]():
             var b = self.bool()
             ("true").write_to(writer) if b else ("false").write_to(writer)
@@ -227,7 +229,7 @@ struct Value(JsonValue):
         elif self.isa[Float64]():
             return _calc_initial_buffer_size(self.float()) - 1
         elif self.isa[String]():
-            return len(self.string()) + 2 # include the surrounding quotes
+            return len(self.string()) + 2  # include the surrounding quotes
         elif self.isa[Bool]():
             return 4 if self.bool() else 5
         elif self.isa[Null]():
@@ -238,7 +240,6 @@ struct Value(JsonValue):
             return self.array().bytes_for_string()
 
         return 0
-
 
     @always_inline
     fn __str__(self) -> String:

@@ -12,9 +12,6 @@ from .utils import StringBuilder
 struct JSON(JsonValue, Sized):
     """Top level JSON object, can either be an Array, or an Object.
 
-    Overloads __getitem__ with both the expected array and dict style syntax, but
-    raises if you choose the wrong option at runtime.
-
     ```mojo
     # Docstring code doesn't seem to execute properly
     # from ember_json import JSON
@@ -31,6 +28,7 @@ struct JSON(JsonValue, Sized):
     #     pass
     ```
     """
+
     alias Type = Variant[Object, Array]
     var _data: Self.Type
 

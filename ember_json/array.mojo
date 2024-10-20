@@ -6,6 +6,7 @@ from .constants import *
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue
 
+
 @value
 struct Array(Sized, JsonValue):
     alias Type = List[Value]
@@ -84,7 +85,7 @@ struct Array(Sized, JsonValue):
         reader.skip_whitespace()
         while likely(reader.peek() != RBRACKET):
             out.append(Value._from_reader(reader))
-            var has_comma = False 
+            var has_comma = False
             if reader.peek() == COMMA:
                 has_comma = True
                 reader.inc()
