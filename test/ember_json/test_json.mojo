@@ -3,7 +3,7 @@ from testing import *
 
 def test_json_object():
     var s = '{"key": 123}'
-    var json = JSON.from_string(s)
+    var json = JSON.from_string_raises(s)
     assert_true(json.is_object())
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json["key"].int(), 123)
@@ -17,7 +17,7 @@ def test_json_object():
 
 def test_json_array():
     var s = '[123, 345]'
-    var json = JSON.from_string(s)
+    var json = JSON.from_string_raises(s)
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
@@ -30,11 +30,17 @@ def test_json_array():
     with assert_raises():
         _ = json["key"]
 
+    json = JSON.from_string_raises("[1, 2, 3]")
+    assert_true(json.is_array())
+    assert_equal(json[0], 1)
+    assert_equal(json[1], 2)
+    assert_equal(json[2], 3)
+
 def test_equality():
 
-    var ob = JSON.from_string('{"key": 123}')
-    var ob2 = JSON.from_string('{"key": 123}')
-    var arr = JSON.from_string('[123, 345]')
+    var ob = JSON.from_string_raises('{"key": 123}')
+    var ob2 = JSON.from_string_raises('{"key": 123}')
+    var arr = JSON.from_string_raises('[123, 345]')
 
     assert_equal(ob, ob2)
     ob["key"] = 456
@@ -53,17 +59,28 @@ def test_setter_array():
     assert_true(arr[0].isa[Null]())
     assert_equal(arr[1], "foo")
 
+def test_stringify_array():
+    var arr = JSON.from_string_raises('[123,"foo",false,null]')
+    assert_equal(str(arr), '[123,"foo",false,null]')
+
+def test_trailing_tokens():
+    with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):
+        _ = JSON.from_string_raises('[1, null, false] garbage tokens')
+
+    with assert_raises(contains='Invalid json, expected end of input, recieved: "trailing string"'):
+        _ = JSON.from_string_raises('{"key": null} "trailing string"')
+
 
 var dir = String("./bench_data/data/jsonchecker/")
 
 def expect_fail(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
         with assert_raises():
-            _ = JSON.from_string(f.read())
+            _ = JSON.from_string_raises(f.read())
 
 def expect_pass(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
-        _ = JSON.from_string(f.read())
+        _ = JSON.from_string_raises(f.read())
 
 def test_fail02():
     expect_fail("fail02")
@@ -167,7 +184,7 @@ def round_trip_test(filename: String):
     var d = String("./bench_data/data/roundtrip/")
     with open(d + filename + ".json", "r") as f:
         var src = f.read()
-        var json = JSON.from_string(src)
+        var json = JSON.from_string_raises(src)
         assert_equal(src, str(json))
 
 def test_roundtrip01():
@@ -233,15 +250,20 @@ def test_roundtrip20():
 def test_roundtrip21():
     round_trip_test("roundtrip21")
 
-# TODO: Mojo currently doesn't format floats in scientific notation/can't 
-#       arbitrary precision floats
-
+# TODO: Mojo currently doesn't format floats in scientific notation
 # def test_roundtrip22():
 #     round_trip_test("roundtrip22")
 
 # def test_roundtrip23():
 #     round_trip_test("roundtrip23")
 
+
+# TODO: Makes '0.0'??
+# def test_roundtrip27():
+#     round_trip_test("roundtrip27")
+
+
+# TODO: too big so atof returns 'inf'
 # def test_roundtrip24():
 #     round_trip_test("roundtrip24")
 
@@ -250,6 +272,3 @@ def test_roundtrip21():
 
 # def test_roundtrip26():
 #     round_trip_test("roundtrip26")
-
-# def test_roundtrip27():
-#     round_trip_test("roundtrip27")

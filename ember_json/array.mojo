@@ -1,12 +1,13 @@
 from .object import Object
 from .value import Value
 from .reader import Reader
+from .utils import *
 from .constants import *
 from sys.intrinsics import unlikely, likely
-
+from .traits import JsonValue
 
 @value
-struct Array(EqualityComparableCollectionElement, Sized, Formattable, Stringable, Representable):
+struct Array(Sized, JsonValue):
     alias Type = List[Value]
     var _data: Self.Type
 
@@ -46,7 +47,7 @@ struct Array(EqualityComparableCollectionElement, Sized, Formattable, Stringable
     fn __ne__(self, other: Self) -> Bool:
         return self._data != other._data
 
-    fn format_to(self, inout writer: Formatter):
+    fn write_to[W: Writer](self, inout writer: W):
         writer.write("[")
         for i in range(len(self._data)):
             writer.write(self._data[i])
@@ -56,7 +57,7 @@ struct Array(EqualityComparableCollectionElement, Sized, Formattable, Stringable
 
     @always_inline
     fn __str__(self) -> String:
-        return String.format_sequence(self)
+        return String.write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -65,6 +66,14 @@ struct Array(EqualityComparableCollectionElement, Sized, Formattable, Stringable
     @always_inline
     fn append(inout self, owned item: Value):
         self._data.append(item^)
+
+    fn bytes_for_string(self) -> Int:
+        var n = 2
+        for item in self._data:
+            n += item[].bytes_for_string() + 1
+        n -= 1
+
+        return n
 
     @staticmethod
     fn _from_reader(inout reader: Reader) raises -> Array:
@@ -84,6 +93,6 @@ struct Array(EqualityComparableCollectionElement, Sized, Formattable, Stringable
         return out^
 
     @staticmethod
-    fn from_string(owned input: String) raises -> Array:
+    fn from_string_raises(owned input: String) raises -> Array:
         var r = Reader(input^)
         return Self._from_reader(r)

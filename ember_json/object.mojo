@@ -1,17 +1,26 @@
-from .reader import Reader, bytes_to_string
+from .reader import Reader
 from .value import Value, Null
 from collections import Dict
 from .constants import *
+from .utils import *
 from sys.intrinsics import unlikely, likely
+from .traits import JsonValue
 
 
 @value
-struct Object(EqualityComparableCollectionElement, Sized, Formattable, Stringable, Representable):
+struct Object(Sized, JsonValue):
     alias Type = Dict[String, Value]
     var _data: Self.Type
 
     fn __init__(inout self):
         self._data = Self.Type()
+
+    fn bytes_for_string(self) -> Int:
+        var n = 2 + len(self) # include ':' for each pairing
+        for k in self._data:
+            n += 3 + len(k[]) + self._data.get(k[]).value().bytes_for_string()
+        n -= 1
+        return n
 
     @always_inline
     fn __setitem__(inout self, owned key: String, owned item: Value):
@@ -47,7 +56,7 @@ struct Object(EqualityComparableCollectionElement, Sized, Formattable, Stringabl
     fn __ne__(self, other: Self) -> Bool:
         return not self == other
 
-    fn format_to(self, inout writer: Formatter):
+    fn write_to[W: Writer](self, inout writer: W):
         writer.write("{")
         var done = 0
         for k in self._data:
@@ -64,7 +73,7 @@ struct Object(EqualityComparableCollectionElement, Sized, Formattable, Stringabl
 
     @always_inline
     fn __str__(self) -> String:
-        return String.format_sequence(self)
+        return String.write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -98,6 +107,6 @@ struct Object(EqualityComparableCollectionElement, Sized, Formattable, Stringabl
         return out^
 
     @staticmethod
-    fn from_string(owned s: String) raises -> Object:
+    fn from_string_raises(owned s: String) raises -> Object:
         var r = Reader(s^)
         return Self._from_reader(r)

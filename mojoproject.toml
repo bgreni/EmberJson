@@ -3,7 +3,7 @@ authors = ["Brian Grenier <grenierb96@gmail.com>"]
 channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 description = "A json library for Mojo"
 name = "EmberJson"
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 version = "0.1.0"
 license = "MIT"
 license-file = "LICENSE"
@@ -14,8 +14,10 @@ repository = "https://github.com/bgreni/EmberJson"
 build = { cmd = "bash scripts/build.sh", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"} }
 template = { cmd = "magic run python3 scripts/templater.py" }
 format = { cmd = "magic run mojo format -l 120 ember_json" }
-test = { cmd = "magic run mojo test" }
+test = { cmd = "magic run clean &> /dev/null ; magic run mojo test" }
 bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
+publish = { cmd = "bash scripts/publish.sh" }
+clean = { cmd = "rm -r output" }
 
 [dependencies]
 max = ">=24.6.0.dev2024101605, <=25"

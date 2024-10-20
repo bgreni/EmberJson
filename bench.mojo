@@ -1,87 +1,72 @@
 from ember_json import *
 from benchmark import *
 
-fn main() raises:
-    var config = BenchConfig()
-    config.verbose_timing = True
-    config.tabular_view = True
-    var m = Bench(config)
-    m.bench_function[benchmark_json_parse_small](BenchId("JsonParseSmall"))
-    m.bench_function[benchmark_json_array_medium](BenchId("JsonArrayMedium"))
-    m.bench_function[benchmark_json_array_large](BenchId("JsonArrayLarge"))
-    m.bench_function[benchmark_json_array_extra_large](BenchId("JsonArrayExtraLarge"))
-    m.bench_function[benchmark_json_big_big_big](BenchId("JsonArrayVeryBig"))
-    m.bench_function[benchmark_json_parse_big3](BenchId("JsonBig3"))
-    m.dump_report()
-
-
-@parameter
-fn benchmark_json_parse_small(inout b: Bencher) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = JSON.from_string(small_data)
-    b.iter[do]()
-
-@parameter
-fn benchmark_json_array_medium(inout b: Bencher) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = JSON.from_string(medium_array)
-    b.iter[do]()
-    
-@parameter
-fn benchmark_json_array_large(inout b: Bencher) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = JSON.from_string(large_array)
-    b.iter[do]()
-
 fn get_data(file: String) -> String:
-    try:
-        with open("./bench_data/data/" + file, "r") as f:
-            return f.read()
-    except:
-        pass
-    return "READ FAILED"
+	try:
+		with open("./bench_data/data/" + file, "r") as f:
+			return f.read()
+	except:
+		pass
+	print("read failed")
+	return "READ FAILED"
+
+fn main() raises:
+	var config = BenchConfig()
+	config.verbose_timing = True
+	config.tabular_view = True
+	var m = Bench(config)
+
+	var canada = get_data("canada.json")
+	var catalog = get_data("citm_catalog.json")
+	var twitter = get_data("twitter.json")
+
+	var data: String
+	with open("./bench_data/users_1k.json", "r") as f:
+		data = f.read()
+
+	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonParseSmall"), small_data)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayMedium"), medium_array)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayLarge"), large_array)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayExtraLarge"), data)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayVeryBig"), canada)
+	m.bench_with_input[(String, String, String), benchmark_json_parse_big3](BenchId("JsonBig3"), (canada, catalog, twitter))	
+	# m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string_raises(canada))
+
+	m.dump_report()
 
 @parameter
-fn benchmark_json_array_extra_large(inout b: Bencher) raises:
-    var data: String
-    with open("./bench_data/users_1k.json", "r") as f:
-        data = f.read()
-        
+fn benchmark_json_parse(inout b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        _ = JSON.from_string(data)
+        _ = JSON.from_string_raises(s)
     b.iter[do]()
-
-var data = get_data("canada.json")
 
 @parameter
-fn benchmark_json_big_big_big(inout b: Bencher) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = JSON.from_string(data)
-    b.iter[do]()
-
-var d1 = get_data("canada.json")
-var d2 = get_data("citm_catalog.json")
-var d3 = get_data("twitter.json")
+fn benchmark_json_parse_big3(inout b: Bencher, args: (String, String, String)) raises:
+	var c1 = args[0]
+	var c2 = args[1]
+	var c3 = args[2]
+	@always_inline
+	@parameter
+	fn do() raises:
+		_ = JSON.from_string_raises(c1)
+		_ = JSON.from_string_raises(c2)
+		_ = JSON.from_string_raises(c3)
+	b.iter[do]()
+	_ = c1
+	_ = c2
+	_ = c3
 
 @parameter
-fn benchmark_json_parse_big3(inout b: Bencher) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = JSON.from_string(d1)
-        _ = JSON.from_string(d2)
-        _ = JSON.from_string(d3)
-    b.iter[do]()
+fn benchmark_json_stringify(inout b: Bencher, json: JSON) raises:
+	@always_inline
+	@parameter
+	fn do() raises:
+		_ = str(json)
+	
+	b.iter[do]()
+
 # source https://opensource.adobe.com/Spry/samples/data_region/JSONDataSetSample.html
 var small_data = """{
 	"id": "0001",

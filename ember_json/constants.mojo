@@ -1,4 +1,4 @@
-from .reader import to_byte
+from .utils import to_byte
 
 alias QUOTE = to_byte('"')
 alias T = to_byte("t")

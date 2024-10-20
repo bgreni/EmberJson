@@ -1,14 +1,17 @@
 from .object import Object
 from .array import Array
-from .reader import Reader, Byte, Bytes, bytes_to_string, byte_to_string, compare_bytes, to_byte, compare_simd, ByteVec
+from .reader import Reader
+from .utils import *
 from utils import Variant, Span
 from .constants import *
 from sys.intrinsics import unlikely
+from .traits import JsonValue
+from collections.string import _calc_initial_buffer_size
 
 
 @value
 @register_passable("trivial")
-struct Null(Stringable, EqualityComparableCollectionElement, Formattable, Representable):
+struct Null(JsonValue):
     fn __eq__(self, n: Null) -> Bool:
         return True
 
@@ -21,7 +24,10 @@ struct Null(Stringable, EqualityComparableCollectionElement, Formattable, Repres
     fn __repr__(self) -> String:
         return self.__str__()
 
-    fn format_to(self, inout writer: Formatter):
+    fn bytes_for_string(self) -> Int:
+        return 4
+
+    fn write_to[W: Writer](self, inout writer: W):
         writer.write(self.__str__())
 
 @always_inline
@@ -111,7 +117,7 @@ fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
 
 
 @value
-struct Value(EqualityComparableCollectionElement, Stringable, Formattable, Representable):
+struct Value(JsonValue):
     alias Type = Variant[Int, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
@@ -196,7 +202,7 @@ struct Value(EqualityComparableCollectionElement, Stringable, Formattable, Repre
     fn array(ref [_]self) -> ref [self._data] Array:
         return self.get[Array]()
 
-    fn format_to(self, inout writer: Formatter):
+    fn write_to[W: Writer](self, inout writer: W):
         if self.isa[Int]():
             writer.write(self.int())
         elif self.isa[Float64]():
@@ -213,13 +219,32 @@ struct Value(EqualityComparableCollectionElement, Stringable, Formattable, Repre
         elif self.isa[Array]():
             writer.write(self.array())
 
+    fn bytes_for_string(self) -> Int:
+        if self.isa[Int]():
+            return _calc_initial_buffer_size(self.int()) - 1
+        elif self.isa[Float64]():
+            return _calc_initial_buffer_size(self.float()) - 1
+        elif self.isa[String]():
+            return len(self.string()) + 2 # include the surrounding quotes
+        elif self.isa[Bool]():
+            return 4 if self.bool() else 5
+        elif self.isa[Null]():
+            return Null().bytes_for_string()
+        elif self.isa[Object]():
+            return self.object().bytes_for_string()
+        elif self.isa[Array]():
+            return self.array().bytes_for_string()
+
+        return 0
+
+
     @always_inline
     fn __str__(self) -> String:
-        return String.format_sequence(self)
+        return String.write(self)
 
     @always_inline
     fn __repr__(self) -> String:
-        return String.format_sequence(self)
+        return self.__str__()
 
     @staticmethod
     fn _from_reader(inout reader: Reader) raises -> Value:
@@ -259,6 +284,6 @@ struct Value(EqualityComparableCollectionElement, Stringable, Formattable, Repre
         return v^
 
     @staticmethod
-    fn from_string(owned input: String) raises -> Value:
+    fn from_string_raises(owned input: String) raises -> Value:
         var r = Reader(input^)
         return Value._from_reader(r)

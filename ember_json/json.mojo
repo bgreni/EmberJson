@@ -1,14 +1,35 @@
-from collections import Dict
+from collections import Dict, Optional
 from utils import Variant
 from .reader import Reader
 from .object import Object
 from .array import Array
 from .constants import *
-from os import abort
+from .traits import JsonValue
 
 
 @value
-struct JSON(EqualityComparableCollectionElement, Stringable, Formattable, Representable, Sized):
+struct JSON(JsonValue, Sized):
+    """Top level JSON object, can either be an Array, or an Object.
+
+    Overloads __getitem__ with both the expected array and dict style syntax, but
+    raises if you choose the wrong option at runtime.
+
+    ```mojo
+    # Docstring code doesn't seem to execute properly
+    # from ember_json import JSON
+    # var arr = JSON.from_string_raises("[1, 2, 3]")
+    # var foo = arr[2] # index based access for arrays
+
+    # var object = JSON.from_string_raises('{"key: True}')
+    # var bar = object["key"] # key based access for objects
+    # try:
+    #     # using the wrong accessor type will raise an exception
+    #     _ = arr["key"]
+    #     _ = object[1]
+    # except:
+    #     pass
+    ```
+    """
     alias Type = Variant[Object, Array]
     var _data: Self.Type
 
@@ -16,16 +37,16 @@ struct JSON(EqualityComparableCollectionElement, Stringable, Formattable, Repres
         self._data = Object()
 
     @always_inline
-    fn get[T: CollectionElement](ref [_]self: Self) -> ref [self._data] T:
+    fn _get[T: CollectionElement](ref [_]self: Self) -> ref [self._data] T:
         return self._data.__getitem__[T]()
 
     @always_inline
     fn object(ref [_]self) -> ref [self._data] Object:
-        return self.get[Object]()
+        return self._get[Object]()
 
     @always_inline
     fn array(ref [_]self) -> ref [self._data] Array:
-        return self.get[Array]()
+        return self._get[Array]()
 
     fn __getitem__(ref [_]self, key: String) raises -> ref [self.object()._data._entries[0].value().value] Value:
         if not self.is_object():
@@ -69,15 +90,15 @@ struct JSON(EqualityComparableCollectionElement, Stringable, Formattable, Repres
     fn __len__(self) -> Int:
         return len(self.array()) if self.is_array() else len(self.object())
 
-    fn format_to(self, inout writer: Formatter):
+    fn write_to[W: Writer](self, inout writer: W):
         if self.is_object():
-            self.object().format_to(writer)
+            writer.write(self.object())
         elif self.is_array():
-            self.array().format_to(writer)
+            writer.write(self.array())
 
     @always_inline
     fn __str__(self) -> String:
-        return String.format_sequence(self)
+        return String.write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -96,7 +117,7 @@ struct JSON(EqualityComparableCollectionElement, Stringable, Formattable, Repres
         return self.isa[Array]()
 
     @staticmethod
-    fn from_string(owned input: String) raises -> JSON:
+    fn from_string_raises(owned input: String) raises -> JSON:
         var data = Self()
         var reader = Reader(input^)
         reader.skip_whitespace()
@@ -113,3 +134,15 @@ struct JSON(EqualityComparableCollectionElement, Stringable, Formattable, Repres
             raise Error("Invalid json, expected end of input, recieved: " + reader.remaining())
 
         return data
+
+    @staticmethod
+    fn from_string(owned input: String) -> Optional[JSON]:
+        try:
+            return JSON.from_string_raises(input^)
+        except:
+            return None
+
+    fn bytes_for_string(self) -> Int:
+        if self.is_array():
+            return self.array().bytes_for_string()
+        return self.object().bytes_for_string()

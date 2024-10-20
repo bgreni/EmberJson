@@ -37,16 +37,23 @@ def main():
     with open(template_path, 'r') as f:
         recipe = f.read()
 
+    readme: str
+    with open("README.md") as f:
+        readme = f.read()
+
+    readme = '\n'.join(["    " + l for l in readme.splitlines()])
+
     # Replace the placeholders in the recipe with the project configuration.
     recipe = recipe \
     .replace("{{NAME}}", config["project"]["name"]) \
-    .replace("{{DESCRIPTION}}", config["project"]["description"]) \
+    .replace("{{SUMMARY}}", config["project"]["description"]) \
     .replace("{{LICENSE}}", config["project"]["license"]) \
     .replace("{{LICENSE_FILE}}", config["project"]["license-file"]) \
     .replace("{{HOMEPAGE}}", config["project"]["homepage"]) \
     .replace("{{REPOSITORY}}", config["project"]["repository"]) \
     .replace("{{VERSION}}", config["project"]["version"]) \
-    .replace("{{PREFIX}}", repo_dir + "/output")
+    .replace("{{PREFIX}}", repo_dir + "/output") \
+    .replace("{{DESCRIPTION}}", "|\n" + readme)
 
     dependencies = config["dependencies"]
 

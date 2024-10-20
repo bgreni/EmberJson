@@ -10,7 +10,7 @@ from ember_json import *
 fn main() raises:
     # parse string
     var s = '{"key": 123}'
-    var json = JSON.from_string(s)
+    var json = JSON.from_string_raises(s)
 
     print(json.is_object()) # prints true
 
@@ -22,7 +22,7 @@ fn main() raises:
 
     # json array
     s = '[123, 456]'
-    json = JSON.from_string(s)
+    json = JSON.from_string_raises(s)
     var arr = json.array()
     print(arr[0].int()) # prints 123
     # implicitly access array
