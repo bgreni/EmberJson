@@ -63,6 +63,8 @@ def test_stringify_array():
     var arr = JSON.from_string_raises('[123,"foo",false,null]')
     assert_equal(str(arr), '[123,"foo",false,null]')
 
+
+
 def test_trailing_tokens():
     with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):
         _ = JSON.from_string_raises('[1, null, false] garbage tokens')
@@ -70,8 +72,17 @@ def test_trailing_tokens():
     with assert_raises(contains='Invalid json, expected end of input, recieved: "trailing string"'):
         _ = JSON.from_string_raises('{"key": null} "trailing string"')
 
-
 var dir = String("./bench_data/data/jsonchecker/")
+
+def test_bytes_for_string():
+    var s = '["foo",1234,null,true,{"key":"some long string teehee","other":null}]'
+    var json = JSON.from_string_raises(s)
+    assert_equal(json.bytes_for_string(), s.byte_length())
+
+def check_bytes_length(file: String):
+    with open("./bench_data/data/" + file + ".json", "r") as f:
+        var data = "".join(f.read().split())
+        assert_equal(JSON.from_string_raises(data).bytes_for_string(), data.byte_length())
 
 def expect_fail(datafile: String):
     with open(dir + datafile + ".json", "r") as f:

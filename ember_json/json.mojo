@@ -5,6 +5,7 @@ from .object import Object
 from .array import Array
 from .constants import *
 from .traits import JsonValue
+from .utils import StringBuilder
 
 
 @value
@@ -92,13 +93,15 @@ struct JSON(JsonValue, Sized):
 
     fn write_to[W: Writer](self, inout writer: W):
         if self.is_object():
-            writer.write(self.object())
+            self.object().write_to(writer)
         elif self.is_array():
-            writer.write(self.array())
+            self.array().write_to(writer)
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        var s = StringBuilder(self.bytes_for_string())
+        self.write_to(s)
+        return s.build()
 
     @always_inline
     fn __repr__(self) -> String:

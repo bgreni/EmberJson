@@ -48,16 +48,18 @@ struct Array(Sized, JsonValue):
         return self._data != other._data
 
     fn write_to[W: Writer](self, inout writer: W):
-        writer.write("[")
+        ("[").write_to(writer)
         for i in range(len(self._data)):
-            writer.write(self._data[i])
+            self._data[i].write_to(writer)
             if i != len(self._data) - 1:
-                writer.write(",")
-        writer.write("]")
+                (",").write_to(writer)
+        ("]").write_to(writer)
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        var s = StringBuilder(self.bytes_for_string())
+        self.write_to(s)
+        return s.build()
 
     @always_inline
     fn __repr__(self) -> String:

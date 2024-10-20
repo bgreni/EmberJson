@@ -57,23 +57,29 @@ struct Object(Sized, JsonValue):
         return not self == other
 
     fn write_to[W: Writer](self, inout writer: W):
-        writer.write("{")
+        ("{").write_to(writer)
         var done = 0
         for k in self._data:
             try:
-                writer.write('"', k[], '"', ":", self._data[k[]])
+                ('"').write_to(writer)
+                k[].write_to(writer)
+                ('"').write_to(writer)
+                (":").write_to(writer)
+                self._data[k[]].write_to(writer)
                 if done < len(self._data) - 1:
-                    writer.write(",")
+                    (",").write_to(writer)
                 done += 1
             except:
                 # Can't happen
                 pass
 
-        writer.write("}")
+        ("}").write_to(writer)
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        var s = StringBuilder(self.bytes_for_string())
+        self.write_to(s)
+        return s.build()
 
     @always_inline
     fn __repr__(self) -> String:

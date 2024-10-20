@@ -204,20 +204,22 @@ struct Value(JsonValue):
 
     fn write_to[W: Writer](self, inout writer: W):
         if self.isa[Int]():
-            writer.write(self.int())
+            self.int().write_to(writer)
         elif self.isa[Float64]():
-            writer.write(self.float())
+            self.float().write_to(writer)
         elif self.isa[String]():
-            writer.write('"', self.string(), '"')
+            ('"').write_to(writer)    
+            self.string().write_to(writer)
+            ('"').write_to(writer)    
         elif self.isa[Bool]():
             var b = self.bool()
-            writer.write("true" if b else "false")
+            ("true").write_to(writer) if b else ("false").write_to(writer)
         elif self.isa[Null]():
-            writer.write(self.null())
+            self.null().write_to(writer)
         elif self.isa[Object]():
-            writer.write(self.object())
+            self.object().write_to(writer)
         elif self.isa[Array]():
-            writer.write(self.array())
+            self.array().write_to(writer)
 
     fn bytes_for_string(self) -> Int:
         if self.isa[Int]():
@@ -240,7 +242,9 @@ struct Value(JsonValue):
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        var s = StringBuilder(self.bytes_for_string())
+        self.write_to(s)
+        return s.build()
 
     @always_inline
     fn __repr__(self) -> String:

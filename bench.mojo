@@ -30,7 +30,13 @@ fn main() raises:
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayExtraLarge"), data)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayVeryBig"), canada)
 	m.bench_with_input[(String, String, String), benchmark_json_parse_big3](BenchId("JsonBig3"), (canada, catalog, twitter))	
-	# m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string_raises(canada))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string_raises(large_array))
+	m.bench_with_input[(JSON, JSON, JSON), benchmark_json_stringify_big3](
+		BenchId("JsonStringifyBig3"),
+		(JSON.from_string_raises(canada),
+		JSON.from_string_raises(catalog),
+		JSON.from_string_raises(twitter))
+	)
 
 	m.dump_report()
 
@@ -66,6 +72,22 @@ fn benchmark_json_stringify(inout b: Bencher, json: JSON) raises:
 		_ = str(json)
 	
 	b.iter[do]()
+
+@parameter
+fn benchmark_json_stringify_big3(inout b: Bencher, args: (JSON, JSON, JSON)) raises:
+	var c1 = args[0]
+	var c2 = args[1]
+	var c3 = args[2]
+	@always_inline
+	@parameter
+	fn do() raises:
+		_ = str(c1)
+		_ = str(c2)
+		_ = str(c3)
+	b.iter[do]()
+	_ = c1
+	_ = c2
+	_ = c3
 
 # source https://opensource.adobe.com/Spry/samples/data_region/JSONDataSetSample.html
 var small_data = """{
