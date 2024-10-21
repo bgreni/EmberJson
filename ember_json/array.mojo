@@ -92,6 +92,9 @@ struct Array(Sized, JsonValue):
             reader.skip_whitespace()
             if unlikely(reader.peek() == RBRACKET and has_comma):
                 raise Error("Illegal trailing comma")
+
+            if reader.bytes_remaining() == 0:
+                raise Error("Expected ']")
         reader.inc()
         return out^
 

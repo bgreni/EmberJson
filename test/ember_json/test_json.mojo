@@ -87,7 +87,8 @@ def check_bytes_length(file: String):
 def expect_fail(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
         with assert_raises():
-            _ = JSON.from_string_raises(f.read())
+            var v = JSON.from_string_raises(f.read())
+            print(v)
 
 def expect_pass(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
@@ -196,7 +197,7 @@ def round_trip_test(filename: String):
     with open(d + filename + ".json", "r") as f:
         var src = f.read()
         var json = JSON.from_string_raises(src)
-        assert_equal(src, str(json))
+        assert_equal(str(json), src)
 
 def test_roundtrip01():
     round_trip_test("roundtrip01")

@@ -9,6 +9,8 @@ from .traits import JsonValue
 from collections.string import _calc_initial_buffer_size, _atol, _atof
 from collections import InlineArray
 from utils import StringSlice
+from sys.ffi import external_call
+from memory import UnsafePointer
 
 
 @value
@@ -110,10 +112,33 @@ fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
             else:
                 first_digit_found = True
 
+    var is_negative = num[0] == NEG
+
     if is_float:
         return _atof(StringSlice(unsafe_from_utf8=num))
+        
 
-    var parsed = _atol(StringSlice(unsafe_from_utf8=num))
+    # _atol has to look for a bunch of extra stuff that slows it down that isn't valid for JSON anyways
+    # var parsed = _atol(StringSlice(unsafe_from_utf8=num))
+
+    var parsed = 0
+    var has_pos = num[0] == PLUS
+
+    var i = 0
+    if is_negative or has_pos:
+        if len(num) == 1:
+            raise Error("Invalid number")
+        i += 1
+
+    while i < len(num):
+        if not isdigit(num[i]):
+            raise Error("unexpected token in number")
+        parsed = parsed * 10 + int(num[i] - 48)
+        i += 1
+    
+    if is_negative:
+        parsed = -parsed
+        
     if leading_zero and parsed != 0:
         raise Error("Integer cannot have leading zero")
     return parsed
@@ -218,7 +243,7 @@ struct Value(JsonValue):
             var b = self.bool()
             ("true").write_to(writer) if b else ("false").write_to(writer)
         elif self.isa[Null]():
-            self.null().write_to(writer)
+            ("null").write_to(writer)
         elif self.isa[Object]():
             self.object().write_to(writer)
         elif self.isa[Array]():

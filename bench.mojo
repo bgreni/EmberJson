@@ -31,12 +31,34 @@ fn main() raises:
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCanada"), canada)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayTwitter"), twitter)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCitmCatalog"), catalog)
+
 	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string_raises(large_array))
 	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCanada"), JSON.from_string_raises(canada))
 	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyTwitter"), JSON.from_string_raises(twitter))
 	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCitmCatalog"), JSON.from_string_raises(catalog))
 
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseBool"), "false")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseNull"), "null")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseInt"), "12345")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseFloat"), "453.45643")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseString"), '"some example string of short length, not all that long really"')
+
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("ValueStringifyBool"), False)
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("ValueStringifyNull"), Null())
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("ValueStringifyInt"), Int(12345))
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("ValueStringifyFloat"), Float64(456.345))
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("ValueStringifyString"), "some example string of short length, not all that long really")
+
 	m.dump_report()
+
+@parameter
+fn benchmark_value_parse(inout b: Bencher, s: String) raises:
+	@always_inline
+	@parameter
+	fn do() raises:
+		_ = Value.from_string_raises(s)
+	b.iter[do]()
+	_ = s
 
 @parameter
 fn benchmark_json_parse(inout b: Bencher, s: String) raises:
@@ -45,9 +67,16 @@ fn benchmark_json_parse(inout b: Bencher, s: String) raises:
 	fn do() raises:
 		_ = JSON.from_string_raises(s)
 	b.iter[do]()
-
 	_ = s
 
+@parameter
+fn benchmark_value_stringify(inout b: Bencher, v: Value) raises:
+	@always_inline
+	@parameter
+	fn do():
+		_ = str(v)
+	b.iter[do]()
+	_ = v
 
 @parameter
 fn benchmark_json_stringify(inout b: Bencher, json: JSON) raises:
