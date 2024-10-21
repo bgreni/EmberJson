@@ -6,7 +6,9 @@ from utils import Variant, Span
 from .constants import *
 from sys.intrinsics import unlikely
 from .traits import JsonValue
-from collections.string import _calc_initial_buffer_size
+from collections.string import _calc_initial_buffer_size, _atol, _atof
+from collections import InlineArray
+from utils import StringSlice
 
 
 @value
@@ -64,7 +66,6 @@ fn _read_string(inout reader: Reader) raises -> String:
     reader.inc()
     return bytes_to_string(res)
 
-
 alias DOT = to_byte(".")
 alias LOW_E = to_byte("e")
 alias UPPER_E = to_byte("E")
@@ -72,9 +73,9 @@ alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
 alias ZERO_CHAR = to_byte("0")
 
-var TRUE = SIMD[DType.uint8, 4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
-var FALSE = Bytes(to_byte("f"), to_byte("a"), to_byte("l"), to_byte("s"), to_byte("e"))
-var NULL = SIMD[DType.uint8, 4](to_byte("n"), to_byte("u"), to_byte("l"), to_byte("l"))
+var TRUE = ByteVec[4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
+alias FALSE = InlineArray[UInt8, 5](to_byte("f"), to_byte("a"), to_byte("l"), to_byte("s"), to_byte("e"))
+var NULL = ByteVec[4](to_byte("n"), to_byte("u"), to_byte("l"), to_byte("l"))
 
 
 @always_inline
@@ -110,9 +111,9 @@ fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
                 first_digit_found = True
 
     if is_float:
-        return atof(bytes_to_string(num))
+        return _atof(StringSlice(unsafe_from_utf8=num))
 
-    var parsed = atol(bytes_to_string(num))
+    var parsed = _atol(StringSlice(unsafe_from_utf8=num))
     if leading_zero and parsed != 0:
         raise Error("Integer cannot have leading zero")
     return parsed

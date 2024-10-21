@@ -56,7 +56,9 @@ struct StringBuilder(Writer):
         if new_size > self.s.capacity:
             self.s.reserve(new_size + int(new_size * 0.40))
 
-        memcpy(dest=self.s.unsafe_ptr() + len(self.s), src=bytes.unsafe_ptr(), count=len(bytes))
+        var d = self.s.unsafe_ptr() + len(self.s)
+        var s = bytes.unsafe_ptr()
+        memcpy(dest=d, src=s, count=len(bytes))
         self.s.size += len(bytes)
 
     fn write[*Ts: Writable](inout self, *args: *Ts):
@@ -67,7 +69,7 @@ struct StringBuilder(Writer):
         args.each[write_arg]()
 
     fn build(inout self) -> String:
-        var s = self.s^
-        s.append(0)
+        self.s.append(0)
+        var s = String(self.s^)
         self.s = Bytes()
-        return String(s^)
+        return s

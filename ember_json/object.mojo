@@ -18,7 +18,10 @@ struct Object(Sized, JsonValue):
     fn bytes_for_string(self) -> Int:
         var n = 2 + len(self)  # include ':' for each pairing
         for k in self._data:
-            n += 3 + len(k[]) + self._data.get(k[]).value().bytes_for_string()
+            try:
+                n += 3 + len(k[]) + self._data[k[]].bytes_for_string()
+            except:
+                pass
         n -= 1
         return n
 
