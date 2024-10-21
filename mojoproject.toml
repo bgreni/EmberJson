@@ -18,6 +18,7 @@ test = { cmd = "magic run clean &> /dev/null ; magic run mojo test" }
 bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
 publish = { cmd = "bash scripts/publish.sh" }
 clean = { cmd = "rm -r output" }
+update_and_build = { cmd = "magic update && magic run build && magic run test" }
 
 [dependencies]
 max = ">=24.6.0.dev2024101605, <=25"
