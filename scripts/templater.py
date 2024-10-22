@@ -2,6 +2,7 @@ import os
 import tomllib
 import argparse
 from typing import Any
+import re
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 repo_dir = os.path.dirname(script_dir)
@@ -51,11 +52,12 @@ def main():
     .replace("{{LICENSE_FILE}}", config["project"]["license-file"]) \
     .replace("{{HOMEPAGE}}", config["project"]["homepage"]) \
     .replace("{{REPOSITORY}}", config["project"]["repository"]) \
-    .replace("{{VERSION}}", config["project"]["version"]) \
     .replace("{{PREFIX}}", repo_dir + "/output") \
     .replace("{{DESCRIPTION}}", "|\n" + readme)
 
     dependencies = config["dependencies"]
+    max_version = re.search("(dev.*),", dependencies['max'])[1]
+    recipe = recipe.replace("{{VERSION}}", config["project"]["version"] + "." + max_version)
 
     deps = build_dependency_list(dependencies)
     recipe = recipe.replace("{{DEPENDENCIES}}", deps)

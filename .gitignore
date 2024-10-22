@@ -9,3 +9,4 @@ recipes/recipe.yaml
 .vscode
 **.DS_Store**
 playground.mojo
+.env
