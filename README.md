@@ -1,5 +1,7 @@
 # EmberJson
+
 ![license_badge](https://badgen.net/badge/License/MIT/blue)
+![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)
 
 A lightweight JSON parsing library for Mojo.
 
