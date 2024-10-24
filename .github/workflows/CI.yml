@@ -25,8 +25,7 @@ jobs:
           curl -ssL https://magic.modular.com | bash
           curl -fsSL https://pixi.sh/install.sh | bash
           source /home/runner/.bash_profile 
-          source /home/runner/.bashrc
-          pixi global install rattler-build
+          /home/runner/.pixi/bin/pixi global install rattler-build
 
           magic run test || exit 1
           magic run build || exit 1
