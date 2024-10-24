@@ -1,5 +1,5 @@
 from collections import Dict, Optional
-from utils import Variant
+from utils import Variant, Span
 from .reader import Reader
 from .object import Object
 from .array import Array
@@ -115,10 +115,15 @@ struct JSON(JsonValue, Sized):
     fn is_array(self) -> Bool:
         return self.isa[Array]()
 
+    @always_inline
     @staticmethod
     fn from_string(input: String) raises -> JSON:
+        return Self.from_bytes(input.as_bytes())
+
+    @staticmethod
+    fn from_bytes[origin: ImmutableOrigin, //](input: Span[Byte, origin]) raises -> JSON:
         var data = Self()
-        var reader = Reader(input.as_string_slice())
+        var reader = Reader(input)
         reader.skip_whitespace()
         var next_char = reader.peek()
         if next_char == LCURLY:
@@ -133,6 +138,7 @@ struct JSON(JsonValue, Sized):
             raise Error("Invalid json, expected end of input, recieved: " + reader.remaining())
 
         return data
+    
 
     fn bytes_for_string(self) -> Int:
         if self.is_array():

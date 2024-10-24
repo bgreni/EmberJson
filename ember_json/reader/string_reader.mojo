@@ -8,8 +8,8 @@ struct Reader[origin: ImmutableOrigin, //]:
     var _data: Span[Byte, origin]
     var _index: Int
 
-    fn __init__(inout self, data: StringSlice[origin]):
-        self._data = data.as_bytes()
+    fn __init__(inout self, data: Span[Byte,origin]):
+        self._data = data
         self._index = 0
 
     @always_inline

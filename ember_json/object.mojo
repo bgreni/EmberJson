@@ -115,5 +115,5 @@ struct Object(Sized, JsonValue):
 
     @staticmethod
     fn from_string(s: String) raises -> Object:
-        var r = Reader(s.as_string_slice())
+        var r = Reader(s.as_bytes())
         return Self._from_reader(r)

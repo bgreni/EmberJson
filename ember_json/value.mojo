@@ -314,5 +314,5 @@ struct Value(JsonValue):
 
     @staticmethod
     fn from_string(input: String) raises -> Value:
-        var r = Reader(input.as_string_slice())
+        var r = Reader(input.as_bytes())
         return Value._from_reader(r)

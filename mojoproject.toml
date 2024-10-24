@@ -11,7 +11,7 @@ homepage = "https://github.com/bgreni/EmberJson"
 repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
-build = { cmd = "bash scripts/build.sh", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"} }
+build = { cmd = "rattler-build build --recipe recipes -c https://conda.modular.com/max-nightly -c conda-forge --skip-existing=all", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"} }
 template = { cmd = "magic run python3 scripts/templater.py" }
 format = { cmd = "magic run mojo format -l 120 ember_json" }
 test = { cmd = "magic run clean ; magic run mojo test" }

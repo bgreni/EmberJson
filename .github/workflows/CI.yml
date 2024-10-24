@@ -22,11 +22,17 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Run Build and Tests
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
         run: |
           curl -ssL https://magic.modular.com | bash
-          curl -fsSL https://pixi.sh/install.sh | bash
           source $HOME/.bash_profile
-          $HOME/.pixi/bin/pixi global install rattler-build
+
+          # Temporary method to fetch the rattler binary.
+          RATTLER_BINARY="rattler-build-aarch64-apple-darwin"
+          if [[ $TARGET_PLATFORM == "linux-64" ]]; then RATTLER_BINARY="rattler-build-x86_64-unknown-linux-musl"; fi
+          curl -SL --progress-bar https://github.com/prefix-dev/rattler-build/releases/latest/download/${RATTLER_BINARY} -o rattler-build
+          chmod +x rattler-build
 
           magic run test || exit 1
-          magic run build || exit 1
+          magic run build --target-platform=$TARGET_PLATFORM || exit 1
