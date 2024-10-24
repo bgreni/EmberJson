@@ -4,7 +4,7 @@ from sys.intrinsics import likely
 from ..utils import *
 
 
-struct Reader[origin: ImmutableOrigin,//]:
+struct Reader[origin: ImmutableOrigin, //]:
     var _data: Span[Byte, origin]
     var _index: Int
 
