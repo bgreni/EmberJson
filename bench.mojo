@@ -32,10 +32,10 @@ fn main() raises:
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayTwitter"), twitter)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCitmCatalog"), catalog)
 
-	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string_raises(large_array))
-	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCanada"), JSON.from_string_raises(canada))
-	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyTwitter"), JSON.from_string_raises(twitter))
-	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCitmCatalog"), JSON.from_string_raises(catalog))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string(large_array))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCanada"), JSON.from_string(canada))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyTwitter"), JSON.from_string(twitter))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCitmCatalog"), JSON.from_string(catalog))
 
 	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseBool"), "false")
 	m.bench_with_input[String, benchmark_value_parse](BenchId("ValueParseNull"), "null")
@@ -56,7 +56,7 @@ fn benchmark_value_parse(inout b: Bencher, s: String) raises:
 	@always_inline
 	@parameter
 	fn do() raises:
-		_ = Value.from_string_raises(s)
+		_ = Value.from_string(s)
 	b.iter[do]()
 	_ = s
 
@@ -65,7 +65,7 @@ fn benchmark_json_parse(inout b: Bencher, s: String) raises:
 	@always_inline
 	@parameter
 	fn do() raises:
-		_ = JSON.from_string_raises(s)
+		_ = JSON.from_string(s)
 	b.iter[do]()
 	_ = s
 

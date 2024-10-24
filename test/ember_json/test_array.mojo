@@ -5,7 +5,7 @@ from testing import *
 
 def test_array():
     var s = '[ 1, 2, "foo" ]'
-    var arr = Array.from_string_raises(s)
+    var arr = Array.from_string(s)
     assert_equal(len(arr), 3)
     assert_equal(arr[0].get[Int](), 1)
     assert_equal(arr[1].get[Int](), 2)
@@ -14,7 +14,7 @@ def test_array():
 
 def test_array_no_space():
     var s = '[1,2,"foo"]'
-    var arr = Array.from_string_raises(s)
+    var arr = Array.from_string(s)
     assert_equal(len(arr), 3)
     assert_equal(arr[0].get[Int](), 1)
     assert_equal(arr[1].get[Int](), 2)
@@ -22,7 +22,7 @@ def test_array_no_space():
 
 def test_nested_object():
     var s = '[false, null, [4.0], { "key": "bar" }]'
-    var arr = Array.from_string_raises(s)
+    var arr = Array.from_string(s)
     assert_equal(len(arr), 4)
     assert_equal(arr[0].bool(), False)
     assert_equal(arr[1].null(), Null())
@@ -35,7 +35,7 @@ def test_nested_object():
 
 def test_contains():
     var s = '[false, 123, "str"]'
-    var arr = Array.from_string_raises(s)
+    var arr = Array.from_string(s)
     assert_true(False in arr)
     assert_true(123 in arr)
     assert_true(String("str") in arr)

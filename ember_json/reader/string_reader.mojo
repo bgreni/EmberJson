@@ -1,18 +1,15 @@
-from utils import Span
+from utils import Span, StringSlice
 from ..constants import *
 from sys.intrinsics import likely
 from ..utils import *
 
 
-struct Reader:
-    var _data: Bytes
+struct Reader[origin: ImmutableOrigin,//]:
+    var _data: Span[Byte, origin]
     var _index: Int
 
-    fn __init__(inout self, owned data: String):
-        self._data = data._buffer^
-        # remove the null termination
-        _ = self._data.pop()
-        data._buffer = Bytes()
+    fn __init__(inout self, data: StringSlice[origin]):
+        self._data = data.as_bytes()
         self._index = 0
 
     @always_inline
@@ -20,13 +17,13 @@ struct Reader:
         return self._data[self._index]
 
     @always_inline
-    fn next(inout self, chars: Int = 1) -> Span[Byte, __origin_of(self._data)]:
+    fn next(inout self, chars: Int = 1) -> Span[Byte, origin]:
         var start = self._index
         self.inc(chars)
-        return Span(self._data)[start : self._index]
+        return self._data[start : self._index]
 
     @always_inline
-    fn read_until(inout self, char: Byte) -> Span[Byte, __origin_of(self._data)]:
+    fn read_until(inout self, char: Byte) -> Span[Byte, origin]:
         @parameter
         fn not_char(c: Byte) -> Bool:
             return c != char
@@ -34,7 +31,7 @@ struct Reader:
         return self.read_while[not_char]()
 
     @always_inline
-    fn read_string(inout self) -> Span[Byte, __origin_of(self._data)]:
+    fn read_string(inout self) -> Span[Byte, origin]:
         var start = self._index
         while likely(self._index < len(self._data)):
             if self.peek() == QUOTE:
@@ -42,10 +39,10 @@ struct Reader:
             if self.peek() == RSOL:
                 self.inc()
             self.inc()
-        return Span(self._data)[start : self._index]
+        return self._data[start : self._index]
 
     @always_inline
-    fn read_word(inout self) -> Span[Byte, __origin_of(self._data)]:
+    fn read_word(inout self) -> Span[Byte, origin]:
         var end_chars = ByteVec[4](COMMA, RCURLY, RBRACKET)
 
         @always_inline
@@ -56,11 +53,11 @@ struct Reader:
         return self.read_while[func]()
 
     @always_inline
-    fn read_while[func: fn (char: Byte) capturing -> Bool](inout self) -> Span[Byte, __origin_of(self._data)]:
+    fn read_while[func: fn (char: Byte) capturing -> Bool](inout self) -> Span[Byte, origin]:
         var start = self._index
         while likely(self._index < len(self._data)) and func(self.peek()):
             self.inc()
-        return Span(self._data)[start : self._index]
+        return self._data[start : self._index]
 
     @always_inline
     fn skip_whitespace(inout self):
@@ -78,7 +75,7 @@ struct Reader:
 
     @always_inline
     fn remaining(self) -> String:
-        return String(self._data[self._index :] + Byte(0))
+        return String(List(self._data[self._index :]) + Byte(0))
 
     @always_inline
     fn bytes_remaining(self) -> Int:

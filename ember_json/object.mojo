@@ -80,9 +80,7 @@ struct Object(Sized, JsonValue):
 
     @always_inline
     fn __str__(self) -> String:
-        var s = StringBuilder(self.bytes_for_string())
-        self.write_to(s)
-        return s.build()
+        return write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -116,6 +114,6 @@ struct Object(Sized, JsonValue):
         return out^
 
     @staticmethod
-    fn from_string_raises(owned s: String) raises -> Object:
-        var r = Reader(s^)
+    fn from_string(s: String) raises -> Object:
+        var r = Reader(s.as_string_slice())
         return Self._from_reader(r)

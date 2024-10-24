@@ -3,7 +3,7 @@ from testing import *
 
 def test_json_object():
     var s = '{"key": 123}'
-    var json = JSON.from_string_raises(s)
+    var json = JSON.from_string(s)
     assert_true(json.is_object())
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json["key"].int(), 123)
@@ -17,7 +17,7 @@ def test_json_object():
 
 def test_json_array():
     var s = '[123, 345]'
-    var json = JSON.from_string_raises(s)
+    var json = JSON.from_string(s)
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
@@ -30,7 +30,7 @@ def test_json_array():
     with assert_raises():
         _ = json["key"]
 
-    json = JSON.from_string_raises("[1, 2, 3]")
+    json = JSON.from_string("[1, 2, 3]")
     assert_true(json.is_array())
     assert_equal(json[0], 1)
     assert_equal(json[1], 2)
@@ -38,9 +38,9 @@ def test_json_array():
 
 def test_equality():
 
-    var ob = JSON.from_string_raises('{"key": 123}')
-    var ob2 = JSON.from_string_raises('{"key": 123}')
-    var arr = JSON.from_string_raises('[123, 345]')
+    var ob = JSON.from_string('{"key": 123}')
+    var ob2 = JSON.from_string('{"key": 123}')
+    var arr = JSON.from_string('[123, 345]')
 
     assert_equal(ob, ob2)
     ob["key"] = 456
@@ -60,39 +60,39 @@ def test_setter_array():
     assert_equal(arr[1], "foo")
 
 def test_stringify_array():
-    var arr = JSON.from_string_raises('[123,"foo",false,null]')
+    var arr = JSON.from_string('[123,"foo",false,null]')
     assert_equal(str(arr), '[123,"foo",false,null]')
 
 
 
 def test_trailing_tokens():
     with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):
-        _ = JSON.from_string_raises('[1, null, false] garbage tokens')
+        _ = JSON.from_string('[1, null, false] garbage tokens')
 
     with assert_raises(contains='Invalid json, expected end of input, recieved: "trailing string"'):
-        _ = JSON.from_string_raises('{"key": null} "trailing string"')
+        _ = JSON.from_string('{"key": null} "trailing string"')
 
 var dir = String("./bench_data/data/jsonchecker/")
 
 def test_bytes_for_string():
     var s = '["foo",1234,null,true,{"key":"some long string teehee","other":null}]'
-    var json = JSON.from_string_raises(s)
+    var json = JSON.from_string(s)
     assert_equal(json.bytes_for_string(), s.byte_length())
 
 def check_bytes_length(file: String):
     with open("./bench_data/data/" + file + ".json", "r") as f:
         var data = "".join(f.read().split())
-        assert_equal(JSON.from_string_raises(data).bytes_for_string(), data.byte_length())
+        assert_equal(JSON.from_string(data).bytes_for_string(), data.byte_length())
 
 def expect_fail(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
         with assert_raises():
-            var v = JSON.from_string_raises(f.read())
+            var v = JSON.from_string(f.read())
             print(v)
 
 def expect_pass(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
-        _ = JSON.from_string_raises(f.read())
+        _ = JSON.from_string(f.read())
 
 def test_fail02():
     expect_fail("fail02")
@@ -196,7 +196,7 @@ def round_trip_test(filename: String):
     var d = String("./bench_data/data/roundtrip/")
     with open(d + filename + ".json", "r") as f:
         var src = f.read()
-        var json = JSON.from_string_raises(src)
+        var json = JSON.from_string(src)
         assert_equal(str(json), src)
 
 def test_roundtrip01():

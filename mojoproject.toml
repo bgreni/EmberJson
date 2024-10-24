@@ -19,7 +19,6 @@ bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
 clean = { cmd = "rm -r output &> /dev/null" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
 publish = { cmd = "bash scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_KEY" }}
-update = { cmd = "magic update && magic run python3 scripts/update.py" } 
 
 [dependencies]
 max = ">=24.6.0.dev2024101605, <=25"

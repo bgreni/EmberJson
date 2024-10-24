@@ -58,9 +58,7 @@ struct Array(Sized, JsonValue):
 
     @always_inline
     fn __str__(self) -> String:
-        var s = StringBuilder(self.bytes_for_string())
-        self.write_to(s)
-        return s.build()
+        return write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -99,6 +97,6 @@ struct Array(Sized, JsonValue):
         return out^
 
     @staticmethod
-    fn from_string_raises(owned input: String) raises -> Array:
-        var r = Reader(input^)
+    fn from_string(input: String) raises -> Array:
+        var r = Reader(input.as_string_slice())
         return Self._from_reader(r)

@@ -36,7 +36,7 @@ struct Null(JsonValue):
 
 
 @always_inline
-fn validate_string[origin: MutableOrigin](b: Span[Byte, origin]) raises:
+fn validate_string(b: Span[Byte, _]) raises:
     alias SOL = to_byte("/")
     alias B = to_byte("b")
     alias F = to_byte("f")
@@ -67,6 +67,7 @@ fn _read_string(inout reader: Reader) raises -> String:
     validate_string(res)
     reader.inc()
     return bytes_to_string(res)
+
 
 alias DOT = to_byte(".")
 alias LOW_E = to_byte("e")
@@ -116,7 +117,6 @@ fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
 
     if is_float:
         return _atof(StringSlice(unsafe_from_utf8=num))
-        
 
     # _atol has to look for a bunch of extra stuff that slows it down that isn't valid for JSON anyways
     # var parsed = _atol(StringSlice(unsafe_from_utf8=num))
@@ -135,10 +135,10 @@ fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
             raise Error("unexpected token in number")
         parsed = parsed * 10 + int(num[i] - 48)
         i += 1
-    
+
     if is_negative:
         parsed = -parsed
-        
+
     if leading_zero and parsed != 0:
         raise Error("Integer cannot have leading zero")
     return parsed
@@ -269,9 +269,7 @@ struct Value(JsonValue):
 
     @always_inline
     fn __str__(self) -> String:
-        var s = StringBuilder(self.bytes_for_string())
-        self.write_to(s)
-        return s.build()
+        return write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -315,6 +313,6 @@ struct Value(JsonValue):
         return v^
 
     @staticmethod
-    fn from_string_raises(owned input: String) raises -> Value:
-        var r = Reader(input^)
+    fn from_string(input: String) raises -> Value:
+        var r = Reader(input.as_string_slice())
         return Value._from_reader(r)

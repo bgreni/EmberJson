@@ -5,7 +5,7 @@ from .object import Object
 from .array import Array
 from .constants import *
 from .traits import JsonValue
-from .utils import StringBuilder
+from .utils import write
 
 
 @value
@@ -15,10 +15,10 @@ struct JSON(JsonValue, Sized):
     ```mojo
     # Docstring code doesn't seem to execute properly
     # from ember_json import JSON
-    # var arr = JSON.from_string_raises("[1, 2, 3]")
+    # var arr = JSON.from_string("[1, 2, 3]")
     # var foo = arr[2] # index based access for arrays
 
-    # var object = JSON.from_string_raises('{"key: True}')
+    # var object = JSON.from_string('{"key: True}')
     # var bar = object["key"] # key based access for objects
     # try:
     #     # using the wrong accessor type will raise an exception
@@ -97,9 +97,7 @@ struct JSON(JsonValue, Sized):
 
     @always_inline
     fn __str__(self) -> String:
-        var s = StringBuilder(self.bytes_for_string())
-        self.write_to(s)
-        return s.build()
+        return write(self)
 
     @always_inline
     fn __repr__(self) -> String:
@@ -118,9 +116,9 @@ struct JSON(JsonValue, Sized):
         return self.isa[Array]()
 
     @staticmethod
-    fn from_string_raises(owned input: String) raises -> JSON:
+    fn from_string(input: String) raises -> JSON:
         var data = Self()
-        var reader = Reader(input^)
+        var reader = Reader(input.as_string_slice())
         reader.skip_whitespace()
         var next_char = reader.peek()
         if next_char == LCURLY:
@@ -136,14 +134,14 @@ struct JSON(JsonValue, Sized):
 
         return data
 
-    @staticmethod
-    fn from_string(owned input: String) -> Optional[JSON]:
-        try:
-            return JSON.from_string_raises(input^)
-        except:
-            return None
-
     fn bytes_for_string(self) -> Int:
         if self.is_array():
             return self.array().bytes_for_string()
         return self.object().bytes_for_string()
+
+    @staticmethod
+    fn try_from_string(input: String) -> Optional[JSON]:
+        try:
+            return JSON.from_string(input)
+        except:
+            return None
