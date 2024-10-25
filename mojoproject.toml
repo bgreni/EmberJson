@@ -18,7 +18,7 @@ test = { cmd = "magic run clean ; magic run mojo test" }
 bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
 clean = { cmd = "rm -r output &> /dev/null" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
-publish = { cmd = "bash scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_KEY" }}
+publish = { cmd = "./scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_KEY" }}
 precommit = { cmd = "magic run format && magic run test" }
 
 [dependencies]
