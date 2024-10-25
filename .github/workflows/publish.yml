@@ -3,7 +3,21 @@ name: Publish
 # Controls when the action will run. Workflow runs when manually triggered using the UI
 # or API.
 on:
+  workflow_call:
+    secrets:
+      PREFIX_API_KEY:  
+        required: true
   workflow_dispatch:
+    inputs:
+        run_mac:
+          # Friendly description to be shown in the UI instead of 'name'
+          description: 'Enable MacOS deployment'
+          # Default value if no value is explicitly provided
+          default: false
+          # Input has to be provided for the workflow to run
+          required: true
+          # The data type of the input
+          type: boolean
 
 jobs:
   publish:
@@ -11,7 +25,7 @@ jobs:
       matrix:
         include:
           - { target: linux-64, os: ubuntu-latest }
-          # - { target: osx-arm64, os: macos-14 }
+          - { target: osx-arm64, os: macos-14 }
       fail-fast: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -26,6 +40,11 @@ jobs:
           TARGET_PLATFORM: ${{ matrix.target }}
           PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
         run: |
+          if [[ github.event.inputs.run_mac == 'false' ]]; then
+            echo "Mac build disabled, exiting..."
+            exit 0
+          fi
+        
           curl -ssL https://magic.modular.com | bash
           source $HOME/.bash_profile
 
