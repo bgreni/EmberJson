@@ -1,14 +1,13 @@
-from utils import Span, StringSlice
 from ..constants import *
 from sys.intrinsics import likely
 from ..utils import *
 
 
 struct Reader[origin: ImmutableOrigin, //]:
-    var _data: Span[Byte, origin]
+    var _data: ByteView[origin]
     var _index: Int
 
-    fn __init__(inout self, data: Span[Byte,origin]):
+    fn __init__(inout self, data: ByteView[origin]):
         self._data = data
         self._index = 0
 
@@ -17,13 +16,13 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self._data[self._index]
 
     @always_inline
-    fn next(inout self, chars: Int = 1) -> Span[Byte, origin]:
+    fn next(inout self, chars: Int = 1) -> ByteView[origin]:
         var start = self._index
         self.inc(chars)
         return self._data[start : self._index]
 
     @always_inline
-    fn read_until(inout self, char: Byte) -> Span[Byte, origin]:
+    fn read_until(inout self, char: Byte) -> ByteView[origin]:
         @parameter
         fn not_char(c: Byte) -> Bool:
             return c != char
@@ -31,7 +30,7 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self.read_while[not_char]()
 
     @always_inline
-    fn read_string(inout self) -> Span[Byte, origin]:
+    fn read_string(inout self) -> ByteView[origin]:
         var start = self._index
         while likely(self._index < len(self._data)):
             if self.peek() == QUOTE:
@@ -42,7 +41,7 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self._data[start : self._index]
 
     @always_inline
-    fn read_word(inout self) -> Span[Byte, origin]:
+    fn read_word(inout self) -> ByteView[origin]:
         var end_chars = ByteVec[4](COMMA, RCURLY, RBRACKET)
 
         @always_inline
@@ -53,7 +52,7 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self.read_while[func]()
 
     @always_inline
-    fn read_while[func: fn (char: Byte) capturing -> Bool](inout self) -> Span[Byte, origin]:
+    fn read_while[func: fn (char: Byte) capturing -> Bool](inout self) -> ByteView[origin]:
         var start = self._index
         while likely(self._index < len(self._data)) and func(self.peek()):
             self.inc()

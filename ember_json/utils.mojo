@@ -6,6 +6,7 @@ from .traits import JsonValue
 
 alias Bytes = String._buffer_type
 alias ByteVec = SIMD[DType.uint8, _]
+alias ByteView = Span[Byte, _]
 
 
 @always_inline
@@ -29,7 +30,7 @@ fn is_space(char: Byte) -> Bool:
 
 
 @always_inline
-fn bytes_to_string(b: Span[Byte, _]) -> String:
+fn bytes_to_string(b: ByteView[_]) -> String:
     var s = String(b)
     s._buffer.append(0)
     return s
@@ -41,14 +42,14 @@ fn byte_to_string(b: Byte) -> String:
 
 
 @always_inline
-fn compare_bytes(l: Span[Byte, _], r: Span[Byte, _]) -> Bool:
+fn compare_bytes(l: ByteView[_], r: ByteView[_]) -> Bool:
     if len(l) != len(r):
         return False
     return memcmp(l.unsafe_ptr(), r.unsafe_ptr(), len(l)) == 0
 
 
 @always_inline
-fn compare_simd[size: Int, //](s: Span[Byte, _], r: SIMD[DType.uint8, size]) -> Bool:
+fn compare_simd[size: Int, //](s: ByteView[_], r: SIMD[DType.uint8, size]) -> Bool:
     if len(s) != size:
         return False
     return (s.unsafe_ptr().load[width=size]() == r).reduce_and()

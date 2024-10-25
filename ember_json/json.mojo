@@ -1,11 +1,11 @@
 from collections import Dict, Optional
-from utils import Variant, Span
+from utils import Variant
 from .reader import Reader
 from .object import Object
 from .array import Array
 from .constants import *
 from .traits import JsonValue
-from .utils import write
+from .utils import write, ByteView
 
 
 @value
@@ -121,7 +121,7 @@ struct JSON(JsonValue, Sized):
         return Self.from_bytes(input.as_bytes())
 
     @staticmethod
-    fn from_bytes[origin: ImmutableOrigin, //](input: Span[Byte, origin]) raises -> JSON:
+    fn from_bytes[origin: ImmutableOrigin, //](input: ByteView[origin]) raises -> JSON:
         var data = Self()
         var reader = Reader(input)
         reader.skip_whitespace()
@@ -141,6 +141,9 @@ struct JSON(JsonValue, Sized):
     
 
     fn bytes_for_string(self) -> Int:
+        """Should only be used as an estimatation. Sizes of float values are
+        unreliable.
+        """
         if self.is_array():
             return self.array().bytes_for_string()
         return self.object().bytes_for_string()

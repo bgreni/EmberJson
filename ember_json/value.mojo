@@ -2,7 +2,7 @@ from .object import Object
 from .array import Array
 from .reader import Reader
 from .utils import *
-from utils import Variant, Span
+from utils import Variant
 from .constants import *
 from sys.intrinsics import unlikely
 from .traits import JsonValue
@@ -36,7 +36,7 @@ struct Null(JsonValue):
 
 
 @always_inline
-fn validate_string(b: Span[Byte, _]) raises:
+fn validate_string(b: ByteView[_]) raises:
     alias SOL = to_byte("/")
     alias B = to_byte("b")
     alias F = to_byte("f")
