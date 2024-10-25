@@ -40,7 +40,7 @@ jobs:
           TARGET_PLATFORM: ${{ matrix.target }}
           PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
         run: |
-          if [[ github.event.inputs.run_mac == 'false' ]]; then
+          if [[ "$github.event.inputs.run_mac" == 'false' ]]; then
             echo "Mac build disabled, exiting..."
             exit 0
           fi
