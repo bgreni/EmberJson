@@ -25,7 +25,7 @@ jobs:
       matrix:
         include:
           - { target: linux-64, os: ubuntu-latest }
-          - { target: osx-arm64, os: macos-14 }
+          # - { target: osx-arm64, os: macos-14 }
       fail-fast: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -40,7 +40,7 @@ jobs:
           TARGET_PLATFORM: ${{ matrix.target }}
           PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
         run: |
-          if [[ "$github.event.inputs.run_mac" == 'false' ]]; then
+          if [[  github.event.inputs.run_mac == 'false' ]]; then
             echo "Mac build disabled, exiting..."
             exit 0
           fi
