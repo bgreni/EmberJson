@@ -1,0 +1,41 @@
+name: Manual workflow
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    strategy:
+      matrix:
+        include:
+          - { target: linux-64, os: ubuntu-latest }
+          # - { target: osx-arm64, os: macos-14 }
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Run Build and Tests
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          curl -ssL https://magic.modular.com | bash
+          source $HOME/.bash_profile
+
+          # Temporary method to fetch the rattler binary.
+          RATTLER_BINARY="rattler-build-aarch64-apple-darwin"
+          if [[ $TARGET_PLATFORM == "linux-64" ]]; then 
+            RATTLER_BINARY="rattler-build-x86_64-unknown-linux-musl";
+            curl -SL --progress-bar https://github.com/prefix-dev/rattler-build/releases/latest/download/${RATTLER_BINARY} -o rattler-build
+          chmod +x rattler-build
+          else
+            brew install rattler-build
+          fi
+
+          magic run publish
