@@ -21,9 +21,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Run Build and Tests
+      - name: Publish package to prefix.dev
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
+          PREFIX_API_KEY: $${{ secrets.PREFIX_API_KEY }}
         run: |
           curl -ssL https://magic.modular.com | bash
           source $HOME/.bash_profile
@@ -32,7 +33,7 @@ jobs:
           RATTLER_BINARY="rattler-build-aarch64-apple-darwin"
           if [[ $TARGET_PLATFORM == "linux-64" ]]; then 
             RATTLER_BINARY="rattler-build-x86_64-unknown-linux-musl";
-            curl -SL --progress-bar https://github.com/prefix-dev/rattler-build/releases/latest/download/${RATTLER_BINARY} -o rattler-build
+            curl -SL --progress-bar https://github.com/prefix-dev/rattler-build/releases/latest/download/${RATTLER_BINARY} -o rattler-build || exit 1
           chmod +x rattler-build
           else
             brew install rattler-build
