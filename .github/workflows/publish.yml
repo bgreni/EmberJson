@@ -24,7 +24,7 @@ jobs:
       - name: Publish package to prefix.dev
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
-          PREFIX_API_KEY: $${{ secrets.PREFIX_API_KEY }}
+          PREFIX_KEY: $${{ secrets.PREFIX_API_KEY }}
         run: |
           curl -ssL https://magic.modular.com | bash
           source $HOME/.bash_profile
@@ -38,5 +38,5 @@ jobs:
           else
             brew install rattler-build
           fi
-
-          magic run publish
+          export PREFIX_API_KEY=$PREFIX_KEY
+          magic run publish || exit 1
