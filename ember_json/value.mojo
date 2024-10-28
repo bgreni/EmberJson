@@ -76,9 +76,9 @@ alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
 alias ZERO_CHAR = to_byte("0")
 
-var TRUE = ByteVec[4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
+alias TRUE = ByteVec[4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
 alias FALSE = InlineArray[UInt8, 5](to_byte("f"), to_byte("a"), to_byte("l"), to_byte("s"), to_byte("e"))
-var NULL = ByteVec[4](to_byte("n"), to_byte("u"), to_byte("l"), to_byte("l"))
+alias NULL = ByteVec[4](to_byte("n"), to_byte("u"), to_byte("l"), to_byte("l"))
 
 
 @always_inline

@@ -13,19 +13,18 @@ struct JSON(JsonValue, Sized):
     """Top level JSON object, can either be an Array, or an Object.
 
     ```mojo
-    # Docstring code doesn't seem to execute properly
-    # from ember_json import JSON
-    # var arr = JSON.from_string("[1, 2, 3]")
-    # var foo = arr[2] # index based access for arrays
+    from ember_json import JSON
+    var arr = JSON.from_string("[1, 2, 3]")
+    var foo = arr[2] # index based access for arrays
 
-    # var object = JSON.from_string('{"key: True}')
-    # var bar = object["key"] # key based access for objects
-    # try:
-    #     # using the wrong accessor type will raise an exception
-    #     _ = arr["key"]
-    #     _ = object[1]
-    # except:
-    #     pass
+    var object = JSON.from_string('{"key": true}')
+    var bar = object["key"] # key based access for objects
+    try:
+        # using the wrong accessor type will raise an exception
+        _ = arr["key"]
+        _ = object[1]
+    except:
+        pass
     ```
     """
 

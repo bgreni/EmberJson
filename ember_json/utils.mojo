@@ -24,8 +24,7 @@ fn to_byte(s: String) -> Byte:
 
 @always_inline
 fn is_space(char: Byte) -> Bool:
-    # making this static breaks docstring tests for some reason?
-    var spaces = ByteVec[4](SPACE, NEWLINE, TAB, LINE_FEED)
+    alias spaces = ByteVec[4](SPACE, NEWLINE, TAB, LINE_FEED)
     return char in spaces
 
 
