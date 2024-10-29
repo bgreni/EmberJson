@@ -40,37 +40,81 @@ struct JSON(JsonValue, Sized):
 
     @always_inline
     fn object(ref [_]self) -> ref [self._data] Object:
+        """Fetch the inner object of this json document.
+
+        Returns:
+            A reference to a JSON object.
+        """
         return self._get[Object]()
 
     @always_inline
     fn array(ref [_]self) -> ref [self._data] Array:
+        """Fetch the inner array of this json document.
+
+        Returns:
+            A reference to a JSON array.
+        """
         return self._get[Array]()
 
     fn __getitem__(ref [_]self, key: String) raises -> ref [self.object()._data._entries[0].value().value] Value:
+        """Access inner object value by key.
+
+        Raises:
+            If this document does not contain an object.
+
+        Returns:
+            A reference to the value associated with the given key.
+        """
         if not self.is_object():
             raise Error("Array index must be an int")
         return self.object().__getitem__(key)
 
     fn __getitem__(ref [_]self, ind: Int) raises -> ref [self.array()._data] Value:
+        """Access the inner array by index.
+
+        Raises:
+            If this document does not contain an array.
+
+        Returns:
+            A reference to the value at the given index.
+        """
         if not self.is_array():
             raise Error("Object key expected to be string")
         return self.array()[ind]
 
-    fn __setitem__(inout self, key: String, owned item: Value) raises:
+    fn __setitem__(inout self, owned key: String, owned item: Value) raises:
+        """Mutate the inner object.
+
+        Raises:
+            If this document does not contain an object.
+        """
         if not self.is_object():
             raise Error("Object key expected to be string")
-        self.object()[key] = item^
+        self.object()[key^] = item^
 
     fn __setitem__(inout self, ind: Int, owned item: Value) raises:
+        """Mutate the inner array.
+
+        Raises:
+            If this document does not contain an array.
+        """
         if not self.is_array():
             raise Error("Array index must be an int")
         self.array()[ind] = item^
 
-    fn __contains__(self, v: Value) -> Bool:
+    fn __contains__(self, v: Value) raises -> Bool:
+        """Check if the given value exists in the document.
+
+        Raises:
+            If a non-string value is used on an object.
+
+        Returns:
+            True if the value is a value within the array or is a key in the object.
+        """
         if self.is_array():
             return v in self.array()
         if not v.isa[String]():
-            return False
+            raise Error("expected string key")
         return v.string() in self.object()
 
     fn __eq__(self, other: Self) -> Bool:
@@ -117,10 +161,26 @@ struct JSON(JsonValue, Sized):
     @always_inline
     @staticmethod
     fn from_string(input: String) raises -> JSON:
+        """Parse JSON document from a string.
+
+        Raises:
+            If the string represent an invalid JSON document.
+
+        Returns:
+            A parsed JSON document.
+        """
         return Self.from_bytes(input.as_bytes())
 
     @staticmethod
     fn from_bytes[origin: ImmutableOrigin, //](input: ByteView[origin]) raises -> JSON:
+        """Parse JSON document from bytes.
+
+        Raises:
+            If the bytes represent an invalid JSON document.
+
+        Returns:
+            A parsed JSON document.
+        """
         var data = Self()
         var reader = Reader(input)
         reader.skip_whitespace()
@@ -148,6 +208,11 @@ struct JSON(JsonValue, Sized):
 
     @staticmethod
     fn try_from_string(input: String) -> Optional[JSON]:
+        """Parse JSON document from a string.
+
+        Returns:
+            An optional parsed JSON document, returns None if the input is invalid.
+        """
         try:
             return JSON.from_string(input)
         except:
