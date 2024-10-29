@@ -137,7 +137,6 @@ struct JSON(JsonValue, Sized):
             raise Error("Invalid json, expected end of input, recieved: " + reader.remaining())
 
         return data
-    
 
     fn bytes_for_string(self) -> Int:
         """Should only be used as an estimatation. Sizes of float values are
