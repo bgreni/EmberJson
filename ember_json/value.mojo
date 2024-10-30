@@ -5,7 +5,7 @@ from .utils import *
 from utils import Variant
 from .constants import *
 from sys.intrinsics import unlikely
-from .traits import JsonValue
+from .traits import JsonValue, PrettyPrintable
 from collections.string import _calc_initial_buffer_size, _atol, _atof
 from collections import InlineArray
 from utils import StringSlice
@@ -248,6 +248,14 @@ struct Value(JsonValue):
             self.object().write_to(writer)
         elif self.isa[Array]():
             self.array().write_to(writer)
+
+    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
+        if self.isa[Object]():
+            self.object().pretty_to(writer, indent)
+        if self.isa[Array]():
+            self.array().pretty_to(writer, indent)
+        else:
+            self.write_to(writer)
 
     fn bytes_for_string(self) -> Int:
         if self.isa[Int]():

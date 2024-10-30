@@ -4,12 +4,12 @@ from .reader import Reader
 from .object import Object
 from .array import Array
 from .constants import *
-from .traits import JsonValue
+from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
 from .utils import write, ByteView
 
 
 @value
-struct JSON(JsonValue, Sized):
+struct JSON(JsonValue, Sized, PrettyPrintable):
     """Top level JSON object, can either be an Array, or an Object.
 
     ```mojo
@@ -135,8 +135,21 @@ struct JSON(JsonValue, Sized):
     fn write_to[W: Writer](self, inout writer: W):
         if self.is_object():
             self.object().write_to(writer)
-        elif self.is_array():
+        else:
             self.array().write_to(writer)
+
+    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
+        """Write the pretty representation to a writer.
+
+        Args:
+            writer: The writer to write to.
+            indent: If an int denotes the number of space characters to use,
+                    if a string then use the given string to indent.
+        """
+        if self.is_object():
+            self.object().pretty_to(writer, indent)
+        else:
+            self.array().pretty_to(writer, indent)
 
     @always_inline
     fn __str__(self) -> String:

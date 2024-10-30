@@ -1,8 +1,8 @@
 from .constants import *
-from utils import Span
+from utils import Span, Variant
 from memory import memcmp, memcpy
 from utils.write import _WriteBuffer
-from .traits import JsonValue
+from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
 
 alias Bytes = String._buffer_type
 alias ByteVec = SIMD[DType.uint8, _]
@@ -13,6 +13,13 @@ alias ByteView = Span[Byte, _]
 fn write[T: JsonValue, //](v: T) -> String:
     var writer = _WriteBuffer[4096](String())
     v.write_to(writer)
+    writer.flush()
+    return writer.writer
+
+
+fn write_pretty[P: PrettyPrintable, //](v: P, indent: Variant[Int, String] = DefaultPrettyIndent) -> String:
+    var writer = _WriteBuffer[4096](String())
+    v.pretty_to(writer, indent)
     writer.flush()
     return writer.writer
 

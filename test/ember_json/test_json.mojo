@@ -1,4 +1,5 @@
 from ember_json import JSON, Null, Array, Object
+from ember_json import write_pretty
 from testing import *
 
 def test_json_object():
@@ -63,6 +64,32 @@ def test_stringify_array():
     var arr = JSON.from_string('[123,"foo",false,null]')
     assert_equal(str(arr), '[123,"foo",false,null]')
 
+def test_pretty_print_array():
+    var arr = JSON.from_string('[123,"foo",false,null]')
+    var expected = """[
+    123,
+    "foo",
+    false,
+    null
+]"""
+    assert_equal(expected, write_pretty(arr))
+
+    expected = """[
+iamateapot123,
+iamateapot"foo",
+iamateapotfalse,
+iamateapotnull
+]"""
+    assert_equal(expected, write_pretty(arr, indent=String("iamateapot")))
+
+
+def test_pretty_print_object():
+    var ob = JSON.from_string('{"k1": null, "k2": 123}')    
+    var expected = """{
+    "k1": null,
+    "k2": 123
+}"""
+    assert_equal(expected, write_pretty(ob))
 
 
 def test_trailing_tokens():

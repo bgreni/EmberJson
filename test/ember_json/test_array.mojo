@@ -76,3 +76,10 @@ def test_equality():
 
 def test_bytes_for_string():
     assert_equal(Array(123, "foo", Null(), True).bytes_for_string(), 21)
+
+def test_list_ctr():
+    var arr = Array.from_list(List[Value](123, "foo", Null(), False))
+    assert_equal(arr[0].int(), 123)
+    assert_equal(arr[1].string(), "foo")
+    assert_equal(arr[2].null(), Null())
+    assert_equal(arr[3].bool(), False)

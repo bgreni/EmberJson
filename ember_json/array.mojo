@@ -4,11 +4,13 @@ from .reader import Reader
 from .utils import *
 from .constants import *
 from sys.intrinsics import unlikely, likely
-from .traits import JsonValue
+from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
 
 
 @value
 struct Array(Sized, JsonValue):
+    """Represents a json array."""
+
     alias Type = List[Value]
     var _data: Self.Type
 
@@ -56,6 +58,17 @@ struct Array(Sized, JsonValue):
                 (",").write_to(writer)
         ("]").write_to(writer)
 
+    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
+        var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
+        writer.write("[\n")
+        for i in range(len(self._data)):
+            writer.write(ind, self._data[i])
+            if i < len(self._data) - 1:
+                writer.write(",")
+            writer.write("\n")
+
+        writer.write("]")
+
     @always_inline
     fn __str__(self) -> String:
         return write(self)
@@ -92,7 +105,7 @@ struct Array(Sized, JsonValue):
                 raise Error("Illegal trailing comma")
 
             if reader.bytes_remaining() == 0:
-                raise Error("Expected ']")
+                raise Error("Expected ']'")
         reader.inc()
         return out^
 
@@ -100,3 +113,7 @@ struct Array(Sized, JsonValue):
     fn from_string(input: String) raises -> Array:
         var r = Reader(input.as_bytes())
         return Self._from_reader(r)
+
+    @staticmethod
+    fn from_list(owned l: Self.Type) -> Array:
+        return Self(l^)

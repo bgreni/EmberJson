@@ -4,11 +4,11 @@ from collections import Dict
 from .constants import *
 from .utils import *
 from sys.intrinsics import unlikely, likely
-from .traits import JsonValue
+from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
 
 
 @value
-struct Object(Sized, JsonValue):
+struct Object(Sized, JsonValue, PrettyPrintable):
     alias Type = Dict[String, Value]
     var _data: Self.Type
 
@@ -77,6 +77,21 @@ struct Object(Sized, JsonValue):
                 pass
 
         ("}").write_to(writer)
+
+    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
+        var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
+        writer.write("{\n")
+        try:
+            var done = 0
+            for k in self._data:
+                writer.write(ind, '"', k[], '"', ": ", self[k[]])
+                if done < len(self._data) - 1:
+                    writer.write(",")
+                writer.write("\n")
+                done += 1
+        except:
+            pass
+        writer.write("}")
 
     @always_inline
     fn __str__(self) -> String:
