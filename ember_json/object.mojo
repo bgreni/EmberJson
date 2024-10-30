@@ -4,7 +4,7 @@ from collections import Dict
 from .constants import *
 from .utils import *
 from sys.intrinsics import unlikely, likely
-from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
+from .traits import JsonValue, PrettyPrintable
 
 
 @value
@@ -78,20 +78,23 @@ struct Object(Sized, JsonValue, PrettyPrintable):
 
         ("}").write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
-        var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
+    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
         writer.write("{\n")
+        self._pretty_write_items(writer, indent)
+        writer.write("}")
+
+    fn _pretty_write_items[W: Writer](self, inout writer: W, indent: String):
         try:
             var done = 0
             for k in self._data:
-                writer.write(ind, '"', k[], '"', ": ", self[k[]])
+                writer.write(indent, '"', k[], '"', ": ")
+                self[k[]]._pretty_to_as_element(writer, indent)
                 if done < len(self._data) - 1:
                     writer.write(",")
                 writer.write("\n")
                 done += 1
         except:
             pass
-        writer.write("}")
 
     @always_inline
     fn __str__(self) -> String:

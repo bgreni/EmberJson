@@ -1,4 +1,5 @@
 from ember_json.value import Value, Null
+from ember_json.utils import write_pretty
 from testing import *
 
 def test_bool():
@@ -91,3 +92,20 @@ def test_bytes_for_string():
     assert_equal(Value(Null()).bytes_for_string(), 4)
     assert_equal(Value(True).bytes_for_string(), 4)
     assert_equal(Value(False).bytes_for_string(), 5)
+
+def test_pretty():
+    var v = Value.from_string("[123, 43564, false]")
+    var expected = """[
+    123,
+    43564,
+    false
+]"""
+    assert_equal(expected, write_pretty(v))
+
+    v = Value.from_string('{"key": 123, "k2": null}')
+    expected = """{
+    "key": 123,
+    "k2": null
+}"""
+
+    assert_equal(expected, write_pretty(v))

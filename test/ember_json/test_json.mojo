@@ -82,6 +82,18 @@ iamateapotnull
 ]"""
     assert_equal(expected, write_pretty(arr, indent=String("iamateapot")))
 
+    arr = JSON.from_string('[123,"foo",false,{"key": null}]')
+    expected = """[
+    123,
+    "foo",
+    false,
+    {
+        "key": null
+    }
+]"""
+
+    assert_equal(expected, write_pretty(arr))
+
 
 def test_pretty_print_object():
     var ob = JSON.from_string('{"k1": null, "k2": 123}')    
@@ -90,6 +102,17 @@ def test_pretty_print_object():
     "k2": 123
 }"""
     assert_equal(expected, write_pretty(ob))
+
+    ob = JSON.from_string('{"key": 123, "k": [123, false, null]}')
+
+    expected = """{
+    "key": 123,
+    "k": [
+        123,
+        false,
+        null
+    ]
+}"""
 
 
 def test_trailing_tokens():

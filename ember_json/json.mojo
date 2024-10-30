@@ -4,7 +4,7 @@ from .reader import Reader
 from .object import Object
 from .array import Array
 from .constants import *
-from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
+from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
 
 
@@ -138,7 +138,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         else:
             self.array().write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
+    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
         """Write the pretty representation to a writer.
 
         Args:

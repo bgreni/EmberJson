@@ -4,7 +4,7 @@ from .reader import Reader
 from .utils import *
 from .constants import *
 from sys.intrinsics import unlikely, likely
-from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
+from .traits import JsonValue, PrettyPrintable
 
 
 @value
@@ -58,16 +58,18 @@ struct Array(Sized, JsonValue):
                 (",").write_to(writer)
         ("]").write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
-        var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
+    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
         writer.write("[\n")
+        self._pretty_write_items(writer, indent)
+        writer.write("]")
+
+    fn _pretty_write_items[W: Writer](self, inout writer: W, indent: String):
         for i in range(len(self._data)):
-            writer.write(ind, self._data[i])
+            writer.write(indent)
+            self._data[i]._pretty_to_as_element(writer, indent)
             if i < len(self._data) - 1:
                 writer.write(",")
             writer.write("\n")
-
-        writer.write("]")
 
     @always_inline
     fn __str__(self) -> String:

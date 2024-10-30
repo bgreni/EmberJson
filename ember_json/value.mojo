@@ -249,10 +249,22 @@ struct Value(JsonValue):
         elif self.isa[Array]():
             self.array().write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: Variant[Int, String] = DefaultPrettyIndent):
+    fn _pretty_to_as_element[W: Writer](self, inout writer: W, indent: String):
+        if self.isa[Object]():
+            writer.write("{\n")
+            self.object()._pretty_write_items(writer, indent * 2)
+            writer.write(indent, "}")
+        elif self.isa[Array]():
+            writer.write("[\n")
+            self.array()._pretty_write_items(writer, indent * 2)
+            writer.write(indent, "]")
+        else:
+            self.write_to(writer)
+
+    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
         if self.isa[Object]():
             self.object().pretty_to(writer, indent)
-        if self.isa[Array]():
+        elif self.isa[Array]():
             self.array().pretty_to(writer, indent)
         else:
             self.write_to(writer)

@@ -2,11 +2,13 @@ from .constants import *
 from utils import Span, Variant
 from memory import memcmp, memcpy
 from utils.write import _WriteBuffer
-from .traits import JsonValue, PrettyPrintable, DefaultPrettyIndent
+from .traits import JsonValue, PrettyPrintable
 
 alias Bytes = String._buffer_type
 alias ByteVec = SIMD[DType.uint8, _]
 alias ByteView = Span[Byte, _]
+
+alias DefaultPrettyIndent = 4
 
 
 @always_inline
@@ -19,7 +21,8 @@ fn write[T: JsonValue, //](v: T) -> String:
 
 fn write_pretty[P: PrettyPrintable, //](v: P, indent: Variant[Int, String] = DefaultPrettyIndent) -> String:
     var writer = _WriteBuffer[4096](String())
-    v.pretty_to(writer, indent)
+    var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
+    v.pretty_to(writer, ind)
     writer.flush()
     return writer.writer
 
