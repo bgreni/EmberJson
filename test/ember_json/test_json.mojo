@@ -124,15 +124,15 @@ def test_trailing_tokens():
 
 var dir = String("./bench_data/data/jsonchecker/")
 
-def test_bytes_for_string():
+def test_min_size_for_string():
     var s = '["foo",1234,null,true,{"key":"some long string teehee","other":null}]'
     var json = JSON.from_string(s)
-    assert_equal(json.bytes_for_string(), s.byte_length())
+    assert_equal(json.min_size_for_string(), s.byte_length())
 
 def check_bytes_length(file: String):
     with open("./bench_data/data/" + file + ".json", "r") as f:
         var data = "".join(f.read().split())
-        assert_equal(JSON.from_string(data).bytes_for_string(), data.byte_length())
+        assert_equal(JSON.from_string(data).min_size_for_string(), data.byte_length())
 
 def expect_fail(datafile: String):
     with open(dir + datafile + ".json", "r") as f:

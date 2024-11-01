@@ -15,11 +15,11 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     fn __init__(inout self):
         self._data = Self.Type()
 
-    fn bytes_for_string(self) -> Int:
+    fn min_size_for_string(self) -> Int:
         var n = 2 + len(self)  # include ':' for each pairing
         for k in self._data:
             try:
-                n += 3 + len(k[]) + self._data[k[]].bytes_for_string()
+                n += 3 + len(k[]) + self._data[k[]].min_size_for_string()
             except:
                 pass
         n -= 1

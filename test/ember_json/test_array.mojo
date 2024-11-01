@@ -74,8 +74,8 @@ def test_equality():
     assert_equal(arr1, arr2)
     assert_not_equal(arr1, arr3)
 
-def test_bytes_for_string():
-    assert_equal(Array(123, "foo", Null(), True).bytes_for_string(), 21)
+def test_min_size_for_string():
+    assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
 
 def test_list_ctr():
     var arr = Array.from_list(List[Value](123, "foo", Null(), False))

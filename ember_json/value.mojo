@@ -28,7 +28,7 @@ struct Null(JsonValue):
     fn __repr__(self) -> String:
         return self.__str__()
 
-    fn bytes_for_string(self) -> Int:
+    fn min_size_for_string(self) -> Int:
         return 4
 
     fn write_to[W: Writer](self, inout writer: W):
@@ -269,7 +269,7 @@ struct Value(JsonValue):
         else:
             self.write_to(writer)
 
-    fn bytes_for_string(self) -> Int:
+    fn min_size_for_string(self) -> Int:
         if self.isa[Int]():
             return _calc_initial_buffer_size(self.int()) - 1
         elif self.isa[Float64]():
@@ -279,11 +279,11 @@ struct Value(JsonValue):
         elif self.isa[Bool]():
             return 4 if self.bool() else 5
         elif self.isa[Null]():
-            return Null().bytes_for_string()
+            return Null().min_size_for_string()
         elif self.isa[Object]():
-            return self.object().bytes_for_string()
+            return self.object().min_size_for_string()
         elif self.isa[Array]():
-            return self.array().bytes_for_string()
+            return self.array().min_size_for_string()
 
         return 0
 

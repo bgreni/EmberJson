@@ -7,6 +7,8 @@ A lightweight JSON parsing library for Mojo.
 
 ## Usage
 
+### Parsing from a string
+
 ```mojo
 from ember_json import *
 
@@ -33,4 +35,25 @@ fn main() raises:
 
     # `Value` type is formattable to allow for direct printing
     print(json[0]) # prints 123
+```
+
+### Stringify
+
+```mojo
+# convert to string
+var json = JSON.from_string('{"key": 123}')
+print(str(json)) # prints '{"key":123}'
+
+# JSON is Writable so you can also just print it directly, or 
+# even write you own stringify implementation!
+print(json)
+
+# pretty printing
+from ember_json import write_pretty
+print(write_pretty(json)) 
+"""
+{
+    "key": 123
+}
+"""
 ```

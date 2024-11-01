@@ -83,10 +83,10 @@ struct Array(Sized, JsonValue):
     fn append(inout self, owned item: Value):
         self._data.append(item^)
 
-    fn bytes_for_string(self) -> Int:
+    fn min_size_for_string(self) -> Int:
         var n = 2
         for item in self._data:
-            n += item[].bytes_for_string() + 1
+            n += item[].min_size_for_string() + 1
         n -= 1
 
         return n

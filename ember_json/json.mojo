@@ -6,6 +6,7 @@ from .array import Array
 from .constants import *
 from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
+from sys.intrinsics import unlikely
 
 
 @value
@@ -30,9 +31,19 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
 
     alias Type = Variant[Object, Array]
     var _data: Self.Type
+    var _source_len: Int
 
     fn __init__(inout self):
         self._data = Object()
+        self._source_len = 0
+
+    fn __init__(inout self, owned ob: Object):
+        self._data = ob^
+        self._source_len = 0
+    
+    fn __init__(inout self, owned arr: Array):
+        self._data = arr^
+        self._source_len = 0
 
     @always_inline
     fn _get[T: CollectionElement](ref [_]self: Self) -> ref [self._data] T:
@@ -206,18 +217,20 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("Invalid json")
 
         reader.skip_whitespace()
-        if reader.has_more():
+        if unlikely(reader.has_more()):
             raise Error("Invalid json, expected end of input, recieved: " + reader.remaining())
 
-        return data
+        data._source_len = len(input)
 
-    fn bytes_for_string(self) -> Int:
+        return data^
+
+    fn min_size_for_string(self) -> Int:
         """Should only be used as an estimatation. Sizes of float values are
         unreliable.
         """
         if self.is_array():
-            return self.array().bytes_for_string()
-        return self.object().bytes_for_string()
+            return self.array().min_size_for_string()
+        return self.object().min_size_for_string()
 
     @staticmethod
     fn try_from_string(input: String) -> Optional[JSON]:

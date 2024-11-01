@@ -73,5 +73,5 @@ def test_bad_value():
     with assert_raises():
         _ = Object.from_string('{"key": nil}')
 
-def test_bytes_for_string():
-    assert_equal(Object.from_string('{"key": true, "foo": "bar"}').bytes_for_string(), 24)
+def test_min_size_for_string():
+    assert_equal(Object.from_string('{"key": true, "foo": "bar"}').min_size_for_string(), 24)
