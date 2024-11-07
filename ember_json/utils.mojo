@@ -1,5 +1,5 @@
 from .constants import *
-from utils import Span, Variant
+from utils import Span, Variant, StringSlice
 from memory import memcmp, memcpy
 from utils.write import _WriteBuffer
 from .traits import JsonValue, PrettyPrintable
@@ -40,8 +40,7 @@ fn is_space(char: Byte) -> Bool:
 
 @always_inline
 fn bytes_to_string(b: ByteView[_]) -> String:
-    var s = String(b)
-    s._buffer.append(0)
+    var s = String(StringSlice(unsafe_from_utf8=b))
     return s
 
 

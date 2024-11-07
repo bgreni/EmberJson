@@ -40,7 +40,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     fn __init__(inout self, owned ob: Object):
         self._data = ob^
         self._source_len = 0
-    
+
     fn __init__(inout self, owned arr: Array):
         self._data = arr^
         self._source_len = 0
