@@ -33,15 +33,15 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     var _data: Self.Type
     var _source_len: Int
 
-    fn __init__(inout self):
+    fn __init__(out self):
         self._data = Object()
         self._source_len = 0
 
-    fn __init__(inout self, owned ob: Object):
+    fn __init__(out self, owned ob: Object):
         self._data = ob^
         self._source_len = 0
 
-    fn __init__(inout self, owned arr: Array):
+    fn __init__(out self, owned arr: Array):
         self._data = arr^
         self._source_len = 0
 

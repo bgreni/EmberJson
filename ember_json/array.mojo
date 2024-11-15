@@ -14,10 +14,10 @@ struct Array(Sized, JsonValue):
     alias Type = List[Value]
     var _data: Self.Type
 
-    fn __init__(inout self):
+    fn __init__(out self):
         self._data = Self.Type()
 
-    fn __init__(inout self, owned *values: Value):
+    fn __init__(out self, owned *values: Value):
         self._data = Self.Type(variadic_list=values^)
 
     @always_inline

@@ -12,7 +12,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     alias Type = Dict[String, Value]
     var _data: Self.Type
 
-    fn __init__(inout self):
+    fn __init__(out self):
         self._data = Self.Type()
 
     fn min_size_for_string(self) -> Int:

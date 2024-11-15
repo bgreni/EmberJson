@@ -1,7 +1,7 @@
 from .constants import *
 from utils import Span, Variant, StringSlice
 from memory import memcmp, memcpy
-from utils.write import _WriteBuffer
+from utils.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 
 alias Bytes = String._buffer_type
@@ -13,14 +13,14 @@ alias DefaultPrettyIndent = 4
 
 @always_inline
 fn write[T: JsonValue, //](v: T) -> String:
-    var writer = _WriteBuffer[4096](String())
+    var writer = _WriteBufferStack[4096](String())
     v.write_to(writer)
     writer.flush()
     return writer.writer
 
 
 fn write_pretty[P: PrettyPrintable, //](v: P, indent: Variant[Int, String] = DefaultPrettyIndent) -> String:
-    var writer = _WriteBuffer[4096](String())
+    var writer = _WriteBufferStack[4096](String())
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
     v.pretty_to(writer, ind)
     writer.flush()

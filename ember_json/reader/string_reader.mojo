@@ -7,7 +7,7 @@ struct Reader[origin: ImmutableOrigin, //]:
     var _data: ByteView[origin]
     var _index: Int
 
-    fn __init__(inout self, data: ByteView[origin]):
+    fn __init__(out self, data: ByteView[origin]):
         self._data = data
         self._index = 0
 
