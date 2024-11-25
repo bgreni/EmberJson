@@ -127,7 +127,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
             reader.skip_whitespace()
             if unlikely(reader.peek() == RCURLY and has_comma):
                 raise Error("Illegal trailing comma")
-            out[bytes_to_string(ident^)] = val^
+            out[bytes_to_string(ident)] = val^
         reader.inc()
         return out^
 

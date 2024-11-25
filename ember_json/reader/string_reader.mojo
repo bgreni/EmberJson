@@ -42,7 +42,7 @@ struct Reader[origin: ImmutableOrigin, //]:
 
     @always_inline
     fn read_word(inout self) -> ByteView[origin]:
-        var end_chars = ByteVec[4](COMMA, RCURLY, RBRACKET)
+        var end_chars = ByteVec[4](COMMA, RCURLY, RBRACKET, RBRACKET)
 
         @always_inline
         @parameter

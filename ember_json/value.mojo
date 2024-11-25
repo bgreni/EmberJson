@@ -149,30 +149,39 @@ struct Value(JsonValue):
     alias Type = Variant[Int, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
+    @implicit
     fn __init__(out self, owned v: Self.Type):
         self._data = v^
 
+    @implicit
     fn __init__(out self, v: Int):
         self._data = v
 
+    @implicit
     fn __init__(out self, v: Float64):
         self._data = v
 
+    @implicit
     fn __init__(out self, owned v: Object):
         self._data = v^
 
+    @implicit
     fn __init__(out self, owned v: Array):
         self._data = v^
 
+    @implicit
     fn __init__(out self, owned v: String):
         self._data = v^
 
+    @implicit
     fn __init__(out self, v: StringLiteral):
         self._data = String(v)
 
+    @implicit
     fn __init__(out self, v: Null):
         self._data = v
 
+    @implicit
     fn __init__(out self, v: Bool):
         self._data = v
 
@@ -309,7 +318,7 @@ struct Value(JsonValue):
             v = True
         elif n == F:
             var w = reader.read_word()
-            if not compare_bytes(w, FALSE):
+            if not compare_bytes(w, Span(FALSE)):
                 raise Error("Expected 'false', received: " + bytes_to_string(w))
             v = False
         elif n == N:
