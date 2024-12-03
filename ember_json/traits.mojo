@@ -2,7 +2,7 @@ from utils import Variant
 
 
 trait PrettyPrintable:
-    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String):
         ...
 
 

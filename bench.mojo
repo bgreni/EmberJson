@@ -52,7 +52,7 @@ fn main() raises:
 	m.dump_report()
 
 @parameter
-fn benchmark_value_parse(inout b: Bencher, s: String) raises:
+fn benchmark_value_parse(mut b: Bencher, s: String) raises:
 	@always_inline
 	@parameter
 	fn do() raises:
@@ -61,7 +61,7 @@ fn benchmark_value_parse(inout b: Bencher, s: String) raises:
 	_ = s
 
 @parameter
-fn benchmark_json_parse(inout b: Bencher, s: String) raises:
+fn benchmark_json_parse(mut b: Bencher, s: String) raises:
 	@always_inline
 	@parameter
 	fn do() raises:
@@ -70,7 +70,7 @@ fn benchmark_json_parse(inout b: Bencher, s: String) raises:
 	_ = s
 
 @parameter
-fn benchmark_value_stringify(inout b: Bencher, v: Value) raises:
+fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
 	@always_inline
 	@parameter
 	fn do():
@@ -79,7 +79,7 @@ fn benchmark_value_stringify(inout b: Bencher, v: Value) raises:
 	_ = v
 
 @parameter
-fn benchmark_json_stringify(inout b: Bencher, json: JSON) raises:
+fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
 	@always_inline
 	@parameter
 	fn do() raises:

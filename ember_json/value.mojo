@@ -31,7 +31,7 @@ struct Null(JsonValue):
     fn min_size_for_string(self) -> Int:
         return 4
 
-    fn write_to[W: Writer](self, inout writer: W):
+    fn write_to[W: Writer](self, mut writer: W):
         writer.write(self.__str__())
 
 
@@ -47,7 +47,7 @@ fn validate_string(b: ByteView[_]) raises:
 
     # can't be alias for some reason
     var acceptable_escapes = ByteVec[16](QUOTE, RSOL, SOL, B, F, N, R, T, U)
-    var control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED)
+    var control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
     i = 0
     while i < len(b):
         var char = b[i]
@@ -61,7 +61,7 @@ fn validate_string(b: ByteView[_]) raises:
         i += 1
 
 
-fn _read_string(inout reader: Reader) raises -> String:
+fn _read_string(mut reader: Reader) raises -> String:
     reader.inc()
     var res = reader.read_string()
     validate_string(res)
@@ -89,7 +89,7 @@ fn is_numerical_component(char: Byte) -> Bool:
 
 
 @always_inline
-fn _read_number(inout reader: Reader) raises -> Variant[Int, Float64]:
+fn _read_number(mut reader: Reader) raises -> Variant[Int, Float64]:
     var num = reader.read_while[is_numerical_component]()
     var is_float = False
     var first_digit_found = False
@@ -174,7 +174,7 @@ struct Value(JsonValue):
         self._data = v^
 
     @implicit
-    fn __init__(out self, v: StringLiteral):
+    fn __init__(out self, owned v: StringLiteral):
         self._data = String(v)
 
     @implicit
@@ -209,56 +209,69 @@ struct Value(JsonValue):
             return self.array() == other.array()
         return False
 
+    @always_inline
     fn __ne__(self, other: Self) -> Bool:
         return not self == other
 
+    @always_inline
     fn isa[T: CollectionElement](self) -> Bool:
         return self._data.isa[T]()
 
-    fn get[T: CollectionElement](ref [_]self) -> ref [self._data] T:
+    @always_inline
+    fn __getitem__[T: CollectionElement](self) -> ref[self._data] T:
         return self._data[T]
 
-    fn int(ref [_]self) -> ref [self._data] Int:
-        return self.get[Int]()
+    @always_inline
+    fn get[T: CollectionElement](self) -> ref[self._data] T:
+        return self._data[T]
 
-    fn null(ref [_]self) -> ref [self._data] Null:
-        return self.get[Null]()
+    @always_inline
+    fn int(self) -> Int:
+        return self._data[Int]
 
-    fn string(ref [_]self) -> ref [self._data] String:
-        return self.get[String]()
+    @always_inline
+    fn null(self) -> Null:
+        return self._data[Null]
 
-    fn float(ref [_]self) -> ref [self._data] Float64:
-        return self.get[Float64]()
+    @always_inline
+    fn string(self) -> ref [self._data] String:
+        return self._data[String]
 
-    fn bool(ref [_]self) -> ref [self._data] Bool:
-        return self.get[Bool]()
+    @always_inline
+    fn float(self) -> Float64:
+        return self._data[Float64]
 
-    fn object(ref [_]self) -> ref [self._data] Object:
-        return self.get[Object]()
+    @always_inline
+    fn bool(self) -> Bool:
+        return self._data[Bool]
 
-    fn array(ref [_]self) -> ref [self._data] Array:
-        return self.get[Array]()
+    @always_inline
+    fn object(self) -> ref [self._data] Object:
+        return self._data[Object]
 
-    fn write_to[W: Writer](self, inout writer: W):
+    @always_inline
+    fn array(self) -> ref [self._data] Array:
+        return self._data[Array]
+
+    fn write_to[W: Writer](self, mut writer: W):
         if self.isa[Int]():
             self.int().write_to(writer)
         elif self.isa[Float64]():
             self.float().write_to(writer)
         elif self.isa[String]():
-            ('"').write_to(writer)
+            writer.write('"')
             self.string().write_to(writer)
-            ('"').write_to(writer)
+            writer.write('"')
         elif self.isa[Bool]():
-            var b = self.bool()
-            ("true").write_to(writer) if b else ("false").write_to(writer)
+            writer.write("true")if self.bool() else writer.write("false")
         elif self.isa[Null]():
-            ("null").write_to(writer)
+            writer.write("null")
         elif self.isa[Object]():
             self.object().write_to(writer)
         elif self.isa[Array]():
             self.array().write_to(writer)
 
-    fn _pretty_to_as_element[W: Writer](self, inout writer: W, indent: String):
+    fn _pretty_to_as_element[W: Writer](self, mut writer: W, indent: String):
         if self.isa[Object]():
             writer.write("{\n")
             self.object()._pretty_write_items(writer, indent * 2)
@@ -270,7 +283,7 @@ struct Value(JsonValue):
         else:
             self.write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String):
         if self.isa[Object]():
             self.object().pretty_to(writer, indent)
         elif self.isa[Array]():
@@ -305,7 +318,7 @@ struct Value(JsonValue):
         return self.__str__()
 
     @staticmethod
-    fn _from_reader(inout reader: Reader) raises -> Value:
+    fn _from_reader(mut reader: Reader) raises -> Value:
         reader.skip_whitespace()
         var v: Value
         var n = reader.peek()

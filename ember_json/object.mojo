@@ -26,9 +26,10 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         return n
 
     @always_inline
-    fn __setitem__(inout self, owned key: String, owned item: Value):
+    fn __setitem__(mut self, owned key: String, owned item: Value):
         self._data[key^] = item^
 
+    @always_inline
     fn __getitem__(ref [_]self, key: String) raises -> ref [self._data._entries[0].value().value] Value:
         return self._data._find_ref(key)
 
@@ -59,7 +60,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     fn __ne__(self, other: Self) -> Bool:
         return not self == other
 
-    fn write_to[W: Writer](self, inout writer: W):
+    fn write_to[W: Writer](self, mut writer: W):
         ("{").write_to(writer)
         var done = 0
         for k in self._data:
@@ -78,12 +79,12 @@ struct Object(Sized, JsonValue, PrettyPrintable):
 
         ("}").write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String):
         writer.write("{\n")
         self._pretty_write_items(writer, indent)
         writer.write("}")
 
-    fn _pretty_write_items[W: Writer](self, inout writer: W, indent: String):
+    fn _pretty_write_items[W: Writer](self, mut writer: W, indent: String):
         try:
             var done = 0
             for k in self._data:
@@ -105,7 +106,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         return self.__str__()
 
     @staticmethod
-    fn _from_reader(inout reader: Reader) raises -> Object:
+    fn _from_reader(mut reader: Reader) raises -> Object:
         reader.inc()
         var out = Self()
         reader.skip_whitespace()

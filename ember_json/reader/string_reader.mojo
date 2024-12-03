@@ -16,13 +16,13 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self._data[self._index]
 
     @always_inline
-    fn next(inout self, chars: Int = 1) -> ByteView[origin]:
+    fn next(mut self, chars: Int = 1) -> ByteView[origin]:
         var start = self._index
         self.inc(chars)
         return self._data[start : self._index]
 
     @always_inline
-    fn read_until(inout self, char: Byte) -> ByteView[origin]:
+    fn read_until(mut self, char: Byte) -> ByteView[origin]:
         @parameter
         fn not_char(c: Byte) -> Bool:
             return c != char
@@ -30,7 +30,7 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self.read_while[not_char]()
 
     @always_inline
-    fn read_string(inout self) -> ByteView[origin]:
+    fn read_string(mut self) -> ByteView[origin]:
         var start = self._index
         while likely(self._index < len(self._data)):
             if self.peek() == QUOTE:
@@ -41,7 +41,7 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self._data[start : self._index]
 
     @always_inline
-    fn read_word(inout self) -> ByteView[origin]:
+    fn read_word(mut self) -> ByteView[origin]:
         var end_chars = ByteVec[4](COMMA, RCURLY, RBRACKET, RBRACKET)
 
         @always_inline
@@ -52,23 +52,23 @@ struct Reader[origin: ImmutableOrigin, //]:
         return self.read_while[func]()
 
     @always_inline
-    fn read_while[func: fn (char: Byte) capturing -> Bool](inout self) -> ByteView[origin]:
+    fn read_while[func: fn (char: Byte) capturing -> Bool](mut self) -> ByteView[origin]:
         var start = self._index
         while likely(self._index < len(self._data)) and func(self.peek()):
             self.inc()
         return self._data[start : self._index]
 
     @always_inline
-    fn skip_whitespace(inout self):
+    fn skip_whitespace(mut self):
         while likely(self._index < len(self._data)) and is_space(self.peek()):
             self.inc()
 
     @always_inline
-    fn inc(inout self, amount: Int = 1):
+    fn inc(mut self, amount: Int = 1):
         self._index += amount
 
     @always_inline
-    fn skip_if(inout self, char: Byte):
+    fn skip_if(mut self, char: Byte):
         if self.peek() == char:
             self.inc()
 

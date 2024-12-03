@@ -46,28 +46,25 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         self._source_len = 0
 
     @always_inline
-    fn _get[T: CollectionElement](ref [_]self: Self) -> ref [self._data] T:
-        return self._data.__getitem__[T]()
-
-    @always_inline
-    fn object(ref [_]self) -> ref [self._data] Object:
+    fn object(ref[_]self) -> ref [self._data] Object:
         """Fetch the inner object of this json document.
 
         Returns:
             A reference to a JSON object.
         """
-        return self._get[Object]()
+        return self._data[Object]
 
     @always_inline
-    fn array(ref [_]self) -> ref [self._data] Array:
+    fn array(ref[_]self) -> ref [self._data] Array:
         """Fetch the inner array of this json document.
 
         Returns:
             A reference to a JSON array.
         """
-        return self._get[Array]()
+        return self._data[Array]
 
-    fn __getitem__(ref [_]self, key: String) raises -> ref [self.object()._data._entries[0].value().value] Value:
+    @always_inline
+    fn __getitem__(self, key: String) raises -> ref [self.object()._data._entries[0].value().value] Value:
         """Access inner object value by key.
 
         Raises:
@@ -80,7 +77,8 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("Array index must be an int")
         return self.object().__getitem__(key)
 
-    fn __getitem__(ref [_]self, ind: Int) raises -> ref [self.array()._data] Value:
+    @always_inline
+    fn __getitem__(self, ind: Int) raises -> ref [self.array()._data] Value:
         """Access the inner array by index.
 
         Raises:
@@ -93,7 +91,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("Object key expected to be string")
         return self.array()[ind]
 
-    fn __setitem__(inout self, owned key: String, owned item: Value) raises:
+    fn __setitem__(mut self, owned key: String, owned item: Value) raises:
         """Mutate the inner object.
 
         Raises:
@@ -103,7 +101,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("Object key expected to be string")
         self.object()[key^] = item^
 
-    fn __setitem__(inout self, ind: Int, owned item: Value) raises:
+    fn __setitem__(mut self, ind: Int, owned item: Value) raises:
         """Mutate the inner array.
 
         Raises:
@@ -143,13 +141,14 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     fn __len__(self) -> Int:
         return len(self.array()) if self.is_array() else len(self.object())
 
-    fn write_to[W: Writer](self, inout writer: W):
+    @always_inline
+    fn write_to[W: Writer](self, mut writer: W):
         if self.is_object():
             self.object().write_to(writer)
         else:
             self.array().write_to(writer)
 
-    fn pretty_to[W: Writer](self, inout writer: W, indent: String):
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String):
         """Write the pretty representation to a writer.
 
         Args:
