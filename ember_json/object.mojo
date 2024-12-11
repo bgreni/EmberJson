@@ -106,9 +106,9 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         return self.__str__()
 
     @staticmethod
-    fn _from_reader(mut reader: Reader) raises -> Object:
+    fn _from_reader(out out: Object, mut reader: Reader) raises:
+        out = Object()
         reader.inc()
-        var out = Self()
         reader.skip_whitespace()
         while likely(reader.peek() != RCURLY):
             if unlikely(reader.peek() != QUOTE):
@@ -130,9 +130,8 @@ struct Object(Sized, JsonValue, PrettyPrintable):
                 raise Error("Illegal trailing comma")
             out[bytes_to_string(ident)] = val^
         reader.inc()
-        return out^
 
     @staticmethod
-    fn from_string(s: String) raises -> Object:
+    fn from_string(out o: Object, s: String) raises:
         var r = Reader(s.as_bytes())
-        return Self._from_reader(r)
+        o = Self._from_reader(r)

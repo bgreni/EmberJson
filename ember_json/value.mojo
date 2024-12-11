@@ -4,13 +4,14 @@ from .reader import Reader
 from .utils import *
 from utils import Variant
 from .constants import *
-from sys.intrinsics import unlikely
 from .traits import JsonValue, PrettyPrintable
 from collections.string import _calc_initial_buffer_size, _atol, _atof
 from collections import InlineArray
 from utils import StringSlice
-from sys.ffi import external_call
 from memory import UnsafePointer
+from .simd import *
+from utils._utf8_validation import _is_valid_utf8
+from sys.intrinsics import unlikely
 
 
 @value
@@ -35,43 +36,18 @@ struct Null(JsonValue):
         writer.write(self.__str__())
 
 
-@always_inline
-fn validate_string(b: ByteView[_]) raises:
-    alias SOL = to_byte("/")
-    alias B = to_byte("b")
-    alias F = to_byte("f")
-    alias N = to_byte("n")
-    alias R = to_byte("r")
-    alias T = to_byte("t")
-    alias U = to_byte("u")
 
-    # can't be alias for some reason
-    var acceptable_escapes = ByteVec[16](QUOTE, RSOL, SOL, B, F, N, R, T, U)
-    var control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
-    i = 0
-    while i < len(b):
-        var char = b[i]
-        if char == RSOL:
-            var next = b[i + 1]
-            if unlikely(not next in acceptable_escapes):
-                raise Error("Invalid escape sequence: " + byte_to_string(char) + byte_to_string(next))
-            i += 1
-        if unlikely(char in control_chars):
-            raise Error("Control characters must be escaped")
-        i += 1
-
-
-fn _read_string(mut reader: Reader) raises -> String:
+fn _read_string(out str: String, mut reader: Reader) raises:
     reader.inc()
     var res = reader.read_string()
-    validate_string(res)
+    if unlikely(not _is_valid_utf8(res)):
+        raise Error("Invalid UTF8 string: " + bytes_to_string(res))
+    # validate_string(res)
     reader.inc()
-    return bytes_to_string(res)
+    str = bytes_to_string(res)
 
 
 alias DOT = to_byte(".")
-alias LOW_E = to_byte("e")
-alias UPPER_E = to_byte("E")
 alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
 alias ZERO_CHAR = to_byte("0")
@@ -87,6 +63,22 @@ fn is_numerical_component(char: Byte) -> Bool:
     var componenents = ByteVec[8](DOT, LOW_E, UPPER_E, PLUS, NEG)
     return isdigit(char) or char in componenents
 
+
+# @always_inline
+# fn parse_number(out v: Variant[Int, Float64], mut reader: Reader) raises:
+#     alias uint64_max: UInt64 = 0xFFFFFFFFFFFFFFFF
+#     var sign = -1
+#     var man_nd = 0
+#     var exp1 = 0
+#     var trunc = 0
+#     var man: UInt64 = 0
+
+#     var neg = reader.peek() == NEG
+#     reader.inc(int(neg))
+#     sign = -1 if neg else 1
+
+#     if self.peek() == ZERO_CHAR:
+#         self.inc()
 
 @always_inline
 fn _read_number(mut reader: Reader) raises -> Variant[Int, Float64]:
@@ -107,11 +99,6 @@ fn _read_number(mut reader: Reader) raises -> Variant[Int, Float64]:
                 var after = num[j]
                 if after in sign_parts:
                     raise Error("Invalid number: " + bytes_to_string(num))
-        if isdigit(b):
-            if not first_digit_found and b == ZERO_CHAR:
-                leading_zero = True
-            else:
-                first_digit_found = True
 
     var is_negative = num[0] == NEG
 
@@ -130,6 +117,9 @@ fn _read_number(mut reader: Reader) raises -> Variant[Int, Float64]:
             raise Error("Invalid number")
         i += 1
 
+    if num[i] == ZERO_CHAR and len(num) - 1 - i != 0:
+        raise Error("Integer cannot have leading zero")
+
     while i < len(num):
         if not isdigit(num[i]):
             raise Error("unexpected token in number")
@@ -138,9 +128,6 @@ fn _read_number(mut reader: Reader) raises -> Variant[Int, Float64]:
 
     if is_negative:
         parsed = -parsed
-
-    if leading_zero and parsed != 0:
-        raise Error("Integer cannot have leading zero")
     return parsed
 
 
@@ -218,11 +205,11 @@ struct Value(JsonValue):
         return self._data.isa[T]()
 
     @always_inline
-    fn __getitem__[T: CollectionElement](self) -> ref[self._data] T:
+    fn __getitem__[T: CollectionElement](self) -> ref [self._data] T:
         return self._data[T]
 
     @always_inline
-    fn get[T: CollectionElement](self) -> ref[self._data] T:
+    fn get[T: CollectionElement](self) -> ref [self._data] T:
         return self._data[T]
 
     @always_inline
@@ -263,7 +250,7 @@ struct Value(JsonValue):
             self.string().write_to(writer)
             writer.write('"')
         elif self.isa[Bool]():
-            writer.write("true")if self.bool() else writer.write("false")
+            writer.write("true") if self.bool() else writer.write("false")
         elif self.isa[Null]():
             writer.write("null")
         elif self.isa[Object]():
@@ -318,9 +305,8 @@ struct Value(JsonValue):
         return self.__str__()
 
     @staticmethod
-    fn _from_reader(mut reader: Reader) raises -> Value:
+    fn _from_reader(out v: Value, mut reader: Reader) raises:
         reader.skip_whitespace()
-        var v: Value
         var n = reader.peek()
         if n == QUOTE:
             v = _read_string(reader)
@@ -350,11 +336,10 @@ struct Value(JsonValue):
             else:
                 v = num.unsafe_take[Float64]()
         else:
-            raise Error("Invalid json value")
+            raise Error("Invalid json value\n" + reader.remaining())
         reader.skip_whitespace()
-        return v^
 
     @staticmethod
-    fn from_string(input: String) raises -> Value:
+    fn from_string(out v: Value, input: String) raises:
         var r = Reader(input.as_bytes())
-        return Value._from_reader(r)
+        v = Value._from_reader(r)

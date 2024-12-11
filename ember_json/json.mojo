@@ -14,39 +14,37 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     """Top level JSON object, can either be an Array, or an Object.
 
     ```mojo
-    from ember_json import JSON
-    var arr = JSON.from_string("[1, 2, 3]")
-    var foo = arr[2] # index based access for arrays
+    # from ember_json import JSON
+    # var arr = JSON.from_string("[1, 2, 3]")
+    # var foo = arr[2] # index based access for arrays
 
-    var object = JSON.from_string('{"key": true}')
-    var bar = object["key"] # key based access for objects
-    try:
-        # using the wrong accessor type will raise an exception
-        _ = arr["key"]
-        _ = object[1]
-    except:
-        pass
+    # var object = JSON.from_string('{"key": true}')
+    # var bar = object["key"] # key based access for objects
+    # try:
+    #     # using the wrong accessor type will raise an exception
+    #     _ = arr["key"]
+    #     _ = object[1]
+    # except:
+    #     pass
     ```
     """
 
     alias Type = Variant[Object, Array]
     var _data: Self.Type
-    var _source_len: Int
 
     fn __init__(out self):
         self._data = Object()
-        self._source_len = 0
 
+    @implicit
     fn __init__(out self, owned ob: Object):
         self._data = ob^
-        self._source_len = 0
 
+    @implicit
     fn __init__(out self, owned arr: Array):
         self._data = arr^
-        self._source_len = 0
 
     @always_inline
-    fn object(ref[_]self) -> ref [self._data] Object:
+    fn object(ref [_]self) -> ref [self._data] Object:
         """Fetch the inner object of this json document.
 
         Returns:
@@ -55,7 +53,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return self._data[Object]
 
     @always_inline
-    fn array(ref[_]self) -> ref [self._data] Array:
+    fn array(ref [_]self) -> ref [self._data] Array:
         """Fetch the inner array of this json document.
 
         Returns:
@@ -183,7 +181,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
 
     @always_inline
     @staticmethod
-    fn from_string(input: String) raises -> JSON:
+    fn from_string(out json: JSON, input: String) raises:
         """Parse JSON document from a string.
 
         Raises:
@@ -192,10 +190,10 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         Returns:
             A parsed JSON document.
         """
-        return Self.from_bytes(input.as_bytes())
+        json = Self.from_bytes(input.as_bytes())
 
     @staticmethod
-    fn from_bytes[origin: ImmutableOrigin, //](input: ByteView[origin]) raises -> JSON:
+    fn from_bytes[origin: ImmutableOrigin, //](out data: JSON, input: ByteView[origin]) raises:
         """Parse JSON document from bytes.
 
         Raises:
@@ -204,7 +202,6 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         Returns:
             A parsed JSON document.
         """
-        var data = Self()
         var reader = Reader(input)
         reader.skip_whitespace()
         var next_char = reader.peek()
@@ -218,10 +215,6 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         reader.skip_whitespace()
         if unlikely(reader.has_more()):
             raise Error("Invalid json, expected end of input, recieved: " + reader.remaining())
-
-        data._source_len = len(input)
-
-        return data^
 
     fn min_size_for_string(self) -> Int:
         """Should only be used as an estimatation. Sizes of float values are

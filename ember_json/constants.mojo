@@ -16,3 +16,6 @@ alias TAB = to_byte("\t")
 alias SPACE = to_byte(" ")
 alias LINE_FEED = to_byte("\r")
 alias RSOL = to_byte("\\")
+
+alias LOW_E = to_byte("e")
+alias UPPER_E = to_byte("E")

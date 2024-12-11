@@ -2,6 +2,11 @@ from ember_json import JSON, Null, Array, Object
 from ember_json import write_pretty
 from testing import *
 
+def test_fix_simd_string_parse():
+    var s = R'{           "quote": "\"",           "backslash": "\\"}'
+    var json = JSON.from_string(s)
+    assert_equal(len(json), 2)
+
 def test_json_object():
     var s = '{"key": 123}'
     var json = JSON.from_string(s)
@@ -312,12 +317,11 @@ def test_roundtrip20():
 def test_roundtrip21():
     round_trip_test("roundtrip21")
 
-# TODO: Mojo currently doesn't format floats in scientific notation
-# def test_roundtrip22():
-#     round_trip_test("roundtrip22")
+def test_roundtrip22():
+    round_trip_test("roundtrip22")
 
-# def test_roundtrip23():
-#     round_trip_test("roundtrip23")
+def test_roundtrip23():
+    round_trip_test("roundtrip23")
 
 
 # TODO: Makes '0.0'??

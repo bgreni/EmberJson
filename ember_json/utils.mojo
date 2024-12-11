@@ -1,8 +1,10 @@
 from .constants import *
-from utils import Span, Variant, StringSlice
+from utils import Variant, StringSlice
+from memory import Span
 from memory import memcmp, memcpy
 from utils.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
+from os import abort
 
 alias Bytes = String._buffer_type
 alias ByteVec = SIMD[DType.uint8, _]
@@ -43,6 +45,12 @@ fn bytes_to_string(b: ByteView[_]) -> String:
     var s = String(StringSlice(unsafe_from_utf8=b))
     return s
 
+@always_inline
+fn to_string(out s: String, v: ByteVec):
+    s = String()
+    @parameter
+    for i in range(v.size):
+        s += byte_to_string(v[i])
 
 @always_inline
 fn byte_to_string(b: Byte) -> String:

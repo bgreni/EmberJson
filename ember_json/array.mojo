@@ -18,7 +18,7 @@ struct Array(Sized, JsonValue):
         self._data = Self.Type()
 
     fn __init__(out self, owned *values: Value):
-        self._data = Self.Type(variadic_list=values^)
+        self._data = Self.Type(elements=values^)
 
     @always_inline
     fn __getitem__(ref [_]self, ind: Int) -> ref [self._data] Value:
@@ -49,6 +49,10 @@ struct Array(Sized, JsonValue):
     @always_inline
     fn __ne__(self, other: Self) -> Bool:
         return self._data != other._data
+
+    @always_inline
+    fn reserve(mut self, n: Int):
+        self._data.reserve(n)
 
     fn write_to[W: Writer](self, mut writer: W):
         ("[").write_to(writer)
@@ -92,10 +96,11 @@ struct Array(Sized, JsonValue):
         return n
 
     @staticmethod
-    fn _from_reader(mut reader: Reader) raises -> Array:
-        var out = Self()
+    fn _from_reader(out out: Array, mut reader: Reader) raises:
+        out = Self()
         reader.inc()
         reader.skip_whitespace()
+        out.reserve(reader.count_before(COMMA, RBRACKET))
         while likely(reader.peek() != RBRACKET):
             out.append(Value._from_reader(reader))
             var has_comma = False
@@ -109,13 +114,12 @@ struct Array(Sized, JsonValue):
             if reader.bytes_remaining() == 0:
                 raise Error("Expected ']'")
         reader.inc()
-        return out^
 
     @staticmethod
-    fn from_string(input: String) raises -> Array:
+    fn from_string(out arr: Array, input: String) raises:
         var r = Reader(input.as_bytes())
-        return Self._from_reader(r)
+        arr = Self._from_reader(r)
 
     @staticmethod
-    fn from_list(owned l: Self.Type) -> Array:
-        return Self(l^)
+    fn from_list(out arr: Array, owned l: Self.Type):
+        arr = Self(l^)
