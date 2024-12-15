@@ -45,12 +45,15 @@ fn bytes_to_string(b: ByteView[_]) -> String:
     var s = String(StringSlice(unsafe_from_utf8=b))
     return s
 
+
 @always_inline
 fn to_string(out s: String, v: ByteVec):
     s = String()
+
     @parameter
     for i in range(v.size):
         s += byte_to_string(v[i])
+
 
 @always_inline
 fn byte_to_string(b: Byte) -> String:

@@ -17,5 +17,3 @@ alias SIMDu64 = SIMD[DType.uint64, _]
 #     @parameter
 #     for i in range(Size):
 #         out += int(v[i]) << (Size - i - 1)
-
-

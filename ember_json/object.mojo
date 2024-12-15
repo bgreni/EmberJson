@@ -1,10 +1,11 @@
-from .reader import Reader
+
 from .value import Value, Null
 from collections import Dict
 from .constants import *
 from .utils import *
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
+from .parser import Parser
 
 
 @value
@@ -106,32 +107,6 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         return self.__str__()
 
     @staticmethod
-    fn _from_reader(out out: Object, mut reader: Reader) raises:
-        out = Object()
-        reader.inc()
-        reader.skip_whitespace()
-        while likely(reader.peek() != RCURLY):
-            if unlikely(reader.peek() != QUOTE):
-                raise Error("Invalid identifier")
-            reader.inc()
-            var ident = reader.read_string()
-            reader.inc()
-            reader.skip_whitespace()
-            if unlikely(reader.peek() != COLON):
-                raise Error("Invalid identifier")
-            reader.inc()
-            var val = Value._from_reader(reader)
-            var has_comma = False
-            if reader.peek() == COMMA:
-                has_comma = True
-                reader.inc()
-            reader.skip_whitespace()
-            if unlikely(reader.peek() == RCURLY and has_comma):
-                raise Error("Illegal trailing comma")
-            out[bytes_to_string(ident)] = val^
-        reader.inc()
-
-    @staticmethod
     fn from_string(out o: Object, s: String) raises:
-        var r = Reader(s.as_bytes())
-        o = Self._from_reader(r)
+        var p = Parser(s.unsafe_ptr(), len(s))
+        o = p.parse_object()

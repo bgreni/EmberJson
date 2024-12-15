@@ -1,6 +1,5 @@
 from .object import Object
 from .array import Array
-from .reader import Reader
 from .utils import *
 from utils import Variant
 from .constants import *
@@ -11,7 +10,8 @@ from utils import StringSlice
 from memory import UnsafePointer
 from .simd import *
 from utils._utf8_validation import _is_valid_utf8
-from sys.intrinsics import unlikely
+from sys.intrinsics import unlikely, likely
+from .parser import Parser
 
 
 @value
@@ -34,101 +34,6 @@ struct Null(JsonValue):
 
     fn write_to[W: Writer](self, mut writer: W):
         writer.write(self.__str__())
-
-
-
-fn _read_string(out str: String, mut reader: Reader) raises:
-    reader.inc()
-    var res = reader.read_string()
-    if unlikely(not _is_valid_utf8(res)):
-        raise Error("Invalid UTF8 string: " + bytes_to_string(res))
-    # validate_string(res)
-    reader.inc()
-    str = bytes_to_string(res)
-
-
-alias DOT = to_byte(".")
-alias PLUS = to_byte("+")
-alias NEG = to_byte("-")
-alias ZERO_CHAR = to_byte("0")
-
-alias TRUE = ByteVec[4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
-alias FALSE = InlineArray[UInt8, 5](to_byte("f"), to_byte("a"), to_byte("l"), to_byte("s"), to_byte("e"))
-alias NULL = ByteVec[4](to_byte("n"), to_byte("u"), to_byte("l"), to_byte("l"))
-
-
-@always_inline
-@parameter
-fn is_numerical_component(char: Byte) -> Bool:
-    var componenents = ByteVec[8](DOT, LOW_E, UPPER_E, PLUS, NEG)
-    return isdigit(char) or char in componenents
-
-
-# @always_inline
-# fn parse_number(out v: Variant[Int, Float64], mut reader: Reader) raises:
-#     alias uint64_max: UInt64 = 0xFFFFFFFFFFFFFFFF
-#     var sign = -1
-#     var man_nd = 0
-#     var exp1 = 0
-#     var trunc = 0
-#     var man: UInt64 = 0
-
-#     var neg = reader.peek() == NEG
-#     reader.inc(int(neg))
-#     sign = -1 if neg else 1
-
-#     if self.peek() == ZERO_CHAR:
-#         self.inc()
-
-@always_inline
-fn _read_number(mut reader: Reader) raises -> Variant[Int, Float64]:
-    var num = reader.read_while[is_numerical_component]()
-    var is_float = False
-    var first_digit_found = False
-    var leading_zero = False
-    var float_parts = ByteVec[4](DOT, LOW_E, UPPER_E)
-    var sign_parts = ByteVec[2](PLUS, NEG)
-    for i in range(len(num)):
-        var b = num[i]
-        if b in float_parts:
-            is_float = True
-        if b in sign_parts:
-            var j = i + 1
-            if j < len(num):
-                # atof doesn't reject numbers like 0e+-1
-                var after = num[j]
-                if after in sign_parts:
-                    raise Error("Invalid number: " + bytes_to_string(num))
-
-    var is_negative = num[0] == NEG
-
-    if is_float:
-        return _atof(StringSlice(unsafe_from_utf8=num))
-
-    # _atol has to look for a bunch of extra stuff that slows it down that isn't valid for JSON anyways
-    # var parsed = _atol(StringSlice(unsafe_from_utf8=num))
-
-    var parsed = 0
-    var has_pos = num[0] == PLUS
-
-    var i = 0
-    if is_negative or has_pos:
-        if len(num) == 1:
-            raise Error("Invalid number")
-        i += 1
-
-    if num[i] == ZERO_CHAR and len(num) - 1 - i != 0:
-        raise Error("Integer cannot have leading zero")
-
-    while i < len(num):
-        if not isdigit(num[i]):
-            raise Error("unexpected token in number")
-        parsed = parsed * 10 + int(num[i] - 48)
-        i += 1
-
-    if is_negative:
-        parsed = -parsed
-    return parsed
 
 
 @value
@@ -305,41 +210,6 @@ struct Value(JsonValue):
         return self.__str__()
 
     @staticmethod
-    fn _from_reader(out v: Value, mut reader: Reader) raises:
-        reader.skip_whitespace()
-        var n = reader.peek()
-        if n == QUOTE:
-            v = _read_string(reader)
-        elif n == T:
-            var w = reader.read_word()
-            if not compare_simd(w, TRUE):
-                raise Error("Expected 'true', received: " + bytes_to_string(w))
-            v = True
-        elif n == F:
-            var w = reader.read_word()
-            if not compare_bytes(w, Span(FALSE)):
-                raise Error("Expected 'false', received: " + bytes_to_string(w))
-            v = False
-        elif n == N:
-            var w = reader.read_word()
-            if not compare_simd(w, NULL):
-                raise Error("Expected 'null', received: " + bytes_to_string(w))
-            v = Null()
-        elif n == LCURLY:
-            v = Object._from_reader(reader)
-        elif n == LBRACKET:
-            v = Array._from_reader(reader)
-        elif is_numerical_component(n):
-            var num = _read_number(reader)
-            if num.isa[Int]():
-                v = num.unsafe_take[Int]()
-            else:
-                v = num.unsafe_take[Float64]()
-        else:
-            raise Error("Invalid json value\n" + reader.remaining())
-        reader.skip_whitespace()
-
-    @staticmethod
     fn from_string(out v: Value, input: String) raises:
-        var r = Reader(input.as_bytes())
-        v = Value._from_reader(r)
+        var p = Parser(input.unsafe_ptr(), len(input))
+        v = p.parse_value()

@@ -1,12 +1,12 @@
 from collections import Dict, Optional
 from utils import Variant
-from .reader import Reader
 from .object import Object
 from .array import Array
 from .constants import *
 from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
 from sys.intrinsics import unlikely
+from .parser import Parser
 
 
 @value
@@ -14,18 +14,18 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     """Top level JSON object, can either be an Array, or an Object.
 
     ```mojo
-    # from ember_json import JSON
-    # var arr = JSON.from_string("[1, 2, 3]")
-    # var foo = arr[2] # index based access for arrays
+    from ember_json import JSON
+    var arr = JSON.from_string("[1, 2, 3]")
+    var foo = arr[2] # index based access for arrays
 
-    # var object = JSON.from_string('{"key": true}')
-    # var bar = object["key"] # key based access for objects
-    # try:
-    #     # using the wrong accessor type will raise an exception
-    #     _ = arr["key"]
-    #     _ = object[1]
-    # except:
-    #     pass
+    var object = JSON.from_string('{"key": true}')
+    var bar = object["key"] # key based access for objects
+    try:
+        # using the wrong accessor type will raise an exception
+        _ = arr["key"]
+        _ = object[1]
+    except:
+        pass
     ```
     """
 
@@ -202,19 +202,8 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         Returns:
             A parsed JSON document.
         """
-        var reader = Reader(input)
-        reader.skip_whitespace()
-        var next_char = reader.peek()
-        if next_char == LCURLY:
-            data = Object._from_reader(reader)
-        elif next_char == LBRACKET:
-            data = Array._from_reader(reader)
-        else:
-            raise Error("Invalid json")
-
-        reader.skip_whitespace()
-        if unlikely(reader.has_more()):
-            raise Error("Invalid json, expected end of input, recieved: " + reader.remaining())
+        var parser = Parser(input.unsafe_ptr(), len(input))
+        data = parser.parse()
 
     fn min_size_for_string(self) -> Int:
         """Should only be used as an estimatation. Sizes of float values are

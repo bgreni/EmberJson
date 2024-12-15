@@ -1,10 +1,10 @@
 from .object import Object
 from .value import Value
-from .reader import Reader
 from .utils import *
 from .constants import *
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
+from .parser import Parser
 
 
 @value
@@ -96,29 +96,9 @@ struct Array(Sized, JsonValue):
         return n
 
     @staticmethod
-    fn _from_reader(out out: Array, mut reader: Reader) raises:
-        out = Self()
-        reader.inc()
-        reader.skip_whitespace()
-        out.reserve(reader.count_before(COMMA, RBRACKET))
-        while likely(reader.peek() != RBRACKET):
-            out.append(Value._from_reader(reader))
-            var has_comma = False
-            if reader.peek() == COMMA:
-                has_comma = True
-                reader.inc()
-            reader.skip_whitespace()
-            if unlikely(reader.peek() == RBRACKET and has_comma):
-                raise Error("Illegal trailing comma")
-
-            if reader.bytes_remaining() == 0:
-                raise Error("Expected ']'")
-        reader.inc()
-
-    @staticmethod
     fn from_string(out arr: Array, input: String) raises:
-        var r = Reader(input.as_bytes())
-        arr = Self._from_reader(r)
+        var p = Parser(input.unsafe_ptr(), len(input))
+        arr = p.parse_array()
 
     @staticmethod
     fn from_list(out arr: Array, owned l: Self.Type):
