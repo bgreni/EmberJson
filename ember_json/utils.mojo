@@ -1,7 +1,7 @@
 from .constants import *
 from utils import Variant, StringSlice
 from memory import Span
-from memory import memcmp, memcpy
+from memory import memcmp, memcpy, UnsafePointer
 from utils.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from os import abort
@@ -72,3 +72,8 @@ fn compare_simd[size: Int, //](s: ByteView[_], r: SIMD[DType.uint8, size]) -> Bo
     if len(s) != size:
         return False
     return (s.unsafe_ptr().load[width=size]() == r).reduce_and()
+
+
+@always_inline
+fn unsafe_memcpy[T: AnyType](mut dest: T, src: UnsafePointer[Byte], len: Int):
+    memcpy(UnsafePointer.address_of(dest).bitcast[UInt8](), src, len)

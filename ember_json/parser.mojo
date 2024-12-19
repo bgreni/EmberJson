@@ -9,13 +9,23 @@ from sys.intrinsics import unlikely, likely
 from collections import InlineArray
 from .parser_helper import *
 from collections.string import _atof
+from memory.unsafe import bitcast
+from bit import count_leading_zeros
 
 #######################################################
 # Certain parts inspired/taken from SonicCPP https://github.com/bytedance/sonic-cpp
 #######################################################
 
 
-struct Parser:
+@value
+struct ParseOptions:
+    var fast_float_parsing: Bool
+
+    fn __init__(out self, *, fast_float_parsing: Bool = False):
+        self.fast_float_parsing = fast_float_parsing
+
+
+struct Parser[options: ParseOptions = ParseOptions()]:
     var data: BytePtr
     var end: BytePtr
     var size: Int
@@ -59,6 +69,7 @@ struct Parser:
         self.data += 1
         self.skip_whitespace()
         arr = Array()
+        arr.reserve(8)
 
         if unlikely(self.data[] != RBRACKET):
             while True:
@@ -140,7 +151,8 @@ struct Parser:
         elif n == LBRACKET:
             v = self.parse_array()
         elif is_numerical_component(n):
-            v = self.read_number()
+            # v = self.read_number()
+            v = self.parse_number()
         else:
             raise Error("Invalid json value")
 
@@ -163,22 +175,6 @@ struct Parser:
             self.data += 4
 
         return c1 <= 0x10FFFF
-
-    fn count_before(self, to_count: Byte, until: Byte) -> Int:
-        var count = 0
-        var offset = 0
-        while self.bytes_remaining() - offset >= SIMD8_WIDTH:
-            var block = self.data.offset(offset).load[width=SIMD8_WIDTH]()
-            var end = block == until
-            if not end.reduce_or():
-                count += int((block == to_count).cast[DType.index]().reduce_add())
-                offset += SIMD8_WIDTH
-            else:
-                var ind = first_true(end)
-                for i in range(offset, offset + ind):
-                    count += int(self.data[i] == to_count)
-                break
-        return count
 
     # @always_inline
     fn find_and_move(mut self, start: BytePtr, out s: String) raises:
@@ -262,57 +258,6 @@ struct Parser:
                 self.data += 1
         raise Error("Invalid String")
 
-    fn read_number(mut self, out number: Value) raises:
-        var num = self.data
-        var is_float = False
-        var float_parts = ByteVec[4](DOT, LOW_E, UPPER_E, LOW_E)
-        while is_numerical_component(self.data[]):
-            if self.data[] in float_parts:
-                is_float = True
-            self.data += 1
-
-        var l = ptr_dist(num, self.data)
-        var sign_parts = ByteVec[2](PLUS, NEG)
-
-        for i in range(l):
-            var b = num[i]
-            if b in sign_parts:
-                var j = i + 1
-                if j < l:
-                    # atof doesn't reject numbers like 0e+-1
-                    var after = num[j]
-                    if after in sign_parts:
-                        raise Error("Invalid number: ")
-
-        var is_negative = num[0] == NEG
-
-        if is_float:
-            # I think I'm scamming the type system here but its fine for now
-            number = _atof(StringSlice[__origin_of(num)](ptr=num, length=l))
-            return
-
-        var parsed = 0
-        var has_pos = num[0] == PLUS
-
-        var i = 0
-        if is_negative or has_pos:
-            if l == 1:
-                raise Error("Invalid number")
-            i += 1
-
-        if num[i] == ZERO_CHAR and l - 1 - i != 0:
-            raise Error("Integer cannot have leading zero")
-
-        while i < l:
-            if unlikely(not isdigit(num[i])):
-                raise Error("unexpected token in number: " + '"' + copy_to_string(num, l) + '"')
-            parsed = parsed * 10 + int(num[i] - ZERO_CHAR)
-            i += 1
-
-        if is_negative:
-            parsed = -parsed
-        number = parsed
-
     @always_inline
     fn skip_whitespace(mut self):
         if not is_space(self.data[]):
@@ -334,3 +279,194 @@ struct Parser:
 
         while self.has_more() and is_space(self.data[]):
             self.data += 1
+
+    #####################################################################################################################
+    # BASED ON SIMDJSON https://github.com/simdjson/simdjson/blob/master/include/simdjson/generic/numberparsing.h
+    #####################################################################################################################
+
+    @always_inline
+    fn compute_float_fast[*, use_lot: Bool](self, out d: Float64, power: Int64, i: UInt64, negative: Bool):
+        d = float(i)
+        var pow: Float64
+        var neg_power = power < 0
+
+        @parameter
+        if use_lot:
+            if neg_power:
+                pow = power_of_ten[-int(power)]
+            else:
+                pow = power_of_ten[int(power)]
+        else:
+            pow = 10 ** float(abs(power))
+
+        if power < 0:
+            d = d / pow
+        else:
+            d = d * pow
+        if negative:
+            d = -d
+
+    @always_inline
+    fn compute_float64(self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool) raises:
+        @parameter
+        if options.fast_float_parsing:
+            return self.compute_float_fast[use_lot=False](power, i, negative)
+
+        alias min_fast_power = Int64(-22)
+        alias max_fast_power = Int64(22)
+        if min_fast_power <= power <= max_fast_power and i <= 9007199254740991:
+            return self.compute_float_fast[use_lot=True](power, i, negative)
+
+        if unlikely(i == 0 or power < -342):
+            return -0.0 if negative else 0.0
+
+        alias `152170 + 65536` = 152170 + 65536
+        alias `1024 + 63` = 1024 + 63
+
+        # var exponent: Int64 = (((`152170 + 65536`) * power) >> 16) + `1024 + 63`
+        var lz = count_leading_zeros(i)
+        i <<= lz
+
+        var index = int(2 * (power - smallest_power))
+
+        var first_product = full_multiplication(i, power_of_five_128[index])
+
+        if unlikely(first_product[1] & 0x1FF == 0x1FF):
+            second_product = full_multiplication(i, power_of_five_128[index + 1])
+            first_product[0] += second_product[1]
+            if second_product[1] > first_product[0]:
+                first_product[1] += 1
+
+        var lower = first_product[0]
+        var upper = first_product[1]
+
+        var upperbit: UInt64 = upper >> 63
+        var mantissa: UInt64 = upper >> (upperbit + 9)
+        lz += int(1 ^ upperbit)
+
+        var real_exponent: Int64 = (((`152170 + 65536`) * power) >> 16) + `1024 + 63` - lz.cast[DType.int64]()
+
+        alias `1 << 52` = 1 << 52
+
+        if unlikely(real_exponent <= 0):
+            if -real_exponent + 1 >= 64:
+                d = -0.0 if negative else 0.0
+                return
+            mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
+
+            real_exponent = 0 if (mantissa < (`1 << 52`)) else 1
+            return to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
+
+        if unlikely(lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)):
+            alias `64 - 53 - 2` = 64 - 53 - 2
+            if (mantissa << (upperbit + `64 - 53 - 2`)) == upper:
+                mantissa &= ~1
+
+        mantissa += mantissa & 1
+        mantissa >>= 1
+
+        alias `1 << 53` = 1 << 53
+        if mantissa >= (`1 << 53`):
+            mantissa = `1 << 52`
+            real_exponent += 1
+        mantissa &= ~(`1 << 52`)
+
+        if unlikely(real_exponent > 2046):
+            raise Error("infinite value")
+
+        d = to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
+
+    @always_inline
+    fn write_float(
+        self, out v: Value, negative: Bool, i: UInt64, start_digits: BytePtr, digit_count: Int, exponent: Int64
+    ) raises:
+        # TODO: check for long strings
+
+        if unlikely(exponent < smallest_power or exponent > largest_power):
+            if exponent < smallest_power or i == 0:
+                return -0.0 if negative else 0.0
+            raise Error("Invalid number: inf")
+
+        return self.compute_float64(exponent, i, negative)
+
+    @always_inline
+    fn parse_number(mut self, out v: Value) raises:
+        var neg = self.data[] == NEG
+        var p = self.data + int(neg or self.data[] == PLUS)
+
+        var start_digits = p
+        var i: UInt64 = 0
+
+        while parse_digit(p, i):
+            p += 1
+
+        var digit_count = ptr_dist(start_digits, p)
+
+        if digit_count == 0 or (start_digits[] == ZERO_CHAR and digit_count > 1):
+            raise Error("Invalid number")
+
+        var exponent: Int64 = 0
+        var is_float = False
+
+        if p[] == DOT:
+            is_float = True
+            p += 1
+
+            var first_after_period = p
+
+            if self.bytes_remaining() >= 8 and is_made_of_eight_digits_fast(p):
+                i = i * 100000000 + parse_eight_digits(p)
+                p += 8
+
+            while parse_digit(p, i):
+                p += 1
+            exponent = ptr_dist(p, first_after_period)
+            if exponent == 0:
+                raise Error("Invalid number")
+            digit_count = ptr_dist(start_digits, p)
+
+        if is_exp_char(p[]):
+            is_float = True
+            p += 1
+
+            var neg_exp = p[] == NEG
+            p += int(neg_exp or p[] == PLUS)
+
+            if unlikely(is_exp_char(p[])):
+                raise Error("Invalid float: Double sign for exponent")
+
+            var start_exp = p
+            var exp_number: Int64 = 0
+            while parse_digit(p, exp_number):
+                p += 1
+
+            if unlikely(p == start_exp):
+                raise Error("Invalid number")
+
+            if unlikely(p > start_exp + 18):
+                while start_exp[] == ZERO_CHAR:
+                    start_exp += 1
+                if p > start_exp + 18:
+                    exp_number = 999999999999999999
+
+            exponent += -exp_number if neg_exp else exp_number
+
+        if is_float:
+            v = self.write_float(neg, i, start_digits, digit_count, exponent)
+            self.data = p
+            return
+
+        var longest_digit_count = 20
+        if digit_count > longest_digit_count:
+            raise Error("integer overflow")
+        if digit_count == longest_digit_count:
+            if i > Int64.MAX.cast[DType.uint64]():
+                raise Error("integer overflow")
+            if neg:
+                self.data = p
+                return int(~i + 1)
+            elif self.data[0] != to_byte("1") or i <= Int64.MAX.cast[DType.uint64]():
+                raise Error("integer overflow")
+
+        self.data = p
+        return int(~i + 1) if neg else int(i)

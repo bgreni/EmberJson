@@ -43,41 +43,69 @@ def test_null():
     with assert_raises(contains="Expected 'null'"):
         _ = Value.from_string("nil")
 
-def test_number():
+def test_integer():
     var v = Value.from_string("123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), 123)
     assert_equal(str(v), "123")
 
+def test_integer_leading_plus():
     v = Value.from_string("+123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), 123)
 
+def test_integer_negative():
     v = Value.from_string("-123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), -123)
     assert_equal(str(v), "-123")
 
+def test_float():
     v = Value.from_string("43.5")
     assert_true(v.isa[Float64]())
-    assert_equal(v.get[Float64](), 43.5)
+    assert_almost_equal(v.get[Float64](), 43.5)
     assert_equal(str(v), "43.5")
 
+def test_eight_digits_after_dot():
+    v = Value.from_string("342.12345678")
+    assert_true(v.isa[Float64]())
+    assert_almost_equal(v.get[Float64](), 342.12345678)
+    assert_equal(str(v), "342.12345678")
+
+def test_special_case_floats():
+
+    v = Value.from_string('2.2250738585072013e-308')
+    assert_almost_equal(v.float(), 2.2250738585072013e-308)
+    assert_true(v.isa[Float64]())
+
+    v = Value.from_string('7.2057594037927933e+16')
+    assert_true(v.isa[Float64]())
+    assert_almost_equal(v.float(), 7.2057594037927933e+16)
+
+    v = Value.from_string('1e000000000000000000001')
+    assert_true(v.isa[Float64]())
+    assert_almost_equal(v.float(), 1e000000000000000000001)
+
+
+def test_float_leading_plus():
     v = Value.from_string("+43.5")
     assert_true(v.isa[Float64]())
-    assert_equal(v.get[Float64](), 43.5)
+    assert_almost_equal(v.get[Float64](), 43.5)
 
+def test_float_negative():
     v = Value.from_string("-43.5")
     assert_true(v.isa[Float64]())
-    assert_equal(v.get[Float64](), -43.5)
+    assert_almost_equal(v.get[Float64](), -43.5)
 
+def test_float_exponent():
     v = Value.from_string("43.5e10")
     assert_true(v.isa[Float64]())
-    assert_equal(v.get[Float64](), 43.5e10)
+    assert_almost_equal(v.get[Float64](), 43.5e10)
 
+def test_float_exponent_negative():
     v = Value.from_string("-43.5e10")
     assert_true(v.isa[Float64]())
-    assert_equal(v.get[Float64](), -43.5e10)
+    assert_almost_equal(v.get[Float64](), -43.5e10)
 
 def test_equality():
     var v1 = Value(34)

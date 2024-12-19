@@ -4,8 +4,11 @@ from math import iota
 from .simd import *
 from .tables import *
 from memory import memcpy
+from memory.unsafe import bitcast
 
 alias BytePtr = UnsafePointer[Byte, mut=False]
+alias smallest_power: Int64 = -342
+alias largest_power: Int64 = 308
 
 
 alias TRUE = ByteVec[4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
@@ -127,3 +130,43 @@ fn is_sign_char(char: Byte) -> Bool:
     return char == PLUS or char == NEG
 
 
+@always_inline
+fn is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
+    var val: UInt64 = 0
+    unsafe_memcpy(val, src, 8)
+    return ((val & 0xF0F0F0F0F0F0F0F0) | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)) == 0x3333333333333333
+
+
+@always_inline
+fn to_double(out d: Float64, owned mantissa: UInt64, real_exponent: UInt64, negative: Bool):
+    alias `1 << 52` = 1 << 52
+    mantissa &= ~(`1 << 52`)
+    mantissa |= real_exponent << 52
+    mantissa |= UInt64(negative) << 63
+    d = bitcast[DType.float64](mantissa)
+
+
+@always_inline
+fn parse_eight_digits(out val: UInt64, p: BytePtr):
+    val = 0
+    unsafe_memcpy(val, p, 8)
+    val = (val & 0x0F0F0F0F0F0F0F0F) * 2561 >> 8
+    val = (val & 0x00FF00FF00FF00FF) * 6553601 >> 16
+    val = (val & 0x0000FFFF0000FFFF) * 42949672960001 >> 32
+
+
+@always_inline
+fn parse_digit(p: BytePtr, mut i: Scalar) -> Bool:
+    if not isdigit(p[]):
+        return False
+    i = i * 10 + int(p[] - ZERO_CHAR)
+    return True
+
+
+@always_inline
+fn significant_digits(p: BytePtr, digit_count: Int) -> Int:
+    var start = p
+    while start[] == ZERO_CHAR or start[] == DOT:
+        start += 1
+
+    return digit_count - ptr_dist(p, start)

@@ -2,11 +2,6 @@ from ember_json import JSON, Null, Array, Object
 from ember_json import write_pretty
 from testing import *
 
-# def test_fix_simd_string_parse():
-#     var s = R'{           "quote": "\"",           "backslash": "\\"}'
-#     var json = JSON.from_string(s)
-#     assert_equal(len(json), 2)
-
 def test_json_object():
     var s = '{"key": 123}'
     var json = JSON.from_string(s)
