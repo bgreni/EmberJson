@@ -106,6 +106,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         return self.__str__()
 
     @staticmethod
+    @always_inline
     fn from_string(out o: Object, s: String) raises:
-        var p = Parser(s.unsafe_ptr(), len(s))
+        var p = Parser(s)
         o = p.parse_object()

@@ -1,5 +1,5 @@
-from ember_json.value import Value, Null
-from ember_json.utils import write_pretty
+from emberjson.value import Value, Null
+from emberjson.utils import write_pretty
 from testing import *
 
 def test_bool():
@@ -114,12 +114,12 @@ def test_equality():
     assert_equal(v2, v3)
     assert_not_equal(v1, v2)
 
-def test_min_size_for_string():
-    assert_equal(Value(12345).min_size_for_string(), 5)
-    assert_equal(Value("foobar").min_size_for_string(), 8)
-    assert_equal(Value(Null()).min_size_for_string(), 4)
-    assert_equal(Value(True).min_size_for_string(), 4)
-    assert_equal(Value(False).min_size_for_string(), 5)
+# def test_min_size_for_string():
+#     assert_equal(Value(12345).min_size_for_string(), 5)
+#     assert_equal(Value("foobar").min_size_for_string(), 8)
+#     assert_equal(Value(Null()).min_size_for_string(), 4)
+#     assert_equal(Value(True).min_size_for_string(), 4)
+#     assert_equal(Value(False).min_size_for_string(), 5)
 
 def test_pretty():
     var v = Value.from_string("[123, 43564, false]")

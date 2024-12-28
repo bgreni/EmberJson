@@ -4,12 +4,10 @@ from .utils import *
 from utils import Variant
 from .constants import *
 from .traits import JsonValue, PrettyPrintable
-from collections.string import _calc_initial_buffer_size, _atol, _atof
 from collections import InlineArray
 from utils import StringSlice
 from memory import UnsafePointer
 from .simd import *
-from utils._utf8_validation import _is_valid_utf8
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
 
@@ -17,21 +15,27 @@ from .parser import Parser
 @value
 @register_passable("trivial")
 struct Null(JsonValue):
+    @always_inline
     fn __eq__(self, n: Null) -> Bool:
         return True
 
+    @always_inline
     fn __ne__(self, n: Null) -> Bool:
         return False
 
+    @always_inline
     fn __str__(self) -> String:
         return "null"
 
+    @always_inline
     fn __repr__(self) -> String:
         return self.__str__()
 
+    @always_inline
     fn min_size_for_string(self) -> Int:
         return 4
 
+    @always_inline
     fn write_to[W: Writer](self, mut writer: W):
         writer.write(self.__str__())
 
@@ -185,9 +189,9 @@ struct Value(JsonValue):
 
     fn min_size_for_string(self) -> Int:
         if self.isa[Int]():
-            return _calc_initial_buffer_size(self.int()) - 1
+            return 10
         elif self.isa[Float64]():
-            return _calc_initial_buffer_size(self.float()) - 1
+            return 10
         elif self.isa[String]():
             return len(self.string()) + 2  # include the surrounding quotes
         elif self.isa[Bool]():
@@ -210,6 +214,7 @@ struct Value(JsonValue):
         return self.__str__()
 
     @staticmethod
+    @always_inline
     fn from_string(out v: Value, input: String) raises:
-        var p = Parser(input.unsafe_ptr(), len(input))
+        var p = Parser(input)
         v = p.parse_value()

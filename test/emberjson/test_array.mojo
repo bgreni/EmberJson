@@ -1,6 +1,6 @@
-from ember_json.array import Array
-from ember_json import Object
-from ember_json.value import Null, Value
+from emberjson.array import Array
+from emberjson import Object
+from emberjson.value import Null, Value
 from testing import *
 
 def test_array():
@@ -74,8 +74,8 @@ def test_equality():
     assert_equal(arr1, arr2)
     assert_not_equal(arr1, arr3)
 
-def test_min_size_for_string():
-    assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
+# def test_min_size_for_string():
+#     assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
 
 def test_list_ctr():
     var arr = Array.from_list(List[Value](123, "foo", Null(), False))

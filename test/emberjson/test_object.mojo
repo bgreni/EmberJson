@@ -1,6 +1,6 @@
-from ember_json.object import Object
-from ember_json.array import Array
-from ember_json.value import Null
+from emberjson.object import Object
+from emberjson.array import Array
+from emberjson.value import Null
 from testing import *
 
 def test_object():

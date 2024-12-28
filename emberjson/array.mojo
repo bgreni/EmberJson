@@ -96,10 +96,12 @@ struct Array(Sized, JsonValue):
         return n
 
     @staticmethod
+    @always_inline
     fn from_string(out arr: Array, input: String) raises:
-        var p = Parser(input.unsafe_ptr(), len(input))
+        var p = Parser(input)
         arr = p.parse_array()
 
     @staticmethod
+    @always_inline
     fn from_list(out arr: Array, owned l: Self.Type):
         arr = Self(l^)

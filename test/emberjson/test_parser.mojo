@@ -1,5 +1,5 @@
-from ember_json.parser import Parser
-from ember_json import JSON, Null, Array, Object
+from emberjson.parser import Parser
+from emberjson import JSON, Null, Array, Object
 from testing import *
 
 def test_parse():

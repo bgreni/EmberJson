@@ -1,4 +1,4 @@
-from ember_json import *
+from emberjson import *
 from benchmark import *
 
 fn get_data(file: String) -> String:
@@ -29,6 +29,16 @@ fn main() raises:
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayLarge"), large_array)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayExtraLarge"), data)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCanada"), canada)
+	@parameter
+	fn benchmark_fast_float_parse(mut b: Bencher, s: String) raises:
+		@always_inline
+		@parameter
+		fn do() raises:
+			var p = Parser[ParseOptions(fast_float_parsing=True)](s.unsafe_ptr(), len(s))
+			_  = p.parse()
+		b.iter[do]()
+		_ = s
+	m.bench_with_input[String, benchmark_fast_float_parse](BenchId("CanadaFastFloat"), canada)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayTwitter"), twitter)
 	m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCitmCatalog"), catalog)
 

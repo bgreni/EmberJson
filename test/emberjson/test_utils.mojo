@@ -1,5 +1,5 @@
-from ember_json.utils import write
-from ember_json import Value
+from emberjson.utils import write
+from emberjson import Value
 from testing import *
 
 def test_string_builder_string():

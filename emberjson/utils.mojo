@@ -5,6 +5,7 @@ from memory import memcmp, memcpy, UnsafePointer
 from utils.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from os import abort
+from sys import sizeof
 
 alias Bytes = String._buffer_type
 alias ByteVec = SIMD[DType.uint8, _]
@@ -75,5 +76,5 @@ fn compare_simd[size: Int, //](s: ByteView[_], r: SIMD[DType.uint8, size]) -> Bo
 
 
 @always_inline
-fn unsafe_memcpy[T: AnyType](mut dest: T, src: UnsafePointer[Byte], len: Int):
+fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: UnsafePointer[Byte]):
     memcpy(UnsafePointer.address_of(dest).bitcast[UInt8](), src, len)

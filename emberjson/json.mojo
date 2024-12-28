@@ -14,18 +14,19 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     """Top level JSON object, can either be an Array, or an Object.
 
     ```mojo
-    from ember_json import JSON
-    var arr = JSON.from_string("[1, 2, 3]")
-    var foo = arr[2] # index based access for arrays
+    from emberjson import JSON
+    fn main() raises:
+        var arr = JSON.from_string("[1, 2, 3]")
+        var foo = arr[2] # index based access for arrays
 
-    var object = JSON.from_string('{"key": true}')
-    var bar = object["key"] # key based access for objects
-    try:
-        # using the wrong accessor type will raise an exception
-        _ = arr["key"]
-        _ = object[1]
-    except:
-        pass
+        var object: JSON = JSON.from_string('{"key": true}')
+        var bar = object["key"] # key based access for objects
+        try:
+            # using the wrong accessor type will raise an exception
+            _ = arr["key"]
+            _ = object[1]
+        except:
+            pass
     ```
     """
 
@@ -193,6 +194,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         json = Self.from_bytes(input.as_bytes())
 
     @staticmethod
+    @always_inline
     fn from_bytes[origin: ImmutableOrigin, //](out data: JSON, input: ByteView[origin]) raises:
         """Parse JSON document from bytes.
 

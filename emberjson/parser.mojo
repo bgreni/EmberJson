@@ -8,12 +8,13 @@ from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
 from collections import InlineArray
 from .parser_helper import *
-from collections.string import _atof
 from memory.unsafe import bitcast
 from bit import count_leading_zeros
 
 #######################################################
-# Certain parts inspired/taken from SonicCPP https://github.com/bytedance/sonic-cpp
+# Certain parts inspired/taken from SonicCPP and simdjon
+# https://github.com/bytedance/sonic-cpp
+# https://github.com/simdjson/simdjson
 #######################################################
 
 
@@ -29,6 +30,11 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     var data: BytePtr
     var end: BytePtr
     var size: Int
+
+    fn __init__(out self, s: String):
+        self.data = s.unsafe_ptr()
+        self.size = len(s)
+        self.end = self.data + self.size
 
     fn __init__(out self, b: BytePtr, size: Int):
         self.data = b
@@ -195,7 +201,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         self.data += block.bs_index()
         return self.cont(start)
 
-    # @always_inline
     fn cont(mut self, start: BytePtr, out s: String) raises:
         self.data += 1
         if self.data[] == U:
@@ -212,7 +217,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             return self.cont(start)
         return self.find_and_move(start)
 
-    # @always_inline
     fn find(mut self, start: BytePtr, out s: String) raises:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
@@ -236,7 +240,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     fn read_string(mut self, out s: String) raises:
         self.data += 1
         var start = self.data
-        var control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
         while likely(self.has_more()):
             if self.bytes_remaining() >= SIMD8_WIDTH:
                 s = self.find(start)
@@ -253,6 +256,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                         raise Error(
                             "Invalid escape sequence: " + byte_to_string(self.data[-1]) + byte_to_string(self.data[])
                         )
+                alias control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
                 if unlikely(self.data[] in control_chars):
                     raise Error("Control characters must be escaped: " + str(self.data[]))
                 self.data += 1
@@ -271,7 +275,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             var chunk = self.data.load[width=SIMD8_WIDTH]()
             var nonspace = get_non_space_bits(chunk)
             var ind = first_true(nonspace)
-            if ind != -1:
+            if ind != Int.MAX:
                 self.data += ind
                 return
             else:
@@ -320,10 +324,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if unlikely(i == 0 or power < -342):
             return -0.0 if negative else 0.0
 
-        alias `152170 + 65536` = 152170 + 65536
-        alias `1024 + 63` = 1024 + 63
-
-        # var exponent: Int64 = (((`152170 + 65536`) * power) >> 16) + `1024 + 63`
         var lz = count_leading_zeros(i)
         i <<= lz
 
@@ -343,6 +343,9 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         var upperbit: UInt64 = upper >> 63
         var mantissa: UInt64 = upper >> (upperbit + 9)
         lz += int(1 ^ upperbit)
+
+        alias `152170 + 65536` = 152170 + 65536
+        alias `1024 + 63` = 1024 + 63
 
         var real_exponent: Int64 = (((`152170 + 65536`) * power) >> 16) + `1024 + 63` - lz.cast[DType.int64]()
 
@@ -402,7 +405,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
         var digit_count = ptr_dist(start_digits, p)
 
-        if digit_count == 0 or (start_digits[] == ZERO_CHAR and digit_count > 1):
+        if unlikely(digit_count == 0 or (start_digits[] == ZERO_CHAR and digit_count > 1)):
             raise Error("Invalid number")
 
         var exponent: Int64 = 0

@@ -10,12 +10,12 @@ A lightweight JSON parsing library for Mojo.
 ### Parsing from a string
 
 ```mojo
-from ember_json import *
+from emberjson import *
 
 fn main() raises:
     # parse string
     var s = '{"key": 123}'
-    var json = JSON.from_string(s)
+    var json = loads(s)
 
     print(json.is_object()) # prints true
 
@@ -49,7 +49,7 @@ print(str(json)) # prints '{"key":123}'
 print(json)
 
 # pretty printing
-from ember_json import write_pretty
+from emberjson import write_pretty
 print(write_pretty(json)) 
 """
 {
