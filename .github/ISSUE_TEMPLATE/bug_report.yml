@@ -1,0 +1,29 @@
+name: Bug Report
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear, concise description of the bug
+    validations:
+      required: false
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal Reproduction
+      description: A code snippet reproducing the issue
+    validations:
+      required: false
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Machine OS, magic, mojo, and ember versions
+      placeholder:|
+        Machine OS type and version.
+        Output of magic --version.
+        Output of mojo --version.
+        EmberJson version.
