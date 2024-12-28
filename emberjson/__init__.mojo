@@ -7,13 +7,13 @@ from .parser import Parser, ParseOptions
 
 
 @always_inline
-fn loads[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
+fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
     var p = Parser[options](s)
     j = p.parse()
 
 
 @always_inline
-fn dumps[*, pretty: Bool = False](out s: String, j: JSON):
+fn to_string[*, pretty: Bool = False](out s: String, j: JSON):
     @parameter
     if pretty:
         s = write_pretty(j)

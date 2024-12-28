@@ -41,7 +41,6 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     fn __len__(self) -> Int:
         return len(self._data)
 
-    @always_inline
     fn __eq__(self, other: Self) -> Bool:
         if len(self) != len(other):
             return False

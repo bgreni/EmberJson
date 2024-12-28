@@ -45,6 +45,9 @@ struct Value(JsonValue):
     alias Type = Variant[Int, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
+    fn __init__(out self):
+        self._data = Null()
+
     @implicit
     fn __init__(out self, owned v: Self.Type):
         self._data = v^
@@ -151,21 +154,21 @@ struct Value(JsonValue):
 
     fn write_to[W: Writer](self, mut writer: W):
         if self.isa[Int]():
-            self.int().write_to(writer)
+            writer.write(self.int())
         elif self.isa[Float64]():
-            self.float().write_to(writer)
+            writer.write(self.float())
         elif self.isa[String]():
             writer.write('"')
-            self.string().write_to(writer)
+            writer.write(self.string())
             writer.write('"')
         elif self.isa[Bool]():
             writer.write("true") if self.bool() else writer.write("false")
         elif self.isa[Null]():
             writer.write("null")
         elif self.isa[Object]():
-            self.object().write_to(writer)
+            writer.write(self.object())
         elif self.isa[Array]():
-            self.array().write_to(writer)
+            writer.write(self.array())
 
     fn _pretty_to_as_element[W: Writer](self, mut writer: W, indent: String):
         if self.isa[Object]():

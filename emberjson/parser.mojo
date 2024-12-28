@@ -157,7 +157,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         elif n == LBRACKET:
             v = self.parse_array()
         elif is_numerical_component(n):
-            # v = self.read_number()
             v = self.parse_number()
         else:
             raise Error("Invalid json value")

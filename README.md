@@ -7,53 +7,74 @@ A lightweight JSON parsing library for Mojo.
 
 ## Usage
 
-### Parsing from a string
+### Parsing JSON
+
+Use the `parse` function to parse a JSON value from a string. It accepts a
+`ParseOptions` struct as a parameter to alter parsing behaviour.
+
+```mojo
+
+from emberjson import parse
+
+struct ParseOptions:
+    # Always use the fast past during float point value parsing.
+    # Use this only if you are comfortable with potentially reduced accuracy.
+    var fast_float_parsing: Bool
+
+...
+
+var json = parse[ParseOptions(fast_float_parsing=True)]('{"key": 123}')
+```
+
+### Converting to String
+
+Use the `to_string` function to convert a JSON struct to its string representation.
+It accepts a parameter to control whether to pretty print the value.
+The JSON struct also conforms to the `Stringable`, `Representable` and `Writable`
+traits.
+
+```mojo
+from emberjson import to_string
+
+var json = parse('{"key": 123}')
+
+print(to_string(json)) # prints {"key":123}
+print(to_string[pretty=True](json))
+# prints:
+#{
+#   "key": 123
+#}
+```
+
+### Working with JSON
+
+`JSON` is the top level type for a document. It can contain either
+an `Object` or `Array`.
+
+`Value` is used to wrap the various possible primitives that an object or
+array can contain, which are `Int`, `Float64`, `String`, `Bool`, `Object`,
+`Array`, and `Null`.
 
 ```mojo
 from emberjson import *
 
-fn main() raises:
-    # parse string
-    var s = '{"key": 123}'
-    var json = loads(s)
+var json = parse('{"key": 123}')
 
-    print(json.is_object()) # prints true
+# check inner type
+print(json.is_object()) # prints True
 
-    # fetch inner value
-    var ob = json.object()
-    print(ob["key"].int()) # prints 123
-    # implicitly access json object
-    print(json["key"].int()) # prints 123
+# dict style access
+print(json["key"].int()) # prints 123
 
-    # json array
-    s = '[123, 456]'
-    json = JSON.from_string(s)
-    var arr = json.array()
-    print(arr[0].int()) # prints 123
-    # implicitly access array
-    print(json[1].int()) # prints 456
+# array
+var array = parse('[123, 4.5, "string", True, null]')
 
-    # `Value` type is formattable to allow for direct printing
-    print(json[0]) # prints 123
-```
+# array style access
+print(json[3].bool()) # prints True
 
-### Stringify
+# equality checks
+print(json[4] == Null()) # prints True
 
-```mojo
-# convert to string
-var json = JSON.from_string('{"key": 123}')
-print(str(json)) # prints '{"key":123}'
-
-# JSON is Writable so you can also just print it directly, or 
-# even write you own stringify implementation!
-print(json)
-
-# pretty printing
-from emberjson import write_pretty
-print(write_pretty(json)) 
-"""
-{
-    "key": 123
-}
-"""
+# Implicit ctors for Value
+var v: Value = "some string"
 ```
