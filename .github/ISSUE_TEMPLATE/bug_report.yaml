@@ -22,7 +22,7 @@ body:
     attributes:
       label: System Info
       description: Machine OS, magic, mojo, and ember versions
-      placeholder:|
+      placeholder: |
         Machine OS type and version.
         Output of magic --version.
         Output of mojo --version.
