@@ -13,7 +13,8 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     var _data: Self.Type
 
     fn __init__(out self):
-        self._data = Self.Type()
+        # TODO: Maybe a good candidate for autotuning in the future?
+        self._data = Self.Type(power_of_two_initial_capacity=32)
 
     fn min_size_for_string(self) -> Int:
         var n = 2 + len(self)  # include ':' for each pairing

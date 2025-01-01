@@ -44,7 +44,7 @@ fn index(simd: SIMD, item: Scalar[simd.type]) -> Int:
     var seq = iota[simd.type, simd.size]()
     var result = (simd == item).select(seq, simd.MAX).reduce_min()
     var found = bool(result != item.MAX)
-    return (Int.MAX * ~found) | (int(result) * found)
+    return branchless_ternary(int(result), Int.MAX, found)
 
 
 @always_inline
@@ -118,7 +118,7 @@ fn copy_to_string(out s: String, p: BytePtr, length: Int):
     memcpy(l.unsafe_ptr(), p, length)
     l.size = length
     l.append(0)
-    s = l
+    s = l^
 
 
 @always_inline
@@ -133,6 +133,7 @@ fn is_sign_char(char: Byte) -> Bool:
 
 @always_inline
 fn is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
+    """Don't ask me how this works."""
     var val: UInt64 = 0
     unsafe_memcpy(val, src)
     return ((val & 0xF0F0F0F0F0F0F0F0) | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)) == 0x3333333333333333
@@ -149,6 +150,7 @@ fn to_double(out d: Float64, owned mantissa: UInt64, real_exponent: UInt64, nega
 
 @always_inline
 fn parse_eight_digits(out val: UInt64, p: BytePtr):
+    """Don't ask me how this works."""
     val = 0
     unsafe_memcpy(val, p)
     val = (val & 0x0F0F0F0F0F0F0F0F) * 2561 >> 8
@@ -158,10 +160,9 @@ fn parse_eight_digits(out val: UInt64, p: BytePtr):
 
 @always_inline
 fn parse_digit(p: BytePtr, mut i: Scalar) -> Bool:
-    if not isdigit(p[]):
-        return False
-    i = i * 10 + (p[] - ZERO_CHAR).cast[i.type]()
-    return True
+    var dig = isdigit(p[])
+    i = branchless_ternary(i * 10 + (p[] - ZERO_CHAR).cast[i.type](), i, dig)
+    return dig
 
 
 @always_inline

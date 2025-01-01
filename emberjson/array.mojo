@@ -15,7 +15,8 @@ struct Array(Sized, JsonValue):
     var _data: Self.Type
 
     fn __init__(out self):
-        self._data = Self.Type()
+        # TODO: Maybe a good candidate for autotuning in the future?
+        self._data = Self.Type(capacity=8)
 
     fn __init__(out self, owned *values: Value):
         self._data = Self.Type(elements=values^)

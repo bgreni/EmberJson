@@ -75,7 +75,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         self.data += 1
         self.skip_whitespace()
         arr = Array()
-        arr.reserve(8)
 
         if unlikely(self.data[] != RBRACKET):
             while True:
@@ -210,7 +209,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             #     raise Error("Invalid unicode")
         else:
             if unlikely(self.data[] not in acceptable_escapes):
-                raise Error("Invalid escape sequence: " + byte_to_string(self.data[-1]) + byte_to_string(self.data[]))
+                raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
         self.data += 1
         if self.data[] == RSOL:
             return self.cont(start)
@@ -253,7 +252,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
                         raise Error(
-                            "Invalid escape sequence: " + byte_to_string(self.data[-1]) + byte_to_string(self.data[])
+                            "Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[])
                         )
                 alias control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
                 if unlikely(self.data[] in control_chars):
@@ -302,10 +301,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         else:
             pow = 10 ** float(abs(power))
 
-        if power < 0:
-            d = d / pow
-        else:
-            d = d * pow
+
+        d = d / pow if neg_power else d * pow
         if negative:
             d = -d
 
@@ -356,7 +353,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 return
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
 
-            real_exponent = 0 if (mantissa < (`1 << 52`)) else 1
+            real_exponent = branchless_ternary(0, 1, (mantissa < (`1 << 52`)))
             return to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
 
         if unlikely(lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)):
@@ -471,4 +468,4 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 raise Error("integer overflow")
 
         self.data = p
-        return int(~i + 1) if neg else int(i)
+        return branchless_ternary(int(~i + 1), int(i), neg)

@@ -130,7 +130,7 @@ struct Value(JsonValue):
 
     @always_inline
     fn null(self) -> Null:
-        return self._data[Null]
+        return Null()
 
     @always_inline
     fn string(self) -> ref [self._data] String:

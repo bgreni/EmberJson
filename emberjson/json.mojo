@@ -126,6 +126,11 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return v.string() in self.object()
 
     fn __eq__(self, other: Self) -> Bool:
+        """Checks if this document is equal to another.
+
+        Returns:
+            True if the document is of same type and value as other else False.
+        """
         if self.is_object() and other.is_object():
             return self.object() == other.object()
         if self.is_array() and other.is_array():
@@ -134,18 +139,34 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
 
     @always_inline
     fn __ne__(self, other: Self) -> Bool:
+        """Checks if this document is not equal to another.
+
+        Returns:
+            True if the document is not of same type and value as other else False.
+        """
         return not self == other
 
     @always_inline
     fn __len__(self) -> Int:
+        """Returns the length of the inner value. This will be the number of items
+        in an array, or the number of keys in an object.
+
+        Returns:
+            The length of the inner container.
+        """
         return len(self.array()) if self.is_array() else len(self.object())
 
     @always_inline
     fn write_to[W: Writer](self, mut writer: W):
+        """Writes the string representation of the document to the given writer.
+
+        Args:
+            writer: A writer to write to.
+        """
         if self.is_object():
-            self.object().write_to(writer)
+            writer.write(self.object())
         else:
-            self.array().write_to(writer)
+            writer.write(self.array())
 
     fn pretty_to[W: Writer](self, mut writer: W, indent: String):
         """Write the pretty representation to a writer.
@@ -162,10 +183,20 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
 
     @always_inline
     fn __str__(self) -> String:
+        """Returns the json string repr of the document.
+
+        Returns:
+            A json string.
+        """
         return write(self)
 
     @always_inline
     fn __repr__(self) -> String:
+        """Returns the json string repr of the document.
+
+        Returns:
+            A json string.
+        """
         return self.__str__()
 
     @always_inline
@@ -174,10 +205,20 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
 
     @always_inline
     fn is_object(self) -> Bool:
+        """Check if the inner value is an object.
+
+        Returns:
+            True if the inner value is an object else False.
+        """
         return self.isa[Object]()
 
     @always_inline
     fn is_array(self) -> Bool:
+        """Check if the inner value is an array.
+
+        Returns:
+            True if the inner value is an array else False.
+        """
         return self.isa[Array]()
 
     @always_inline
