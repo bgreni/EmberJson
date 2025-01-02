@@ -319,17 +319,17 @@ def test_roundtrip23():
     round_trip_test("roundtrip23")
 
 
-# TODO: Makes '0.0'??
+# TODO: stdlib write it like 1.7976931348623157e+308 instead of 1.7976931348623157e308
 # def test_roundtrip27():
 #     round_trip_test("roundtrip27")
 
 
 # TODO: too big so atof returns 'inf'
-# def test_roundtrip24():
-#     round_trip_test("roundtrip24")
+def test_roundtrip24():
+    round_trip_test("roundtrip24")
 
-# def test_roundtrip25():
-#     round_trip_test("roundtrip25")
+def test_roundtrip25():
+    round_trip_test("roundtrip25")
 
-# def test_roundtrip26():
-#     round_trip_test("roundtrip26")
+def test_roundtrip26():
+    round_trip_test("roundtrip26")

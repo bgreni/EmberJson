@@ -40,7 +40,7 @@ fn get_non_space_bits[Size: Int, //](out v: ByteVec[Size]._Mask, s: ByteVec[Size
 
 
 @always_inline
-fn index(simd: SIMD, item: Scalar[simd.type]) -> Int:
+fn index[T: DType, //, item: Scalar[T]](simd: SIMD[T, _]) -> Int:
     var seq = iota[simd.type, simd.size]()
     var result = (simd == item).select(seq, simd.MAX).reduce_min()
     var found = bool(result != item.MAX)
@@ -48,13 +48,8 @@ fn index(simd: SIMD, item: Scalar[simd.type]) -> Int:
 
 
 @always_inline
-fn index(simd: SIMDBool) -> Int:
-    return index(simd.cast[DType.uint8](), UInt8(1))
-
-
-@always_inline
 fn first_true(simd: SIMD[DType.bool, _]) -> Int:
-    return index(simd.cast[DType.uint8](), UInt8(1))
+    return index[UInt8(1)](simd.cast[DType.uint8]())
 
 
 @always_inline
@@ -84,15 +79,15 @@ struct StringBlock:
 
     @always_inline
     fn has_quote_first(self) -> Bool:
-        return index(self.quote_bits) < index(self.bs_bits) and not self.has_unescaped()
+        return first_true(self.quote_bits) < first_true(self.bs_bits) and not self.has_unescaped()
 
     @always_inline
     fn has_backslash(self) -> Bool:
-        return index(self.bs_bits) < index(self.quote_bits)
+        return first_true(self.bs_bits) < first_true(self.quote_bits)
 
     @always_inline
     fn has_unescaped(self) -> Bool:
-        return index(self.unescaped_bits) < index(self.quote_bits)
+        return first_true(self.unescaped_bits) < first_true(self.quote_bits)
 
     @staticmethod
     @always_inline
