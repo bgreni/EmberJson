@@ -2,7 +2,7 @@
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
 channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 description = "A json library for Mojo"
-name = "EmberJson"
+name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 version = "0.1.0"
 license = "MIT"

@@ -155,7 +155,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.2-pyhd8ed1ab_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pandas-2.2.3-py312hf9745cd_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-0.12.1-pyhd8ed1ab_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/pillow-11.0.0-py312h7b63e92_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pillow-11.1.0-py312h80c1187_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.3.6-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.21.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/propcache-0.2.1-py312h66e93f0_0.conda
@@ -188,7 +188,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/rich-13.9.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/rich-toolkit-0.11.3-pyh29332c3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/s2n-1.5.10-hb5b8611_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/safetensors-0.4.5-py312h12e396e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/safetensors-0.5.0-py312h12e396e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/six-1.17.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/snappy-1.2.1-h8bd8927_1.conda
@@ -406,7 +406,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/rich-13.9.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/rich-toolkit-0.11.3-pyh29332c3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/s2n-1.5.10-h5df210e_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/safetensors-0.4.5-py312h8cbf658_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/safetensors-0.5.0-py312h8cbf658_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/six-1.17.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/snappy-1.2.1-hd4fb6f5_1.conda
@@ -614,7 +614,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/requests-2.32.3-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/rich-13.9.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/rich-toolkit-0.11.3-pyh29332c3_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/safetensors-0.4.5-py312he431725_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/safetensors-0.5.0-py312hcd83bfe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/six-1.17.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/snappy-1.2.1-h98b9ce2_1.conda
@@ -3205,6 +3205,7 @@ packages:
   - parquet-cpp <0.0a0
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 5506699
   timestamp: 1735682962976
 - kind: conda
@@ -3247,6 +3248,7 @@ packages:
   - parquet-cpp <0.0a0
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 8026714
   timestamp: 1735685336542
 - kind: conda
@@ -3290,6 +3292,7 @@ packages:
   - parquet-cpp <0.0a0
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 8770256
   timestamp: 1735684696564
 - kind: conda
@@ -3306,6 +3309,7 @@ packages:
   - libgcc >=13
   - libstdcxx >=13
   license: Apache-2.0
+  license_family: APACHE
   size: 578222
   timestamp: 1735685424850
 - kind: conda
@@ -3323,6 +3327,7 @@ packages:
   - libgcc >=13
   - libstdcxx >=13
   license: Apache-2.0
+  license_family: APACHE
   size: 612463
   timestamp: 1735684749868
 - kind: conda
@@ -3339,6 +3344,7 @@ packages:
   - libarrow 18.1.0 h0ad35bc_7_cpu
   - libcxx >=18
   license: Apache-2.0
+  license_family: APACHE
   size: 485185
   timestamp: 1735683071232
 - kind: conda
@@ -3357,6 +3363,7 @@ packages:
   - libparquet 18.1.0 hfc78867_7_cpu
   - libstdcxx >=13
   license: Apache-2.0
+  license_family: APACHE
   size: 560329
   timestamp: 1735685518922
 - kind: conda
@@ -3376,6 +3383,7 @@ packages:
   - libparquet 18.1.0 h081d1f1_7_cpu
   - libstdcxx >=13
   license: Apache-2.0
+  license_family: APACHE
   size: 587497
   timestamp: 1735684880531
 - kind: conda
@@ -3394,6 +3402,7 @@ packages:
   - libcxx >=18
   - libparquet 18.1.0 h636d7b7_7_cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 491237
   timestamp: 1735684688308
 - kind: conda
@@ -3416,6 +3425,7 @@ packages:
   - libprotobuf >=5.28.3,<5.28.4.0a0
   - libstdcxx >=13
   license: Apache-2.0
+  license_family: APACHE
   size: 521861
   timestamp: 1735684940668
 - kind: conda
@@ -3437,6 +3447,7 @@ packages:
   - libprotobuf >=5.28.3,<5.28.4.0a0
   - libstdcxx >=13
   license: Apache-2.0
+  license_family: APACHE
   size: 516014
   timestamp: 1735685565929
 - kind: conda
@@ -3458,6 +3469,7 @@ packages:
   - libcxx >=18
   - libprotobuf >=5.28.3,<5.28.4.0a0
   license: Apache-2.0
+  license_family: APACHE
   size: 452385
   timestamp: 1735684993831
 - kind: conda
@@ -4881,6 +4893,7 @@ packages:
   - libthrift >=0.21.0,<0.21.1.0a0
   - openssl >=3.4.0,<4.0a0
   license: Apache-2.0
+  license_family: APACHE
   size: 1205598
   timestamp: 1735684849150
 - kind: conda
@@ -4899,6 +4912,7 @@ packages:
   - libthrift >=0.21.0,<0.21.1.0a0
   - openssl >=3.4.0,<4.0a0
   license: Apache-2.0
+  license_family: APACHE
   size: 873251
   timestamp: 1735684582558
 - kind: conda
@@ -4917,6 +4931,7 @@ packages:
   - libthrift >=0.21.0,<0.21.1.0a0
   - openssl >=3.4.0,<4.0a0
   license: Apache-2.0
+  license_family: APACHE
   size: 1117825
   timestamp: 1735685495511
 - kind: conda
@@ -6770,31 +6785,6 @@ packages:
 - kind: conda
   name: pillow
   version: 11.0.0
-  build: py312h7b63e92_0
-  subdir: linux-64
-  url: https://conda.anaconda.org/conda-forge/linux-64/pillow-11.0.0-py312h7b63e92_0.conda
-  sha256: 13a464bea02c0df0199c20ef6bad24a6bc336aaf55bf8d6a133d0fe664463224
-  md5: 385f46a4df6f97892503a841121a9acf
-  depends:
-  - __glibc >=2.17,<3.0.a0
-  - freetype >=2.12.1,<3.0a0
-  - lcms2 >=2.16,<3.0a0
-  - libgcc >=13
-  - libjpeg-turbo >=3.0.0,<4.0a0
-  - libtiff >=4.7.0,<4.8.0a0
-  - libwebp-base >=1.4.0,<2.0a0
-  - libxcb >=1.17.0,<2.0a0
-  - libzlib >=1.3.1,<2.0a0
-  - openjpeg >=2.5.2,<3.0a0
-  - python >=3.12,<3.13.0a0
-  - python_abi 3.12.* *_cp312
-  - tk >=8.6.13,<8.7.0a0
-  license: HPND
-  size: 41948418
-  timestamp: 1729065846594
-- kind: conda
-  name: pillow
-  version: 11.0.0
   build: py312haf37ca6_0
   subdir: osx-arm64
   url: https://conda.anaconda.org/conda-forge/osx-arm64/pillow-11.0.0-py312haf37ca6_0.conda
@@ -6817,6 +6807,31 @@ packages:
   license: HPND
   size: 41737424
   timestamp: 1729065920347
+- kind: conda
+  name: pillow
+  version: 11.1.0
+  build: py312h80c1187_0
+  subdir: linux-64
+  url: https://conda.anaconda.org/conda-forge/linux-64/pillow-11.1.0-py312h80c1187_0.conda
+  sha256: 5c347962202b55ae4d8a463e0555c5c6ca33396266a08284bf1384399894e541
+  md5: d3894405f05b2c0f351d5de3ae26fa9c
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - freetype >=2.12.1,<3.0a0
+  - lcms2 >=2.16,<3.0a0
+  - libgcc >=13
+  - libjpeg-turbo >=3.0.0,<4.0a0
+  - libtiff >=4.7.0,<4.8.0a0
+  - libwebp-base >=1.5.0,<2.0a0
+  - libxcb >=1.17.0,<2.0a0
+  - libzlib >=1.3.1,<2.0a0
+  - openjpeg >=2.5.3,<3.0a0
+  - python >=3.12,<3.13.0a0
+  - python_abi 3.12.* *_cp312
+  - tk >=8.6.13,<8.7.0a0
+  license: HPND
+  size: 42749785
+  timestamp: 1735929845390
 - kind: conda
   name: platformdirs
   version: 4.3.6
@@ -7971,12 +7986,12 @@ packages:
   timestamp: 1734415467047
 - kind: conda
   name: safetensors
-  version: 0.4.5
+  version: 0.5.0
   build: py312h12e396e_0
   subdir: linux-64
-  url: https://conda.anaconda.org/conda-forge/linux-64/safetensors-0.4.5-py312h12e396e_0.conda
-  sha256: e44515f875c10efb5e041efcb250dfd18f2cb66ec3f268237549ead6284c6922
-  md5: 3b87a00bcaab069172d6cef8124b7142
+  url: https://conda.anaconda.org/conda-forge/linux-64/safetensors-0.5.0-py312h12e396e_0.conda
+  sha256: f9d0a4fbfbd2bcded116b81afd69d00aa5d5bac0d431dd47737cec1b1d24c2e2
+  md5: 4b33e7c3e9bbc3936e08150fc9e17708
   depends:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=13
@@ -7986,16 +8001,16 @@ packages:
   - __glibc >=2.17
   license: Apache-2.0
   license_family: APACHE
-  size: 402547
-  timestamp: 1725632183154
+  size: 424699
+  timestamp: 1735917812729
 - kind: conda
   name: safetensors
-  version: 0.4.5
+  version: 0.5.0
   build: py312h8cbf658_0
   subdir: linux-aarch64
-  url: https://conda.anaconda.org/conda-forge/linux-aarch64/safetensors-0.4.5-py312h8cbf658_0.conda
-  sha256: e83ebeaba4a07bbe4a1d6c7eef0b4f7ae19901ef365bca043808d16e4c8faad8
-  md5: 82ef253c37308b082a478fb92924cad6
+  url: https://conda.anaconda.org/conda-forge/linux-aarch64/safetensors-0.5.0-py312h8cbf658_0.conda
+  sha256: aee581ce5c744f81ac4848b1810a88a750041ef91da646234f75092a8b4e06d1
+  md5: 9c317f54bd3c95a830e98b7baee11ea9
   depends:
   - libgcc >=13
   - python >=3.12,<3.13.0a0
@@ -8005,16 +8020,16 @@ packages:
   - __glibc >=2.17
   license: Apache-2.0
   license_family: APACHE
-  size: 400284
-  timestamp: 1725632278147
+  size: 408792
+  timestamp: 1735917879258
 - kind: conda
   name: safetensors
-  version: 0.4.5
-  build: py312he431725_0
+  version: 0.5.0
+  build: py312hcd83bfe_0
   subdir: osx-arm64
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/safetensors-0.4.5-py312he431725_0.conda
-  sha256: 93a085d0d64237db7f4ff395c446f268c575dc2c324d8e3e5c5d7d836896295e
-  md5: ccb978cf1e3151c25a44c4ae65c1f20e
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/safetensors-0.5.0-py312hcd83bfe_0.conda
+  sha256: 8992f78362793a465c3009be2fd80582c93e2151bc17d07ebd39ce7af757358a
+  md5: acbbbac2271653f4914cef842a84190f
   depends:
   - __osx >=11.0
   - python >=3.12,<3.13.0a0
@@ -8024,8 +8039,8 @@ packages:
   - __osx >=11.0
   license: Apache-2.0
   license_family: APACHE
-  size: 353606
-  timestamp: 1725632294079
+  size: 377533
+  timestamp: 1735918206452
 - kind: conda
   name: shellingham
   version: 1.5.4

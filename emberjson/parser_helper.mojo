@@ -34,7 +34,7 @@ fn is_numerical_component(char: Byte) -> Bool:
 
 
 @always_inline
-fn get_non_space_bits[Size: Int, //](out v: ByteVec[Size]._Mask, s: ByteVec[Size]):
+fn get_non_space_bits[Size: Int, //](out v: SIMDBool[Size], s: ByteVec[Size]):
     v = (s == SPACE) | (s == NEWLINE) | (s == TAB) | (s == LINE_FEED)
     return ~v
 
@@ -93,8 +93,8 @@ struct StringBlock:
     @always_inline
     fn find(src: UnsafePointer[UInt8]) -> StringBlock:
         var v = src.load[width=SIMD8_WIDTH]()
-        alias I_DONT_KNOW_WHAT_THIS_IS: UInt8 = 31
-        return StringBlock(v == RSOL, v == QUOTE, v <= I_DONT_KNOW_WHAT_THIS_IS)
+        alias LAST_ESCAPE_CHAR: UInt8 = 31
+        return StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
 
 
 @always_inline
