@@ -1,0 +1,16 @@
+name: Branch workflow
+
+on:
+  pull_request:
+    branches: 
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+  
+  package:
+    uses: ./.github/workflows/package.yml
