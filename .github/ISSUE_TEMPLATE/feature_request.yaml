@@ -1,0 +1,19 @@
+name: Feature Request
+description: A feature request
+title: "[Feature]: "
+labels: ["feature_request"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe what you want.
+    validations:
+      required: false
+  - type: textarea
+    id: justification
+    attributes:
+      label: Justification
+      description: Explain why this is something we need or why this is better than what exists.
+    validations:
+      required: false
