@@ -91,10 +91,10 @@ struct StringBlock:
 
     @staticmethod
     @always_inline
-    fn find(src: UnsafePointer[UInt8]) -> StringBlock:
+    fn find(out block: StringBlock, src: UnsafePointer[UInt8]):
         var v = src.load[width=SIMD8_WIDTH]()
         alias LAST_ESCAPE_CHAR: UInt8 = 31
-        return StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
+        block = StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
 
 
 @always_inline
