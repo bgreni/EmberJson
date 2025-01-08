@@ -114,6 +114,23 @@ def test_pretty_print_object():
     ]
 }"""
 
+    assert_equal(expected, write_pretty(ob))
+
+    ob = JSON.from_string('{"key": 123, "k": [123, false, [1, 2, 3]]}')
+    expected = """{
+    "key": 123,
+    "k": [
+        123,
+        false,
+        [
+            1,
+            2,
+            3
+        ]
+    ]
+}"""
+    assert_equal(expected, write_pretty(ob))
+
 
 def test_trailing_tokens():
     with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):

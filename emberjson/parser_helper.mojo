@@ -113,7 +113,7 @@ fn copy_to_string(out s: String, p: BytePtr, length: Int):
     memcpy(l.unsafe_ptr(), p, length)
     l.size = length
     l.append(0)
-    s = l^
+    s = String(l^)
 
 
 @always_inline

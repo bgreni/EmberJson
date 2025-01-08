@@ -1,4 +1,5 @@
 from emberjson.value import Value, Null
+from emberjson import Object, Array, JSON
 from emberjson.utils import write_pretty
 from testing import *
 
@@ -113,6 +114,26 @@ def test_equality():
     var v3 = Value("Some string")
     assert_equal(v2, v3)
     assert_not_equal(v1, v2)
+
+
+def test_implicit_conversion():
+    var val: Value = "a string"
+    assert_equal(val.string(), "a string")
+    val = 100
+    assert_equal(val.int(), 100)
+    val = False
+    assert_false(val.bool())
+    val = 1e10
+    assert_almost_equal(val.float(), 1e10)
+    val = Null()
+    assert_equal(val.null(), Null())
+    val = Object()
+    assert_equal(val.object(), Object())
+    val = Array(1, 2, 3)
+    assert_equal(val.array(), Array(1, 2, 3))
+    val = JSON()
+    assert_equal(val.object(), Object())
+
 
 # def test_min_size_for_string():
 #     assert_equal(Value(12345).min_size_for_string(), 5)

@@ -53,6 +53,13 @@ struct Value(JsonValue):
         self._data = v^
 
     @implicit
+    fn __init__(out self, owned j: JSON):
+        if j.is_object():
+            self._data = j.object()
+        else:
+            self._data = j.array()
+
+    @implicit
     fn __init__(out self, v: Int):
         self._data = v
 
@@ -170,23 +177,23 @@ struct Value(JsonValue):
         elif self.isa[Array]():
             writer.write(self.array())
 
-    fn _pretty_to_as_element[W: Writer](self, mut writer: W, indent: String):
+    fn _pretty_to_as_element[W: Writer](self, mut writer: W, indent: String, curr_depth: Int):
         if self.isa[Object]():
             writer.write("{\n")
-            self.object()._pretty_write_items(writer, indent * 2)
-            writer.write(indent, "}")
+            self.object()._pretty_write_items(writer, indent, curr_depth + 1)
+            writer.write(indent * curr_depth, "}")
         elif self.isa[Array]():
             writer.write("[\n")
-            self.array()._pretty_write_items(writer, indent * 2)
-            writer.write(indent, "]")
+            self.array()._pretty_write_items(writer, indent, curr_depth + 1)
+            writer.write(indent * curr_depth, "]")
         else:
             self.write_to(writer)
 
-    fn pretty_to[W: Writer](self, mut writer: W, indent: String):
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         if self.isa[Object]():
-            self.object().pretty_to(writer, indent)
+            self.object().pretty_to(writer, indent, curr_depth=curr_depth)
         elif self.isa[Array]():
-            self.array().pretty_to(writer, indent)
+            self.array().pretty_to(writer, indent, curr_depth=curr_depth)
         else:
             self.write_to(writer)
 

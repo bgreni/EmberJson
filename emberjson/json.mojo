@@ -168,7 +168,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         else:
             writer.write(self.array())
 
-    fn pretty_to[W: Writer](self, mut writer: W, indent: String):
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         """Write the pretty representation to a writer.
 
         Args:
@@ -177,9 +177,9 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
                     if a string then use the given string to indent.
         """
         if self.is_object():
-            self.object().pretty_to(writer, indent)
+            self.object().pretty_to(writer, indent, curr_depth=curr_depth)
         else:
-            self.array().pretty_to(writer, indent)
+            self.array().pretty_to(writer, indent, curr_depth=curr_depth)
 
     @always_inline
     fn __str__(self) -> String:
