@@ -6,7 +6,7 @@ from .tables import *
 from memory import memcpy
 from memory.unsafe import bitcast
 
-alias BytePtr = UnsafePointer[Byte, mut=False]
+alias BytePtr = UnsafePointer[Byte]
 alias smallest_power: Int64 = -342
 alias largest_power: Int64 = 308
 
