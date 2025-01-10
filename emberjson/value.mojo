@@ -10,6 +10,7 @@ from memory import UnsafePointer
 from .simd import *
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
+from .format_int import write_int
 
 
 @value
@@ -161,7 +162,7 @@ struct Value(JsonValue):
 
     fn write_to[W: Writer](self, mut writer: W):
         if self.isa[Int]():
-            writer.write(self.int())
+            write_int(self.int(), writer)
         elif self.isa[Float64]():
             writer.write(self.float())
         elif self.isa[String]():

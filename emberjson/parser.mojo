@@ -251,9 +251,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 if self.data[] == RSOL:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
-                        raise Error(
-                            "Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[])
-                        )
+                        raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
                 alias control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
                 if unlikely(self.data[] in control_chars):
                     raise Error("Control characters must be escaped: " + str(self.data[]))
@@ -300,7 +298,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 pow = power_of_ten[int(power)]
         else:
             pow = 10 ** float(abs(power))
-
 
         d = d / pow if neg_power else d * pow
         if negative:

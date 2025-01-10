@@ -87,8 +87,7 @@ fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: Unsaf
 
 @always_inline
 fn branchless_ternary(t: Scalar, f: Scalar[t.type], cond: Bool) -> Scalar[t.type]:
-    """Returns t if cond is True else f.
-    """
+    """Returns t if cond is True else f."""
 
     # Trick doesn't work for floats since (-0.0 + 0.0) fails
     constrained[t.type.is_integral(), "Expected an integral"]()
@@ -99,8 +98,7 @@ fn branchless_ternary(t: Scalar, f: Scalar[t.type], cond: Bool) -> Scalar[t.type
 
 @always_inline
 fn branchless_ternary(t: Int, f: Int, cond: Bool) -> Int:
-    """Returns t if cond is True else f.
-    """
+    """Returns t if cond is True else f."""
     # One side of the `|` will always be zero so the returned result is just the
     # other side.
     return (t * cond) | (f * ~cond)
