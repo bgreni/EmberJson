@@ -46,10 +46,12 @@ struct Value(JsonValue):
     alias Type = Variant[Int, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
+    @always_inline
     fn __init__(out self):
         self._data = Null()
 
     @implicit
+    @always_inline
     fn __init__(out self, owned v: Self.Type):
         self._data = v^
 
@@ -61,40 +63,50 @@ struct Value(JsonValue):
             self._data = j.array()
 
     @implicit
+    @always_inline
     fn __init__(out self, v: Int):
         self._data = v
 
     @implicit
+    @always_inline
     fn __init__(out self, v: Float64):
         self._data = v
 
     @implicit
+    @always_inline
     fn __init__(out self, owned v: Object):
         self._data = v^
 
     @implicit
+    @always_inline
     fn __init__(out self, owned v: Array):
         self._data = v^
 
     @implicit
+    @always_inline
     fn __init__(out self, owned v: String):
         self._data = v^
 
     @implicit
+    @always_inline
     fn __init__(out self, owned v: StringLiteral):
         self._data = String(v)
 
     @implicit
+    @always_inline
     fn __init__(out self, v: Null):
         self._data = v
 
     @implicit
+    @always_inline
     fn __init__(out self, v: Bool):
         self._data = v
 
+    @always_inline
     fn __copyinit__(out self, other: Self):
         self._data = other._data
 
+    @always_inline
     fn __moveinit__(out self, owned other: Self):
         self._data = other._data^
 

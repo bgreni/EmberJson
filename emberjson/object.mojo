@@ -12,6 +12,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     alias Type = Dict[String, Value]
     var _data: Self.Type
 
+    @always_inline
     fn __init__(out self):
         # TODO: Maybe a good candidate for autotuning in the future?
         self._data = Self.Type(power_of_two_initial_capacity=32)

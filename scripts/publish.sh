@@ -14,5 +14,3 @@ CONDA_BLD_PATH="output"
 for file in "$CONDA_BLD_PATH"/**/*.conda; do
     magic run rattler-build upload prefix -c "mojo-community" "$file" || (echo "upload failed" && exit 1)
 done
-
-magic run clean

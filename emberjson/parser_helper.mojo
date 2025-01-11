@@ -98,19 +98,65 @@ struct StringBlock:
 
 
 @always_inline
-fn hex_to_u32(out out: UInt32, v: ByteVec[4]):
+fn hex_to_u32(out out: UInt32, p: BytePtr):
     alias other = ByteVec[4](630, 420, 210, 0)
     out = 0
+    var v = p.load[width=4]().cast[DType.uint32]()
+    v = (v & 0xF) + 9 * (v >> 6)
+    out = v[0] << 12 | v[1] << 8 | v[2] << 4 | v[3]
 
-    @parameter
-    for i in range(4):
-        out |= digit_to_val32[int(v[i] + other[i])]
 
+fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
+    var c1 = hex_to_u32(p)
+    p += 4
+    if c1 >= 0xD800 and c1 < 0xDC00:
+        var v = p.load[width=2]()
+        if unlikely(all(v != ByteVec[2](RSOL, U))):
+            raise Error("Bad unicode codepoint")
 
+        p += 2
+        var c2 = hex_to_u32(p)
+
+        if unlikely(bool((c1 | c2) >> 16)):
+            raise Error("Bad unicode codepoint")
+
+        c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) + 0x10000
+        p += 4
+    if c1 <= 0x7F:
+        dest.append(c1.cast[DType.uint8]())
+        return
+    elif c1 <= 0x7FF:
+        dest.append(((c1 >> 6) + 192).cast[DType.uint8]())
+        dest.append(((c1 & 63) + 128).cast[DType.uint8]())
+        return
+    elif c1 <= 0xFFFF:
+        dest.append(((c1 >> 12) + 224).cast[DType.uint8]())
+        dest.append((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
+        dest.append(((c1 & 63) + 128).cast[DType.uint8]())
+        return
+    elif c1 <= 0x10FFFF:
+        dest.append(((c1 >> 18) + 240).cast[DType.uint8]())
+        dest.append((((c1 >> 12) & 63) + 128).cast[DType.uint8]())
+        dest.append((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
+        dest.append(((c1 & 63) + 128).cast[DType.uint8]())
+        return
+    else:
+        raise Error("Invalid unicode")
+        
+    
 @always_inline
-fn copy_to_string(out s: String, p: BytePtr, length: Int):
+fn copy_to_string(out s: String, start: BytePtr, end: BytePtr) raises:
+    var length = ptr_dist(start, end)
     var l = Bytes(capacity=length + 1)
-    memcpy(l.unsafe_ptr(), p, length)
+    var p = start
+    while p < end:
+        if p[] == RSOL and (p + 1)[] == U:
+            p += 2
+            handle_unicode_codepoint(p, l)
+        else:
+            l.append(p[])
+            p += 1
+
     l.size = length
     l.append(0)
     s = String(l^)

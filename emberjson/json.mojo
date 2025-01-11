@@ -11,24 +11,7 @@ from .parser import Parser
 
 @value
 struct JSON(JsonValue, Sized, PrettyPrintable):
-    """Top level JSON object, can either be an Array, or an Object.
-
-    ```mojo
-    from emberjson import JSON
-    fn main() raises:
-        var arr = JSON.from_string("[1, 2, 3]")
-        var foo = arr[2] # index based access for arrays
-
-        var object: JSON = JSON.from_string('{"key": true}')
-        var bar = object["key"] # key based access for objects
-        try:
-            # using the wrong accessor type will raise an exception
-            _ = arr["key"]
-            _ = object[1]
-        except:
-            pass
-    ```
-    """
+    """Top level JSON object, can either be an Array, or an Object."""
 
     alias Type = Variant[Object, Array]
     var _data: Self.Type
