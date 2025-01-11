@@ -14,10 +14,12 @@ struct Array(Sized, JsonValue):
     alias Type = List[Value]
     var _data: Self.Type
 
+    @always_inline
     fn __init__(out self):
         # TODO: Maybe a good candidate for autotuning in the future?
         self._data = Self.Type(capacity=8)
 
+    @always_inline
     fn __init__(out self, owned *values: Value):
         self._data = Self.Type(elements=values^)
 

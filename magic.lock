@@ -211,7 +211,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/uvicorn-0.34.0-pyh31011fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/uvicorn-standard-0.34.0-h31011fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/uvloop-0.21.0-py312h66e93f0_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/watchfiles-1.0.3-py312h12e396e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/watchfiles-1.0.4-py312h12e396e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/websockets-14.1-py312h66e93f0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/wrapt-1.17.0-py312h66e93f0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb9d3cd8_0.conda
@@ -429,7 +429,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/uvicorn-0.34.0-pyh31011fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/uvicorn-standard-0.34.0-h31011fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/uvloop-0.21.0-py312hb2c0f52_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/watchfiles-1.0.3-py312h8cbf658_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/watchfiles-1.0.4-py312h8cbf658_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/websockets-14.1-py312hb2c0f52_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/wrapt-1.17.0-py312hb2c0f52_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxau-1.0.12-h86ecc28_0.conda
@@ -637,7 +637,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/uvicorn-0.34.0-pyh31011fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/uvicorn-standard-0.34.0-h31011fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uvloop-0.21.0-py312h0bf5046_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/watchfiles-1.0.3-py312hcd83bfe_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/watchfiles-1.0.4-py312hcd83bfe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/websockets-14.1-py312hea69d52_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/wrapt-1.17.0-py312hea69d52_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libxau-1.0.12-h5505292_0.conda
@@ -8607,12 +8607,12 @@ packages:
   timestamp: 1730214606664
 - kind: conda
   name: watchfiles
-  version: 1.0.3
+  version: 1.0.4
   build: py312h12e396e_0
   subdir: linux-64
-  url: https://conda.anaconda.org/conda-forge/linux-64/watchfiles-1.0.3-py312h12e396e_0.conda
-  sha256: c89755d8e8f6384b3ba13e41dcabb40bf690c38b9d61512e963129badb1ad332
-  md5: b76a5ad00856af6e74da9c3e85fed0cc
+  url: https://conda.anaconda.org/conda-forge/linux-64/watchfiles-1.0.4-py312h12e396e_0.conda
+  sha256: b728f525dcae2c10524f9942255346eba62aee9c820ff269d7dd4f7caffb7ffb
+  md5: df87129c4cb7afc4a3cbad71a1b9e223
   depends:
   - __glibc >=2.17,<3.0.a0
   - anyio >=3.0.0
@@ -8622,17 +8622,16 @@ packages:
   constrains:
   - __glibc >=2.17
   license: MIT
-  license_family: MIT
-  size: 410432
-  timestamp: 1733998892675
+  size: 410192
+  timestamp: 1736550568524
 - kind: conda
   name: watchfiles
-  version: 1.0.3
+  version: 1.0.4
   build: py312h8cbf658_0
   subdir: linux-aarch64
-  url: https://conda.anaconda.org/conda-forge/linux-aarch64/watchfiles-1.0.3-py312h8cbf658_0.conda
-  sha256: 9be9569c279dc6e7881e9b45fe9f0368218538c660641e2f8b0e023e72a6571c
-  md5: 3465c1a19634233abc2d1832ac01fd31
+  url: https://conda.anaconda.org/conda-forge/linux-aarch64/watchfiles-1.0.4-py312h8cbf658_0.conda
+  sha256: 45193910f6bafc287c784442d173745161b18f96223f0f990a9a744fda753787
+  md5: ed958a27e610c31de625e167d4c11a04
   depends:
   - anyio >=3.0.0
   - libgcc >=13
@@ -8642,17 +8641,16 @@ packages:
   constrains:
   - __glibc >=2.17
   license: MIT
-  license_family: MIT
-  size: 404239
-  timestamp: 1733998941045
+  size: 403791
+  timestamp: 1736550743174
 - kind: conda
   name: watchfiles
-  version: 1.0.3
+  version: 1.0.4
   build: py312hcd83bfe_0
   subdir: osx-arm64
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/watchfiles-1.0.3-py312hcd83bfe_0.conda
-  sha256: b64b78a7d6384bf72a878256802c783c692fe641ab4b806fd7e9f45e18a5e3b4
-  md5: 13b89e1aa72aa773806b1f59ec018b67
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/watchfiles-1.0.4-py312hcd83bfe_0.conda
+  sha256: 84122e3712f2263e12c9d2be75d122eaf2d269801183df4b73aadcb670943b17
+  md5: 946eb0208d09b811a671fad9b2831f4e
   depends:
   - __osx >=11.0
   - anyio >=3.0.0
@@ -8662,9 +8660,8 @@ packages:
   constrains:
   - __osx >=11.0
   license: MIT
-  license_family: MIT
-  size: 363162
-  timestamp: 1733999215646
+  size: 363822
+  timestamp: 1736550859472
 - kind: conda
   name: websockets
   version: '14.1'

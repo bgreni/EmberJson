@@ -51,7 +51,10 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn remaining(self) -> String:
-        return copy_to_string(self.data, ptr_dist(self.data, self.end))
+        try:
+            return copy_to_string(self.data, self.end)
+        except:
+            return ""
 
     @always_inline
     fn pos(self) -> Int:
@@ -160,32 +163,12 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value")
 
-    fn handle_unicode_codepoint(mut self) -> Bool:
-        var c1 = hex_to_u32(self.data.load[width=4]())
-        self.data += 4
-        if c1 >= 0xD800 and c1 < 0xDC00:
-            var v = self.data.load[width=2]()
-            if all(v != ByteVec[2](RSOL, U)):
-                return False
-
-            self.data += 2
-
-            var c2 = hex_to_u32(self.data.load[width=4]())
-
-            if ((c1 | c2) >> 16) != 0:
-                return False
-
-            c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) + 0x10000
-            self.data += 4
-
-        return c1 <= 0x10FFFF
-
     # @always_inline
     fn find_and_move(mut self, start: BytePtr, out s: String) raises:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string(start, ptr_dist(start, self.data))
+            return copy_to_string(start, self.data)
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
@@ -219,7 +202,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string(start, ptr_dist(start, self.data))
+            return copy_to_string(start, self.data)
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
@@ -245,7 +228,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 return
             else:
                 if self.data[] == QUOTE:
-                    s = copy_to_string(start, ptr_dist(start, self.data))
+                    s = copy_to_string(start, self.data)
                     self.data += 1
                     return
                 if self.data[] == RSOL:
