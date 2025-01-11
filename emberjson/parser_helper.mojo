@@ -103,7 +103,9 @@ fn hex_to_u32(out out: UInt32, p: BytePtr):
     out = 0
     var v = p.load[width=4]().cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
-    out = v[0] << 12 | v[1] << 8 | v[2] << 4 | v[3]
+    alias shifts = SIMD[DType.uint32, 4](12, 8, 4, 0)
+    v <<= shifts
+    out = v.reduce_or()
 
 
 fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
@@ -142,6 +144,7 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
         return
     else:
         raise Error("Invalid unicode")
+
         
     
 @always_inline

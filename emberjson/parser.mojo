@@ -187,9 +187,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if self.data[] == U:
             self.data += 1
             return self.find_and_move(start)
-            # TODO: Fix this
-            # if not self.handle_unicode_codepoint():
-            #     raise Error("Invalid unicode")
         else:
             if unlikely(self.data[] not in acceptable_escapes):
                 raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
