@@ -13,8 +13,8 @@ source:
 
 build:
   script:
-    - mkdir -p {{PREFIX}}/lib/mojo
-    - magic run mojo package . -o {{PREFIX}}/lib/mojo/{{NAME}}.mojopkg
+    - mkdir -p ${PREFIX}/lib/mojo
+    - magic run mojo package . -o ${PREFIX}/lib/mojo/{{NAME}}.mojopkg
 
 requirements:
   run:

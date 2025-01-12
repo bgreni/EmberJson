@@ -146,10 +146,20 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
 
     @always_inline
     fn __bool__(self) -> Bool:
+        """Returns True if the size of the inner collection is non-empty.
+
+        Return:
+            True if the inner container is non-empty else False
+        """
         return len(self) == 0
 
     @always_inline
     fn __as_bool__(self) -> Bool:
+        """Returns True if the size of the inner collection is non-empty.
+
+        Return:
+            True if the inner container is non-empty else False
+        """
         return bool(self)
 
     @always_inline
