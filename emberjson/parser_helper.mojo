@@ -145,8 +145,7 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
     else:
         raise Error("Invalid unicode")
 
-        
-    
+
 @always_inline
 fn copy_to_string(out s: String, start: BytePtr, end: BytePtr) raises:
     var length = ptr_dist(start, end)

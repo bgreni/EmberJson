@@ -11,5 +11,14 @@ trait StringSize:
         ...
 
 
-trait JsonValue(EqualityComparableCollectionElement, Writable, Stringable, Representable, StringSize, Defaultable):
+trait JsonValue(
+    EqualityComparableCollectionElement,
+    Writable,
+    Stringable,
+    Representable,
+    StringSize,
+    Defaultable,
+    Boolable,
+    ImplicitlyBoolable,
+):
     pass

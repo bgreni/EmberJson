@@ -22,4 +22,4 @@ publish = { cmd = "./scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_
 precommit = { cmd = "magic run format && magic run test" }
 
 [dependencies]
-max = "24.6.0"
+max = "==24.6.0"

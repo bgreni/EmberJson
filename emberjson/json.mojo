@@ -16,14 +16,17 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     alias Type = Variant[Object, Array]
     var _data: Self.Type
 
+    @always_inline
     fn __init__(out self):
         self._data = Object()
 
     @implicit
+    @always_inline
     fn __init__(out self, owned ob: Object):
         self._data = ob^
 
     @implicit
+    @always_inline
     fn __init__(out self, owned arr: Array):
         self._data = arr^
 
@@ -73,6 +76,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("Object key expected to be string")
         return self.array()[ind]
 
+    @always_inline
     fn __setitem__(mut self, owned key: String, owned item: Value) raises:
         """Mutate the inner object.
 
@@ -83,6 +87,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("Object key expected to be string")
         self.object()[key^] = item^
 
+    @always_inline
     fn __setitem__(mut self, ind: Int, owned item: Value) raises:
         """Mutate the inner array.
 
@@ -138,6 +143,14 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             The length of the inner container.
         """
         return len(self.array()) if self.is_array() else len(self.object())
+
+    @always_inline
+    fn __bool__(self) -> Bool:
+        return len(self) == 0
+
+    @always_inline
+    fn __as_bool__(self) -> Bool:
+        return bool(self)
 
     @always_inline
     fn write_to[W: Writer](self, mut writer: W):

@@ -61,6 +61,20 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     fn __ne__(self, other: Self) -> Bool:
         return not self == other
 
+    @always_inline
+    fn __bool__(self) -> Bool:
+        return len(self) == 0
+
+    @always_inline
+    fn __as_bool__(self) -> Bool:
+        return bool(self)
+
+    @always_inline
+    fn keys(self, out l: List[String]):
+        l = List[String](capacity=len(self))
+        for k in self._data.keys():
+            l.append(k[])
+
     fn write_to[W: Writer](self, mut writer: W):
         ("{").write_to(writer)
         var done = 0

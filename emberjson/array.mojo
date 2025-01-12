@@ -8,6 +8,34 @@ from .parser import Parser
 
 
 @value
+struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
+    var index: Int
+    var src: Pointer[Array, origin]
+
+    fn __iter__(self) -> Self:
+        return self
+
+    fn __next__(mut self, out p: Pointer[Value, __origin_of(self.src[]._data)]):
+        @parameter
+        if forward:
+            p = Pointer.address_of(self.src[][self.index])
+            self.index += 1
+        else:
+            self.index -= 1
+            p = Pointer.address_of(self.src[][self.index])
+
+    fn __has_next__(self) -> Bool:
+        return len(self) > 0
+
+    fn __len__(self) -> Int:
+        @parameter
+        if forward:
+            return len(self.src[]) - self.index
+        else:
+            return self.index
+
+
+@value
 struct Array(Sized, JsonValue):
     """Represents a json array."""
 
@@ -42,6 +70,14 @@ struct Array(Sized, JsonValue):
         return False
 
     @always_inline
+    fn __bool__(self) -> Bool:
+        return len(self) == 0
+
+    @always_inline
+    fn __as_bool__(self) -> Bool:
+        return bool(self)
+
+    @always_inline
     fn __contains__(self, v: Value) -> Bool:
         return v in self._data
 
@@ -52,6 +88,12 @@ struct Array(Sized, JsonValue):
     @always_inline
     fn __ne__(self, other: Self) -> Bool:
         return self._data != other._data
+
+    fn __iter__(ref self) -> _ArrayIter[__origin_of(self)]:
+        return _ArrayIter(0, Pointer.address_of(self))
+
+    fn __reversed__(ref self) -> _ArrayIter[__origin_of(self), False]:
+        return _ArrayIter[forward=False](len(self), Pointer.address_of(self))
 
     @always_inline
     fn reserve(mut self, n: Int):

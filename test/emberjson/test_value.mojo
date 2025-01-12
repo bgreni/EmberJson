@@ -158,3 +158,18 @@ def test_pretty():
 }"""
 
     assert_equal(expected, write_pretty(v))
+
+def test_booling():
+    var a: Value = True
+    assert_true(a)
+    if not a:
+        raise Error("Implicit bool failed")
+
+
+    var trues = Array("some string", 123, 3.43)
+    for t in trues:
+        assert_true(t[])
+
+    var falsies = Array("", 0, 0.0, False, Null())
+    for f in falsies:
+        assert_false(f[])

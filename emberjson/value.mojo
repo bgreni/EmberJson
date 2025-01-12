@@ -37,6 +37,14 @@ struct Null(JsonValue):
         return 4
 
     @always_inline
+    fn __bool__(self) -> Bool:
+        return False
+
+    @always_inline
+    fn __as_bool__(self) -> Bool:
+        return False
+
+    @always_inline
     fn write_to[W: Writer](self, mut writer: W):
         writer.write(self.__str__())
 
@@ -131,6 +139,24 @@ struct Value(JsonValue):
     @always_inline
     fn __ne__(self, other: Self) -> Bool:
         return not self == other
+
+    fn __bool__(self) -> Bool:
+        if self.isa[Int]():
+            return bool(self.int())
+        elif self.isa[Float64]():
+            return bool(self.float())
+        elif self.isa[String]():
+            return bool(self.string())
+        elif self.isa[Bool]():
+            return self.bool()
+        elif self.isa[Null]():
+            return False
+        elif self.isa[Object]():
+            return bool(self.object())
+        return bool(self.array())
+
+    fn __as_bool__(self) -> Bool:
+        return bool(self)
 
     @always_inline
     fn isa[T: CollectionElement](self) -> Bool:
