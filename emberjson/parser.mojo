@@ -250,9 +250,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         while self.bytes_remaining() >= SIMD8_WIDTH:
             var chunk = self.data.load[width=SIMD8_WIDTH]()
             var nonspace = get_non_space_bits(chunk)
-            var ind = first_true(nonspace)
-            if ind != Int.MAX:
-                self.data += ind
+            if nonspace.reduce_or():
+                self.data += first_true(nonspace)
                 return
             else:
                 self.data += SIMD8_WIDTH + 1

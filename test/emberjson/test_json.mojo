@@ -1,6 +1,16 @@
-from emberjson import JSON, Null, Array, Object
+from emberjson import JSON, Null, Array, Object, parse, ParseOptions
 from emberjson import write_pretty
 from testing import *
+
+def test_reject_comment():
+    var s = """
+    {
+        // a comment
+        "key": 123
+    }
+"""
+    with assert_raises():
+        _ = parse(s)
 
 def test_json_object():
     var s = '{"key": 123}'
@@ -140,11 +150,6 @@ def test_trailing_tokens():
         _ = JSON.from_string('{"key": null} "trailing string"')
 
 var dir = String("./bench_data/data/jsonchecker/")
-
-# def test_min_size_for_string():
-#     var s = '["foo",1234,null,true,{"key":"some long string teehee","other":null}]'
-#     var json = JSON.from_string(s)
-#     assert_equal(json.min_size_for_string(), s.byte_length())
 
 def check_bytes_length(file: String):
     with open("./bench_data/data/" + file + ".json", "r") as f:

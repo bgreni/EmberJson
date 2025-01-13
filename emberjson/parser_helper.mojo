@@ -112,8 +112,7 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
     var c1 = hex_to_u32(p)
     p += 4
     if c1 >= 0xD800 and c1 < 0xDC00:
-        var v = p.load[width=2]()
-        if unlikely(all(v != ByteVec[2](RSOL, U))):
+        if unlikely(p[] != RSOL and (p+1)[] != U):
             raise Error("Bad unicode codepoint")
 
         p += 2
@@ -151,8 +150,9 @@ fn copy_to_string(out s: String, start: BytePtr, end: BytePtr) raises:
     var length = ptr_dist(start, end)
     var l = Bytes(capacity=length + 1)
     var p = start
+
     while p < end:
-        if p[] == RSOL and (p + 1)[] == U:
+        if p[] == RSOL and p + 1 != end  and (p + 1)[] == U:
             p += 2
             handle_unicode_codepoint(p, l)
         else:

@@ -26,6 +26,12 @@ struct ParseOptions:
 var json = parse[ParseOptions(fast_float_parsing=True)]('{"key": 123}')
 ```
 
+EmberJSON supports decoding escaped unicode characters.
+
+```mojo
+print(parse(r'["\uD83D\uDD25"]')) # prints '["🔥"]'
+```
+
 ### Converting to String
 
 Use the `to_string` function to convert a JSON struct to its string representation.
