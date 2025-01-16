@@ -2,8 +2,7 @@ name: Branch workflow
 
 on:
   pull_request:
-    branches: 
-      - '*'
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
@@ -14,3 +13,6 @@ jobs:
   
   package:
     uses: ./.github/workflows/package.yml
+  
+  lint:
+    uses: ./.github/workflows/test_pre_commit.yml

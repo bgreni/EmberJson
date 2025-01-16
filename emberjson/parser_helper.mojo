@@ -7,7 +7,7 @@ from memory import memcpy
 from memory.unsafe import bitcast, pack_bits
 from bit import count_trailing_zeros
 
-alias BytePtr = UnsafePointer[Byte]
+alias BytePtr = UnsafePointer[Byte, mut=False]
 alias smallest_power: Int64 = -342
 alias largest_power: Int64 = 308
 
@@ -28,10 +28,12 @@ alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
 alias ZERO_CHAR = to_byte("0")
 
+
 fn isdigit(char: Byte) -> Bool:
     alias ord_0 = to_byte("0")
     alias ord_9 = to_byte("9")
     return ord_0 <= char <= ord_9
+
 
 @always_inline
 fn is_numerical_component(char: Byte) -> Bool:

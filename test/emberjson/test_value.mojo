@@ -3,6 +3,7 @@ from emberjson import Object, Array, JSON
 from emberjson.utils import write_pretty
 from testing import *
 
+
 def test_bool():
     var s = "false"
     var v = Value.from_string(s)
@@ -21,6 +22,7 @@ def test_bool():
     # with assert_raises(contains="Expected 'true'"):
     #     _ = Value.from_string("tue")
 
+
 def test_string():
     var s = '"Some String"'
     var v = Value.from_string(s)
@@ -28,11 +30,12 @@ def test_string():
     assert_equal(v.get[String](), "Some String")
     assert_equal(String(v), s)
 
-    s = "\"Escaped\""
+    s = '"Escaped"'
     v = Value.from_string(s)
     assert_true(v.isa[String]())
     assert_equal(v.get[String](), "Escaped")
     assert_equal(String(v), s)
+
 
 def test_null():
     var s = "null"
@@ -44,16 +47,19 @@ def test_null():
     with assert_raises(contains="Expected 'null'"):
         _ = Value.from_string("nil")
 
+
 def test_integer():
     var v = Value.from_string("123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), 123)
     assert_equal(String(v), "123")
 
+
 def test_integer_leading_plus():
     v = Value.from_string("+123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), 123)
+
 
 def test_integer_negative():
     v = Value.from_string("-123")
@@ -61,11 +67,13 @@ def test_integer_negative():
     assert_equal(v.get[Int](), -123)
     assert_equal(String(v), "-123")
 
+
 def test_float():
     v = Value.from_string("43.5")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5)
     assert_equal(String(v), "43.5")
+
 
 def test_eight_digits_after_dot():
     v = Value.from_string("342.12345678")
@@ -73,17 +81,17 @@ def test_eight_digits_after_dot():
     assert_almost_equal(v.get[Float64](), 342.12345678)
     assert_equal(String(v), "342.12345678")
 
-def test_special_case_floats():
 
-    v = Value.from_string('2.2250738585072013e-308')
+def test_special_case_floats():
+    v = Value.from_string("2.2250738585072013e-308")
     assert_almost_equal(v.float(), 2.2250738585072013e-308)
     assert_true(v.isa[Float64]())
 
-    v = Value.from_string('7.2057594037927933e+16')
+    v = Value.from_string("7.2057594037927933e+16")
     assert_true(v.isa[Float64]())
-    assert_almost_equal(v.float(), 7.2057594037927933e+16)
+    assert_almost_equal(v.float(), 7.2057594037927933e16)
 
-    v = Value.from_string('1e000000000000000000001')
+    v = Value.from_string("1e000000000000000000001")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.float(), 1e000000000000000000001)
 
@@ -93,20 +101,24 @@ def test_float_leading_plus():
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5)
 
+
 def test_float_negative():
     v = Value.from_string("-43.5")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), -43.5)
+
 
 def test_float_exponent():
     v = Value.from_string("43.5e10")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5e10)
 
+
 def test_float_exponent_negative():
     v = Value.from_string("-43.5e10")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), -43.5e10)
+
 
 def test_equality():
     var v1 = Value(34)
@@ -142,6 +154,7 @@ def test_implicit_conversion():
 #     assert_equal(Value(True).min_size_for_string(), 4)
 #     assert_equal(Value(False).min_size_for_string(), 5)
 
+
 def test_pretty():
     var v = Value.from_string("[123, 43564, false]")
     var expected = """[
@@ -159,12 +172,12 @@ def test_pretty():
 
     assert_equal(expected, write_pretty(v))
 
+
 def test_booling():
     var a: Value = True
     assert_true(a)
     if not a:
         raise Error("Implicit bool failed")
-
 
     var trues = Array("some string", 123, 3.43)
     for t in trues:
