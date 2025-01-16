@@ -142,21 +142,21 @@ struct Value(JsonValue):
 
     fn __bool__(self) -> Bool:
         if self.isa[Int]():
-            return bool(self.int())
+            return Bool(self.int())
         elif self.isa[Float64]():
-            return bool(self.float())
+            return Bool(self.float())
         elif self.isa[String]():
-            return bool(self.string())
+            return Bool(self.string())
         elif self.isa[Bool]():
             return self.bool()
         elif self.isa[Null]():
             return False
         elif self.isa[Object]():
-            return bool(self.object())
-        return bool(self.array())
+            return Bool(self.object())
+        return Bool(self.array())
 
     fn __as_bool__(self) -> Bool:
-        return bool(self)
+        return Bool(self)
 
     @always_inline
     fn isa[T: CollectionElement](self) -> Bool:

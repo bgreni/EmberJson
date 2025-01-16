@@ -8,7 +8,7 @@ def test_object():
     var ob = Object.from_string(s)
     assert_true("thing" in ob)
     assert_equal(ob["thing"].int(), 123)
-    assert_equal(str(ob), s)
+    assert_equal(String(ob), s)
 
 def test_object_spaces():
     var s = '{ "Key" : "some value" }'
@@ -42,7 +42,7 @@ def test_multiple_keys():
     assert_true("k2" in ob)
     assert_equal(ob["k1"].int(), 123)
     assert_equal(ob["k2"].int(), 456)
-    assert_equal(str(ob), '{"k1":123,"k2":456}')
+    assert_equal(String(ob), '{"k1":123,"k2":456}')
 
 def test_invalid_key():
     var s = '{key: 123}'

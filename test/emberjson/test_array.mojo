@@ -10,7 +10,7 @@ def test_array():
     assert_equal(arr[0].get[Int](), 1)
     assert_equal(arr[1].get[Int](), 2)
     assert_equal(arr[2].get[String](), "foo")
-    assert_equal(str(arr), '[1,2,"foo"]')
+    assert_equal(String(arr), '[1,2,"foo"]')
 
 def test_array_no_space():
     var s = '[1,2,"foo"]'
@@ -78,7 +78,7 @@ def test_equality():
 #     assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
 
 def test_list_ctr():
-    var arr = Array.from_list(List[Value](123, "foo", Null(), False))
+    var arr = Array(List[Value](123, "foo", Null(), False))
     assert_equal(arr[0].int(), 123)
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())

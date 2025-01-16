@@ -4,7 +4,8 @@ from math import iota
 from .simd import *
 from .tables import *
 from memory import memcpy
-from memory.unsafe import bitcast
+from memory.unsafe import bitcast, pack_bits
+from bit import count_trailing_zeros
 
 alias BytePtr = UnsafePointer[Byte]
 alias smallest_power: Int64 = -342
@@ -27,6 +28,10 @@ alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
 alias ZERO_CHAR = to_byte("0")
 
+fn isdigit(char: Byte) -> Bool:
+    alias ord_0 = to_byte("0")
+    alias ord_9 = to_byte("9")
+    return ord_0 <= char <= ord_9
 
 @always_inline
 fn is_numerical_component(char: Byte) -> Bool:
@@ -40,58 +45,60 @@ fn get_non_space_bits[Size: Int, //](out v: SIMDBool[Size], s: ByteVec[Size]):
 
 
 @always_inline
-fn index[T: DType, //, item: Scalar[T]](simd: SIMD[T, _]) -> Int:
-    var seq = iota[simd.type, simd.size]()
-    var result = (simd == item).select(seq, simd.MAX).reduce_min()
-    var found = bool(result != item.MAX)
-    return branchless_ternary(int(result), Int.MAX, found)
+fn pack_into_int(simd: SIMDBool) -> Int:
+    return Int(pack_bits(simd))
 
 
 @always_inline
 fn first_true(simd: SIMD[DType.bool, _]) -> Int:
-    return index[UInt8(1)](simd.cast[DType.uint8]())
+    return count_trailing_zeros(pack_into_int(simd))
 
 
 @always_inline
-fn ptr_dist(start: UnsafePointer[Byte], end: UnsafePointer[Byte]) -> Int:
-    return int(end) - int(start)
+fn ptr_dist(start: BytePtr, end: BytePtr) -> Int:
+    return Int(end) - Int(start)
 
 
-@value
+@register_passable("trivial")
 struct StringBlock:
     alias BitMask = SIMD8xT._Mask
 
-    var bs_bits: Self.BitMask
-    var quote_bits: Self.BitMask
-    var unescaped_bits: Self.BitMask
+    var bs_bits: Int
+    var quote_bits: Int
+    var unescaped_bits: Int
+
+    fn __init__(out self, bs: SIMDBool, qb: SIMDBool, un: SIMDBool):
+        self.bs_bits = pack_into_int(bs)
+        self.quote_bits = pack_into_int(qb)
+        self.unescaped_bits = pack_into_int(un)
 
     @always_inline
     fn quote_index(self) -> Int:
-        return first_true(self.quote_bits)
+        return count_trailing_zeros(self.quote_bits)
 
     @always_inline
-    fn bs_index(self) -> Int:
-        return first_true(self.bs_bits)
+    fn bs_index(self) -> UInt64:
+        return count_trailing_zeros(self.bs_bits)
 
     @always_inline
     fn unescaped_index(self) -> Int:
-        return first_true(self.unescaped_bits)
+        return count_trailing_zeros(self.unescaped_bits)
 
     @always_inline
     fn has_quote_first(self) -> Bool:
-        return first_true(self.quote_bits) < first_true(self.bs_bits) and not self.has_unescaped()
+        return count_trailing_zeros(self.quote_bits) < count_trailing_zeros(self.bs_bits) and not self.has_unescaped()
 
     @always_inline
     fn has_backslash(self) -> Bool:
-        return first_true(self.bs_bits) < first_true(self.quote_bits)
+        return count_trailing_zeros(self.bs_bits) < count_trailing_zeros(self.quote_bits)
 
     @always_inline
     fn has_unescaped(self) -> Bool:
-        return first_true(self.unescaped_bits) < first_true(self.quote_bits)
+        return count_trailing_zeros(self.unescaped_bits) < count_trailing_zeros(self.quote_bits)
 
     @staticmethod
     @always_inline
-    fn find(out block: StringBlock, src: UnsafePointer[UInt8]):
+    fn find(out block: StringBlock, src: BytePtr):
         var v = src.load[width=SIMD8_WIDTH]()
         alias LAST_ESCAPE_CHAR: UInt8 = 31
         block = StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
@@ -112,13 +119,13 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
     var c1 = hex_to_u32(p)
     p += 4
     if c1 >= 0xD800 and c1 < 0xDC00:
-        if unlikely(p[] != RSOL and (p+1)[] != U):
+        if unlikely(p[] != RSOL and (p + 1)[] != U):
             raise Error("Bad unicode codepoint")
 
         p += 2
         var c2 = hex_to_u32(p)
 
-        if unlikely(bool((c1 | c2) >> 16)):
+        if unlikely(Bool((c1 | c2) >> 16)):
             raise Error("Bad unicode codepoint")
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) + 0x10000
@@ -152,7 +159,7 @@ fn copy_to_string(out s: String, start: BytePtr, end: BytePtr) raises:
     var p = start
 
     while p < end:
-        if p[] == RSOL and p + 1 != end  and (p + 1)[] == U:
+        if p[] == RSOL and p + 1 != end and (p + 1)[] == U:
             p += 2
             handle_unicode_codepoint(p, l)
         else:
@@ -187,7 +194,7 @@ fn to_double(out d: Float64, owned mantissa: UInt64, real_exponent: UInt64, nega
     alias `1 << 52` = 1 << 52
     mantissa &= ~(`1 << 52`)
     mantissa |= real_exponent << 52
-    mantissa |= int(negative) << 63
+    mantissa |= Int(negative) << 63
     d = bitcast[DType.float64](mantissa)
 
 

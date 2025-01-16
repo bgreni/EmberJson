@@ -87,7 +87,7 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
 	@always_inline
 	@parameter
 	fn do():
-		_ = str(v)
+		_ = String(v)
 	b.iter[do]()
 	_ = v
 
@@ -96,7 +96,7 @@ fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
 	@always_inline
 	@parameter
 	fn do() raises:
-		_ = str(json)
+		_ = String(json)
 	
 	b.iter[do]()
 

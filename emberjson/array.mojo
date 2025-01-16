@@ -75,7 +75,7 @@ struct Array(Sized, JsonValue):
 
     @always_inline
     fn __as_bool__(self) -> Bool:
-        return bool(self)
+        return Bool(self)
 
     @always_inline
     fn __contains__(self, v: Value) -> Bool:
@@ -92,7 +92,7 @@ struct Array(Sized, JsonValue):
     fn __iter__(ref self) -> _ArrayIter[__origin_of(self)]:
         return _ArrayIter(0, Pointer.address_of(self))
 
-    fn __reversed__(ref self) -> _ArrayIter[__origin_of(self), False]:
+    fn reverse(ref self) -> _ArrayIter[__origin_of(self), False]:
         return _ArrayIter[forward=False](len(self), Pointer.address_of(self))
 
     @always_inline

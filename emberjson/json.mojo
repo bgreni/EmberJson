@@ -160,7 +160,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         Return:
             True if the inner container is non-empty else False
         """
-        return bool(self)
+        return Bool(self)
 
     @always_inline
     fn write_to[W: Writer](self, mut writer: W):

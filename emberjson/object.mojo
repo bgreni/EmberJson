@@ -67,7 +67,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
 
     @always_inline
     fn __as_bool__(self) -> Bool:
-        return bool(self)
+        return Bool(self)
 
     @always_inline
     fn keys(self, out l: List[String]):

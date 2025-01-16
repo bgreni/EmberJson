@@ -19,7 +19,7 @@ def test_json_object():
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json["key"].int(), 123)
 
-    assert_equal(str(json), '{"key":123}')
+    assert_equal(String(json), '{"key":123}')
 
     assert_equal(len(json), 1)
 
@@ -34,7 +34,7 @@ def test_json_array():
     assert_equal(json.array()[1].int(), 345)
     assert_equal(json[0].int(), 123)
 
-    assert_equal(str(json), '[123,345]')
+    assert_equal(String(json), '[123,345]')
 
     assert_equal(len(json), 2)
 
@@ -72,7 +72,7 @@ def test_setter_array():
 
 def test_stringify_array():
     var arr = JSON.from_string('[123,"foo",false,null]')
-    assert_equal(str(arr), '[123,"foo",false,null]')
+    assert_equal(String(arr), '[123,"foo",false,null]')
 
 def test_pretty_print_array():
     var arr = JSON.from_string('[123,"foo",false,null]')
@@ -269,7 +269,7 @@ def round_trip_test(filename: String):
     with open(d + filename + ".json", "r") as f:
         var src = f.read()
         var json = JSON.from_string(src)
-        assert_equal(str(json), src)
+        assert_equal(String(json), src)
 
 def test_roundtrip01():
     round_trip_test("roundtrip01")

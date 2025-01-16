@@ -61,12 +61,12 @@ def main():
 
     out = subprocess.check_output("magic list --json", shell=True)
     j = json.loads(out)
-    # max_version = ''
-    # for res in j:
-    #     if res['name'] == 'max':
-    #         max_version = re.search("(dev.*)", res["version"])[1]
-    # recipe = recipe.replace("{{VERSION}}", config["project"]["version"] + "." + max_version)
-    recipe = recipe.replace("{{VERSION}}", config["project"]["version"])
+    max_version = ''
+    for res in j:
+        if res['name'] == 'max':
+            max_version = re.search("(dev.*)", res["version"])[1]
+    recipe = recipe.replace("{{VERSION}}", config["project"]["version"] + "." + max_version)
+    # recipe = recipe.replace("{{VERSION}}", config["project"]["version"])
 
     deps = build_dependency_list(config['dependencies'])
     recipe = recipe.replace("{{DEPENDENCIES}}", deps)

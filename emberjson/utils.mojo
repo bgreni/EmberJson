@@ -60,7 +60,7 @@ fn to_string(out s: String, v: ByteVec):
 
 @always_inline
 fn to_string(b: Byte) -> String:
-    return chr(int(b))
+    return chr(Int(b))
 
 
 @always_inline
@@ -93,7 +93,7 @@ fn branchless_ternary(t: Scalar, f: Scalar[t.type], cond: Bool) -> Scalar[t.type
     constrained[t.type.is_integral(), "Expected an integral"]()
     # One side of the `|` will always be zero so the returned result is just the
     # other side.
-    return (t * int(cond)) | (f * int(~cond))
+    return (t * Int(cond)) | (f * Int(~cond))
 
 
 @always_inline

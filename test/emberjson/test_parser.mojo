@@ -11,7 +11,7 @@ def test_parse():
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json["key"].int(), 123)
 
-    assert_equal(str(json), '{"key":123}')
+    assert_equal(String(json), '{"key":123}')
 
     assert_equal(len(json), 1)
 
@@ -25,7 +25,7 @@ def test_parse():
     assert_equal(json.array()[1].int(), 345)
     assert_equal(json[0].int(), 123)
 
-    assert_equal(str(json), '[123,345]')
+    assert_equal(String(json), '[123,345]')
 
     assert_equal(len(json), 2)
 

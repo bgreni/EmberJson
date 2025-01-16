@@ -8,13 +8,13 @@ def test_bool():
     var v = Value.from_string(s)
     assert_true(v.isa[Bool]())
     assert_equal(v.get[Bool](), False)
-    assert_equal(str(v), s)
+    assert_equal(String(v), s)
 
     s = "true"
     v = Value.from_string(s)
     assert_true(v.isa[Bool]())
     assert_equal(v.get[Bool](), True)
-    assert_equal(str(v), s)
+    assert_equal(String(v), s)
 
     # with assert_raises(contains="Expected 'false'"):
     #     _ = Value.from_string("falsee")
@@ -26,20 +26,20 @@ def test_string():
     var v = Value.from_string(s)
     assert_true(v.isa[String]())
     assert_equal(v.get[String](), "Some String")
-    assert_equal(str(v), s)
+    assert_equal(String(v), s)
 
     s = "\"Escaped\""
     v = Value.from_string(s)
     assert_true(v.isa[String]())
     assert_equal(v.get[String](), "Escaped")
-    assert_equal(str(v), s)
+    assert_equal(String(v), s)
 
 def test_null():
     var s = "null"
     var v = Value.from_string(s)
     assert_true(v.isa[Null]())
     assert_equal(v.get[Null](), Null())
-    assert_equal(str(v), s)
+    assert_equal(String(v), s)
 
     with assert_raises(contains="Expected 'null'"):
         _ = Value.from_string("nil")
@@ -48,7 +48,7 @@ def test_integer():
     var v = Value.from_string("123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), 123)
-    assert_equal(str(v), "123")
+    assert_equal(String(v), "123")
 
 def test_integer_leading_plus():
     v = Value.from_string("+123")
@@ -59,19 +59,19 @@ def test_integer_negative():
     v = Value.from_string("-123")
     assert_true(v.isa[Int]())
     assert_equal(v.get[Int](), -123)
-    assert_equal(str(v), "-123")
+    assert_equal(String(v), "-123")
 
 def test_float():
     v = Value.from_string("43.5")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5)
-    assert_equal(str(v), "43.5")
+    assert_equal(String(v), "43.5")
 
 def test_eight_digits_after_dot():
     v = Value.from_string("342.12345678")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 342.12345678)
-    assert_equal(str(v), "342.12345678")
+    assert_equal(String(v), "342.12345678")
 
 def test_special_case_floats():
 

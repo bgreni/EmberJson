@@ -174,7 +174,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 "Control characters must be escaped: "
                 + to_string(self.data.load[width=SIMD8_WIDTH]())
                 + " : "
-                + str(block.unescaped_index())
+                + String(block.unescaped_index())
             )
         if not block.has_backslash():
             self.data += SIMD8_WIDTH
@@ -205,7 +205,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 "Control characters must be escaped: "
                 + to_string(self.data.load[width=SIMD8_WIDTH]())
                 + " : "
-                + str(block.unescaped_index())
+                + String(block.unescaped_index())
             )
         if not block.has_backslash():
             self.data += SIMD8_WIDTH
@@ -234,7 +234,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                         raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
                 alias control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
                 if unlikely(self.data[] in control_chars):
-                    raise Error("Control characters must be escaped: " + str(self.data[]))
+                    raise Error("Control characters must be escaped: " + String(self.data[]))
                 self.data += 1
         raise Error("Invalid String")
 
@@ -243,18 +243,15 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if not is_space(self.data[]):
             return
         self.data += 1
-        if not is_space(self.data[]):
-            return
-        self.data += 1
 
         while self.bytes_remaining() >= SIMD8_WIDTH:
             var chunk = self.data.load[width=SIMD8_WIDTH]()
             var nonspace = get_non_space_bits(chunk)
-            if nonspace.reduce_or():
+            if any(nonspace):
                 self.data += first_true(nonspace)
                 return
             else:
-                self.data += SIMD8_WIDTH + 1
+                self.data += SIMD8_WIDTH
 
         while self.has_more() and is_space(self.data[]):
             self.data += 1
@@ -272,9 +269,9 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         @parameter
         if use_lot:
             if neg_power:
-                pow = power_of_ten[-int(power)]
+                pow = power_of_ten[-Int(power)]
             else:
-                pow = power_of_ten[int(power)]
+                pow = power_of_ten[Int(power)]
         else:
             pow = 10 ** float(abs(power))
 
@@ -284,12 +281,13 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn compute_float64(self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool) raises:
+        alias min_fast_power = Int64(-22)
+        alias max_fast_power = Int64(22)
+
         @parameter
         if options.fast_float_parsing:
             return self.compute_float_fast[use_lot=False](power, i, negative)
 
-        alias min_fast_power = Int64(-22)
-        alias max_fast_power = Int64(22)
         if min_fast_power <= power <= max_fast_power and i <= 9007199254740991:
             return self.compute_float_fast[use_lot=True](power, i, negative)
 
@@ -299,7 +297,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         var lz = count_leading_zeros(i)
         i <<= lz
 
-        var index = int(2 * (power - smallest_power))
+        var index = Int(2 * (power - smallest_power))
 
         var first_product = full_multiplication(i, power_of_five_128[index])
 
@@ -314,7 +312,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
         var upperbit: UInt64 = upper >> 63
         var mantissa: UInt64 = upper >> (upperbit + 9)
-        lz += int(1 ^ upperbit)
+        lz += Int(1 ^ upperbit)
 
         alias `152170 + 65536` = 152170 + 65536
         alias `1024 + 63` = 1024 + 63
@@ -367,7 +365,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     @always_inline
     fn parse_number(mut self, out v: Value) raises:
         var neg = self.data[] == NEG
-        var p = self.data + int(neg or self.data[] == PLUS)
+        var p = self.data + Int(neg or self.data[] == PLUS)
 
         var start_digits = p
         var i: UInt64 = 0
@@ -405,7 +403,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             p += 1
 
             var neg_exp = p[] == NEG
-            p += int(neg_exp or p[] == PLUS)
+            p += Int(neg_exp or p[] == PLUS)
 
             if unlikely(is_exp_char(p[])):
                 raise Error("Invalid float: Double sign for exponent")
@@ -424,7 +422,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 if p > start_exp + 18:
                     exp_number = 999999999999999999
 
-            exponent += -exp_number if neg_exp else exp_number
+            exponent += branchless_ternary(-exp_number, exp_number, neg_exp)
 
         if is_float:
             v = self.write_float(neg, i, start_digits, digit_count, exponent)
@@ -439,9 +437,9 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 raise Error("integer overflow")
             if neg:
                 self.data = p
-                return int(~i + 1)
+                return Int(~i + 1)
             elif self.data[0] != to_byte("1") or i <= Int64.MAX.cast[DType.uint64]():
                 raise Error("integer overflow")
 
         self.data = p
-        return branchless_ternary(int(~i + 1), int(i), neg)
+        return branchless_ternary(Int(~i + 1), Int(i), neg)
