@@ -2,6 +2,7 @@ from emberjson.parser import Parser
 from emberjson import JSON, Null, Array, Object
 from testing import *
 
+
 def test_parse():
     var s = '{"key": 123}'
     var p = Parser(s.unsafe_ptr(), len(s))
@@ -18,14 +19,14 @@ def test_parse():
     with assert_raises():
         _ = json[2]
 
-    s = '[123, 345]'
+    s = "[123, 345]"
     json = JSON.from_string(s)
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
     assert_equal(json[0].int(), 123)
 
-    assert_equal(String(json), '[123,345]')
+    assert_equal(String(json), "[123,345]")
 
     assert_equal(len(json), 2)
 

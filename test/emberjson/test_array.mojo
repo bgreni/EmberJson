@@ -3,6 +3,7 @@ from emberjson import Object
 from emberjson.value import Null, Value
 from testing import *
 
+
 def test_array():
     var s = '[ 1, 2, "foo" ]'
     var arr = Array.from_string(s)
@@ -12,6 +13,7 @@ def test_array():
     assert_equal(arr[2].get[String](), "foo")
     assert_equal(String(arr), '[1,2,"foo"]')
 
+
 def test_array_no_space():
     var s = '[1,2,"foo"]'
     var arr = Array.from_string(s)
@@ -19,6 +21,7 @@ def test_array_no_space():
     assert_equal(arr[0].get[Int](), 1)
     assert_equal(arr[1].get[Int](), 2)
     assert_equal(arr[2].get[String](), "foo")
+
 
 def test_nested_object():
     var s = '[false, null, [4.0], { "key": "bar" }]'
@@ -33,6 +36,7 @@ def test_nested_object():
     assert_true("key" in ob)
     assert_equal(ob["key"].string(), "bar")
 
+
 def test_contains():
     var s = '[false, 123, "str"]'
     var arr = Array.from_string(s)
@@ -42,21 +46,13 @@ def test_contains():
     assert_false(True in arr)
     assert_true(True not in arr)
 
+
 def test_variadic_init():
-    var arr = Array(123,
-        "foo",
-        Null()
-    )
+    var arr = Array(123, "foo", Null())
     var ob = Object()
     ob["key"] = "value"
 
-    var arr2 = Array(
-        Int(45),
-        45.5,
-        Float64(45.5),
-        arr,
-        ob
-    )
+    var arr2 = Array(Int(45), 45.5, Float64(45.5), arr, ob)
     assert_equal(arr[0].int(), 123)
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())
@@ -67,6 +63,7 @@ def test_variadic_init():
     assert_true(arr2[3].isa[Array]())
     assert_true(arr2[4].isa[Object]())
 
+
 def test_equality():
     var arr1 = Array(123, 456)
     var arr2 = Array(123, 456)
@@ -74,8 +71,10 @@ def test_equality():
     assert_equal(arr1, arr2)
     assert_not_equal(arr1, arr3)
 
+
 # def test_min_size_for_string():
 #     assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
+
 
 def test_list_ctr():
     var arr = Array(List[Value](123, "foo", Null(), False))
