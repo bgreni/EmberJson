@@ -92,11 +92,17 @@ struct Array(Sized, JsonValue):
     fn __ne__(self, other: Self) -> Bool:
         return self._data != other._data
 
+    @always_inline
     fn __iter__(ref self) -> _ArrayIter[__origin_of(self)]:
         return _ArrayIter(0, Pointer.address_of(self))
 
+    @always_inline
     fn reversed(ref self) -> _ArrayIter[__origin_of(self), False]:
         return _ArrayIter[forward=False](len(self), Pointer.address_of(self))
+
+    @always_inline
+    fn iter(ref self) -> _ArrayIter[__origin_of(self)]:
+        return self.__iter__()
 
     @always_inline
     fn reserve(mut self, n: Int):

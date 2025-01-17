@@ -5,6 +5,7 @@ from .utils import *
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
+from collections.dict import _DictKeyIter, _DictEntryIter, _DictValueIter
 
 
 @value
@@ -70,10 +71,20 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         return Bool(self)
 
     @always_inline
-    fn keys(self, out l: List[String]):
-        l = List[String](capacity=len(self))
-        for k in self._data.keys():
-            l.append(k[])
+    fn keys(ref self) -> _DictKeyIter[String, Value, __origin_of(self._data)]:
+        return self._data.keys()
+
+    @always_inline
+    fn values(ref self) -> _DictValueIter[String, Value, __origin_of(self._data)]:
+        return self._data.values()
+
+    @always_inline
+    fn __iter__(ref self) -> _DictKeyIter[String, Value, __origin_of(self._data)]:
+        return self.keys()
+
+    @always_inline
+    fn items(ref self) -> _DictEntryIter[String, Value, __origin_of(self._data)]:
+        return self._data.items()
 
     fn write_to[W: Writer](self, mut writer: W):
         ("{").write_to(writer)
