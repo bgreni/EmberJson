@@ -34,6 +34,11 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
         else:
             return self.index
 
+    fn collect(owned self, out arr: Array):
+        arr = Array(capacity=len(self))
+        for _ in range(len(self)):
+            arr.append(self.__next__()[])
+
 
 @value
 struct Array(Sized, JsonValue):
@@ -46,6 +51,10 @@ struct Array(Sized, JsonValue):
     fn __init__(out self):
         # TODO: Maybe a good candidate for autotuning in the future?
         self._data = Self.Type(capacity=8)
+    
+    @always_inline
+    fn __init__(out self, *, capacity: Int):
+        self._data = Self.Type(capacity=capacity)
 
     @always_inline
     fn __init__(out self, owned *values: Value):
@@ -62,12 +71,6 @@ struct Array(Sized, JsonValue):
     @always_inline
     fn __len__(self) -> Int:
         return len(self._data)
-
-    fn __contains__[T: EqualityComparableCollectionElement, //](self, item: T) -> Bool:
-        for v in self._data:
-            if v[].isa[T]() and v[][T] == item:
-                return True
-        return False
 
     @always_inline
     fn __bool__(self) -> Bool:
@@ -92,7 +95,7 @@ struct Array(Sized, JsonValue):
     fn __iter__(ref self) -> _ArrayIter[__origin_of(self)]:
         return _ArrayIter(0, Pointer.address_of(self))
 
-    fn reverse(ref self) -> _ArrayIter[__origin_of(self), False]:
+    fn reversed(ref self) -> _ArrayIter[__origin_of(self), False]:
         return _ArrayIter[forward=False](len(self), Pointer.address_of(self))
 
     @always_inline

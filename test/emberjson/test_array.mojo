@@ -72,6 +72,11 @@ def test_equality():
     assert_not_equal(arr1, arr3)
 
 
+def test_reverse_array():
+    var arr = Array(1, 2, 3, 4)
+    assert_equal(arr.reversed().collect(), Array(4, 3, 2, 1))
+
+
 # def test_min_size_for_string():
 #     assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
 

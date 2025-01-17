@@ -11,6 +11,7 @@ from .simd import *
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
 from .format_int import write_int
+from sys.intrinsics import _type_is_eq
 
 
 @value
@@ -47,6 +48,13 @@ struct Null(JsonValue):
     @always_inline
     fn write_to[W: Writer](self, mut writer: W):
         writer.write(self.__str__())
+
+
+fn constrain_json_type[T: CollectionElement]():
+    alias valid = _type_is_eq[T, Int]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
+        T, Bool
+    ]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
+    constrained[valid, "Invalid type for JSON"]()
 
 
 @value
@@ -160,14 +168,17 @@ struct Value(JsonValue):
 
     @always_inline
     fn isa[T: CollectionElement](self) -> Bool:
+        constrain_json_type[T]()
         return self._data.isa[T]()
 
     @always_inline
     fn __getitem__[T: CollectionElement](self) -> ref [self._data] T:
+        constrain_json_type[T]()
         return self._data[T]
 
     @always_inline
     fn get[T: CollectionElement](self) -> ref [self._data] T:
+        constrain_json_type[T]()
         return self._data[T]
 
     @always_inline
