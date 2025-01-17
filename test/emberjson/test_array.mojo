@@ -12,6 +12,8 @@ def test_array():
     assert_equal(arr[1].get[Int](), 2)
     assert_equal(arr[2].get[String](), "foo")
     assert_equal(String(arr), '[1,2,"foo"]')
+    arr[0] = 10
+    assert_equal(arr[0].int(), 10)
 
 
 def test_array_no_space():

@@ -74,7 +74,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         """
         if not self.is_array():
             raise Error("Object key expected to be string")
-        return self.array()[ind]
+        return self.array().__getitem__(ind)
 
     @always_inline
     fn __setitem__(mut self, owned key: String, owned item: Value) raises:

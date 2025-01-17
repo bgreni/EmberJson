@@ -18,11 +18,11 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
     fn __next__(mut self, out p: Pointer[Value, __origin_of(self.src[]._data)]):
         @parameter
         if forward:
-            p = Pointer.address_of(self.src[][self.index])
+            p = Pointer.address_of(self.src[].__getitem__(self.index))
             self.index += 1
         else:
             self.index -= 1
-            p = Pointer.address_of(self.src[][self.index])
+            p = Pointer.address_of(self.src[].__getitem__(self.index))
 
     fn __has_next__(self) -> Bool:
         return len(self) > 0
@@ -61,11 +61,11 @@ struct Array(Sized, JsonValue):
         self._data = Self.Type(elements=values^)
 
     @always_inline
-    fn __getitem__(ref [_]self, ind: Int) -> ref [self._data] Value:
+    fn __getitem__(ref self, ind: Int) -> ref [self._data] Value:
         return self._data[ind]
 
     @always_inline
-    fn __setitem(mut self, ind: Int, owned item: Value):
+    fn __setitem__(mut self, ind: Int, owned item: Value):
         self._data[ind] = item^
 
     @always_inline
