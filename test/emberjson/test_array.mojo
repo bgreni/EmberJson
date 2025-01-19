@@ -89,3 +89,5 @@ def test_list_ctr():
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())
     assert_equal(arr[3].bool(), False)
+
+    assert_equal(arr.to_list(), List[Value](123, "foo", Null(), False))

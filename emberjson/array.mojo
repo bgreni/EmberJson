@@ -40,7 +40,6 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
             arr.append(self.__next__()[])
 
 
-@value
 struct Array(Sized, JsonValue):
     """Represents a json array."""
 
@@ -51,14 +50,30 @@ struct Array(Sized, JsonValue):
     fn __init__(out self):
         # TODO: Maybe a good candidate for autotuning in the future?
         self._data = Self.Type(capacity=8)
-    
+
     @always_inline
     fn __init__(out self, *, capacity: Int):
         self._data = Self.Type(capacity=capacity)
 
     @always_inline
+    fn __init__(out self, owned d: Self.Type):
+        self._data = d^
+
+    @always_inline
     fn __init__(out self, owned *values: Value):
         self._data = Self.Type(elements=values^)
+
+    @always_inline
+    fn __copyinit__(out self, other: Self):
+        self._data = other._data
+
+    @always_inline
+    fn copy(self) -> Self:
+        return self
+
+    @always_inline
+    fn __moveinit__(out self, owned other: Self):
+        self._data = other._data
 
     @always_inline
     fn __getitem__(ref self, ind: Int) -> ref [self._data] Value:
@@ -155,7 +170,6 @@ struct Array(Sized, JsonValue):
         var p = Parser(input)
         arr = p.parse_array()
 
-    @staticmethod
-    @always_inline
-    fn from_list(out arr: Array, owned l: Self.Type):
-        arr = Self(l^)
+    fn to_list(owned self, out l: List[Value]):
+        l = self._data^
+        self._data = Self.Type()

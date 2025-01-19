@@ -1,7 +1,8 @@
 from emberjson.object import Object
 from emberjson.array import Array
-from emberjson.value import Null
+from emberjson.value import Null, Value
 from testing import *
+from collections import Dict
 
 
 def test_object():
@@ -10,6 +11,17 @@ def test_object():
     assert_true("thing" in ob)
     assert_equal(ob["thing"].int(), 123)
     assert_equal(String(ob), s)
+
+
+def test_to_from_dict():
+    var d = Dict[String, Value]()
+    d["key"] = False
+
+    var o = Object(d^)
+    assert_equal(o["key"].bool(), False)
+
+    d = o.to_dict()
+    assert_equal(d["key"].bool(), False)
 
 
 def test_object_spaces():

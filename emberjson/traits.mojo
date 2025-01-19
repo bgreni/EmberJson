@@ -20,5 +20,6 @@ trait JsonValue(
     Defaultable,
     Boolable,
     ImplicitlyBoolable,
+    ExplicitlyCopyable,
 ):
     pass

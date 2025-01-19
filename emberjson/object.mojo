@@ -8,7 +8,6 @@ from .parser import Parser
 from collections.dict import _DictKeyIter, _DictEntryIter, _DictValueIter
 
 
-@value
 struct Object(Sized, JsonValue, PrettyPrintable):
     alias Type = Dict[String, Value]
     var _data: Self.Type
@@ -17,6 +16,22 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     fn __init__(out self):
         # TODO: Maybe a good candidate for autotuning in the future?
         self._data = Self.Type(power_of_two_initial_capacity=32)
+
+    @always_inline
+    fn __init__(out self, owned d: Self.Type):
+        self._data = d^
+
+    @always_inline
+    fn __copyinit__(out self, other: Self):
+        self._data = other._data
+
+    @always_inline
+    fn __moveinit__(out self, owned other: Self):
+        self._data = other._data
+
+    @always_inline
+    fn copy(self) -> Self:
+        return self
 
     fn min_size_for_string(self) -> Int:
         var n = 2 + len(self)  # include ':' for each pairing
@@ -136,3 +151,8 @@ struct Object(Sized, JsonValue, PrettyPrintable):
     fn from_string(out o: Object, s: String) raises:
         var p = Parser(s)
         o = p.parse_object()
+
+    @always_inline
+    fn to_dict(owned self, out d: Dict[String, Value]):
+        d = self._data^
+        self._data = Dict[String, Value]()

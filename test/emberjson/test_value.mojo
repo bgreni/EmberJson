@@ -127,6 +127,16 @@ def test_equality():
     assert_equal(v2, v3)
     assert_not_equal(v1, v2)
 
+    def eq_self(v: Value):
+        assert_equal(v, v)
+
+    eq_self(Value(123))
+    eq_self(Value(34.5))
+    eq_self(Value(Null()))
+    eq_self(Value(False))
+    eq_self(Value(Array()))
+    eq_self(Value(Object()))
+
 
 def test_implicit_conversion():
     var val: Value = "a string"

@@ -136,21 +136,24 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if n == QUOTE:
             v = self.read_string()
         elif n == T:
-            var w = self.data.load[width=4]()
-            if any(w != TRUE):
+            var w: UInt32 = 0
+            unsafe_memcpy(w, self.data)
+            if w != TRUE:
                 raise Error("Expected 'true', received: " + to_string(w))
             v = True
             self.data += 4
         elif n == F:
             self.data += 1
-            var w = self.data.load[width=4]()
-            if any(w != ALSE):
+            var w: UInt32 = 0
+            unsafe_memcpy(w, self.data)
+            if w != ALSE:
                 raise Error("Expected 'false', received: " + to_string(w))
             v = False
             self.data += 4
         elif n == N:
-            var w = self.data.load[width=4]()
-            if any(w != NULL):
+            var w: UInt32 = 0
+            unsafe_memcpy(w, self.data)
+            if w != NULL:
                 raise Error("Expected 'null', received: " + to_string(w))
             v = Null()
             self.data += 4
@@ -262,7 +265,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn compute_float_fast[*, use_lot: Bool](self, out d: Float64, power: Int64, i: UInt64, negative: Bool):
-        d = float(i)
+        d = Float64(i)
         var pow: Float64
         var neg_power = power < 0
 
@@ -273,7 +276,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             else:
                 pow = power_of_ten[Int(power)]
         else:
-            pow = 10 ** float(abs(power))
+            pow = 10 ** Float64(abs(power))
 
         d = d / pow if neg_power else d * pow
         if negative:

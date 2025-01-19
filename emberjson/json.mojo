@@ -9,7 +9,6 @@ from sys.intrinsics import unlikely
 from .parser import Parser
 
 
-@value
 struct JSON(JsonValue, Sized, PrettyPrintable):
     """Top level JSON object, can either be an Array, or an Object."""
 
@@ -29,6 +28,18 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     @always_inline
     fn __init__(out self, owned arr: Array):
         self._data = arr^
+
+    @always_inline
+    fn __copyinit__(out self, other: Self):
+        self._data = other._data
+
+    @always_inline
+    fn __moveinit__(out self, owned other: Self):
+        self._data = other._data^
+
+    @always_inline
+    fn copy(self) -> Self:
+        return self
 
     @always_inline
     fn object(ref [_]self) -> ref [self._data] Object:

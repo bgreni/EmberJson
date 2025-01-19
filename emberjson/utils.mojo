@@ -7,6 +7,7 @@ from .traits import JsonValue, PrettyPrintable
 from os import abort
 from sys import sizeof
 from sys.intrinsics import unlikely
+from sys.intrinsics import _type_is_eq
 
 alias Bytes = List[Byte, True]
 alias ByteVec = SIMD[DType.uint8, _]
@@ -14,21 +15,23 @@ alias ByteView = Span[Byte, _]
 
 alias DefaultPrettyIndent = 4
 
+alias WRITER_DEFAULT_SIZE = 4096
+
 
 @always_inline
-fn write[T: JsonValue, //](v: T) -> String:
-    var writer = _WriteBufferStack[4096](String())
+fn write[T: JsonValue, //](out s: String, v: T):
+    s = String()
+    var writer = _WriteBufferStack[WRITER_DEFAULT_SIZE](s)
     v.write_to(writer)
     writer.flush()
-    return writer.writer
 
 
-fn write_pretty[P: PrettyPrintable, //](v: P, indent: Variant[Int, String] = DefaultPrettyIndent) -> String:
-    var writer = _WriteBufferStack[4096](String())
+fn write_pretty[P: PrettyPrintable, //](out s: String, v: P, indent: Variant[Int, String] = DefaultPrettyIndent):
+    s = String()
+    var writer = _WriteBufferStack[WRITER_DEFAULT_SIZE](s)
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
     v.pretty_to(writer, ind)
     writer.flush()
-    return writer.writer
 
 
 @always_inline
@@ -38,8 +41,7 @@ fn to_byte(s: String) -> Byte:
 
 @always_inline
 fn is_space(char: Byte) -> Bool:
-    alias spaces = ByteVec[4](SPACE, NEWLINE, TAB, LINE_FEED)
-    return char in spaces
+    return char == SPACE or char == NEWLINE or char == TAB or char == LINE_FEED
 
 
 @always_inline
@@ -48,7 +50,6 @@ fn to_string(b: ByteView[_]) -> String:
     return s
 
 
-@always_inline
 fn to_string(out s: String, v: ByteVec):
     s = String()
     s.reserve(v.size)
@@ -61,6 +62,12 @@ fn to_string(out s: String, v: ByteVec):
 @always_inline
 fn to_string(b: Byte) -> String:
     return chr(Int(b))
+
+
+@always_inline
+fn to_string(owned i: UInt32) -> String:
+    # This is meant to be a sequence of 4 characters
+    return to_string(UnsafePointer.address_of(i).bitcast[Byte]().load[width=4]())
 
 
 @always_inline
@@ -102,3 +109,10 @@ fn branchless_ternary(t: Int, f: Int, cond: Bool) -> Int:
     # One side of the `|` will always be zero so the returned result is just the
     # other side.
     return (t * cond) | (f * ~cond)
+
+
+fn constrain_json_type[T: CollectionElement]():
+    alias valid = _type_is_eq[T, Int]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
+        T, Bool
+    ]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
+    constrained[valid, "Invalid type for JSON"]()

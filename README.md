@@ -83,4 +83,12 @@ print(json[4] == Null()) # prints True
 
 # Implicit ctors for Value
 var v: Value = "some string"
+
+# Convert Array and Dict back to stdlib types
+# These are consuming actions so the original Array/Object will be moved
+var arr = Array(123, False)
+var l = arr.to_list()
+
+var ob = Object()
+var d = ob.to_dict()
 ```

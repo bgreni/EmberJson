@@ -12,9 +12,9 @@ alias smallest_power: Int64 = -342
 alias largest_power: Int64 = 308
 
 
-alias TRUE = ByteVec[4](to_byte("t"), to_byte("r"), to_byte("u"), to_byte("e"))
-alias ALSE = ByteVec[4](to_byte("a"), to_byte("l"), to_byte("s"), to_byte("e"))
-alias NULL = ByteVec[4](to_byte("n"), to_byte("u"), to_byte("l"), to_byte("l"))
+alias TRUE: UInt32 = 0x65757274
+alias ALSE: UInt32 = 0x65736C61
+alias NULL: UInt32 = 0x6C6C756E
 alias SOL = to_byte("/")
 alias B = to_byte("b")
 alias F = to_byte("f")

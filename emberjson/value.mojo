@@ -11,7 +11,6 @@ from .simd import *
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
 from .format_int import write_int
-from sys.intrinsics import _type_is_eq
 
 
 @value
@@ -50,11 +49,42 @@ struct Null(JsonValue):
         writer.write(self.__str__())
 
 
-fn constrain_json_type[T: CollectionElement]():
-    alias valid = _type_is_eq[T, Int]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
-        T, Bool
-    ]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
-    constrained[valid, "Invalid type for JSON"]()
+@value
+struct BigInt(JsonValue):
+    var _data: String
+
+    fn __init__(out self):
+        self._data = "0"
+
+    fn __init__(out self, owned s: String):
+        self._data = s
+
+    fn __init__(out self, i: Int):
+        self._data = String(i)
+
+    fn __eq__(self, other: Self) -> Bool:
+        return self._data == other._data
+
+    fn __ne__(self, other: Self) -> Bool:
+        return not self == other
+
+    fn __str__(self) -> String:
+        return self._data
+
+    fn __repr__(self) -> String:
+        return self._data
+
+    fn __bool__(self) -> Bool:
+        return Bool(self._data)
+
+    fn __as_bool__(self) -> Bool:
+        return Bool(self)
+
+    fn write_to[W: Writer](self, mut writer: W):
+        writer.write(self._data)
+
+    fn min_size_for_string(self) -> Int:
+        return len(self._data)
 
 
 @value
@@ -123,6 +153,10 @@ struct Value(JsonValue):
         self._data = other._data
 
     @always_inline
+    fn copy(self) -> Self:
+        return self
+
+    @always_inline
     fn __moveinit__(out self, owned other: Self):
         self._data = other._data^
 
@@ -142,6 +176,8 @@ struct Value(JsonValue):
             return self.object() == other.object()
         elif self.isa[Array]() and other.isa[Array]():
             return self.array() == other.array()
+        elif self.isa[Null]() and other.isa[Null]():
+            return True
         return False
 
     @always_inline
