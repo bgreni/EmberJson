@@ -11,6 +11,7 @@ from .simd import *
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
 from .format_int import write_int
+from sys.info import bitwidthof
 
 
 @value
@@ -50,46 +51,8 @@ struct Null(JsonValue):
 
 
 @value
-struct BigInt(JsonValue):
-    var _data: String
-
-    fn __init__(out self):
-        self._data = "0"
-
-    fn __init__(out self, owned s: String):
-        self._data = s
-
-    fn __init__(out self, i: Int):
-        self._data = String(i)
-
-    fn __eq__(self, other: Self) -> Bool:
-        return self._data == other._data
-
-    fn __ne__(self, other: Self) -> Bool:
-        return not self == other
-
-    fn __str__(self) -> String:
-        return self._data
-
-    fn __repr__(self) -> String:
-        return self._data
-
-    fn __bool__(self) -> Bool:
-        return Bool(self._data)
-
-    fn __as_bool__(self) -> Bool:
-        return Bool(self)
-
-    fn write_to[W: Writer](self, mut writer: W):
-        writer.write(self._data)
-
-    fn min_size_for_string(self) -> Int:
-        return len(self._data)
-
-
-@value
 struct Value(JsonValue):
-    alias Type = Variant[Int, Float64, String, Bool, Object, Array, Null]
+    alias Type = Variant[Int64, UInt64, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
     @always_inline
@@ -110,8 +73,39 @@ struct Value(JsonValue):
 
     @implicit
     @always_inline
-    fn __init__(out self, v: Int):
+    fn __init__(out self, v: Int64):
         self._data = v
+
+    @implicit
+    @always_inline
+    fn __init__(out self, v: UInt64):
+        self._data = v
+
+    @implicit
+    @always_inline
+    fn __init__(out self, v: IntLiteral):
+        if UInt64(v) > Int64.MAX.cast[DType.uint64]():
+            self._data = UInt64(v)
+        else:
+            self._data = Int64(v)
+
+    @implicit
+    @always_inline
+    fn __init__(out self, v: Int):
+        constrained[
+            bitwidthof[DType.index]() <= bitwidthof[DType.int64](),
+            "Cannot fit index width into 64 bits for signed integer",
+        ]()
+        self._data = Int64(v)
+
+    @implicit
+    @always_inline
+    fn __init__(out self, v: UInt):
+        constrained[
+            bitwidthof[DType.index]() <= bitwidthof[DType.uint64](),
+            "Cannot fit index width into 64 bits for unsigned integer",
+        ]()
+        self._data = UInt64(v)
 
     @implicit
     @always_inline
@@ -160,24 +154,36 @@ struct Value(JsonValue):
     fn __moveinit__(out self, owned other: Self):
         self._data = other._data^
 
-    fn __eq__(self, other: Self) -> Bool:
-        if self._data._get_discr() != other._data._get_discr():
-            return False
+    @always_inline
+    fn _type_equal(self, other: Self) -> Bool:
+        return self._data._get_discr() == other._data._get_discr()
 
-        if self.isa[Int]() and other.isa[Int]():
-            return self.int() == other.int()
-        elif self.isa[Float64]() and other.isa[Float64]():
+    fn __eq__(self, other: Self) -> Bool:
+        if (self.is_int() or self.is_uint()) and (other.is_int() or other.is_uint()):
+            if self.is_int():
+                if other.is_int() or not will_overflow(other.uint()):
+                    return self.int() == other.int()
+                return False
+            elif self.is_uint():
+                if other.is_uint() or other.int() > 0:
+                    return self.int() == other.int()
+                return False
+
+        if not self._type_equal(other):
+            return False
+        elif self.isa[Float64]():
             return self.float() == other.float()
-        elif self.isa[String]() and other.isa[String]():
+        elif self.isa[String]():
             return self.string() == other.string()
-        elif self.isa[Bool]() and other.isa[Bool]():
+        elif self.isa[Bool]():
             return self.bool() == other.bool()
-        elif self.isa[Object]() and other.isa[Object]():
+        elif self.isa[Object]():
             return self.object() == other.object()
-        elif self.isa[Array]() and other.isa[Array]():
+        elif self.isa[Array]():
             return self.array() == other.array()
-        elif self.isa[Null]() and other.isa[Null]():
+        elif self.isa[Null]():
             return True
+        abort("Unreachable")
         return False
 
     @always_inline
@@ -185,8 +191,10 @@ struct Value(JsonValue):
         return not self == other
 
     fn __bool__(self) -> Bool:
-        if self.isa[Int]():
+        if self.isa[Int64]():
             return Bool(self.int())
+        elif self.isa[UInt64]():
+            return Bool(self.uint())
         elif self.isa[Float64]():
             return Bool(self.float())
         elif self.isa[String]():
@@ -199,6 +207,7 @@ struct Value(JsonValue):
             return Bool(self.object())
         return Bool(self.array())
 
+    @always_inline
     fn __as_bool__(self) -> Bool:
         return Bool(self)
 
@@ -208,46 +217,65 @@ struct Value(JsonValue):
         return self._data.isa[T]()
 
     @always_inline
-    fn __getitem__[T: CollectionElement](self) -> ref [self._data] T:
+    fn is_int(self) -> Bool:
+        return self.isa[Int64]()
+
+    @always_inline
+    fn is_uint(self) -> Bool:
+        return self.isa[UInt64]()
+
+    @always_inline
+    fn __getitem__[T: CollectionElement](ref self) -> ref [self._data] T:
         constrain_json_type[T]()
         return self._data[T]
 
     @always_inline
-    fn get[T: CollectionElement](self) -> ref [self._data] T:
-        constrain_json_type[T]()
-        return self._data[T]
+    fn get[T: CollectionElement](ref self) -> ref [self._data] T:
+        return self[T]
 
     @always_inline
-    fn int(self) -> Int:
-        return self._data[Int]
+    fn int(self) -> Int64:
+        if self.is_int():
+            return self[Int64]
+        else:
+            return Int64(self[UInt64])
+
+    @always_inline
+    fn uint(self) -> UInt64:
+        if self.is_uint():
+            return self[UInt64]
+        else:
+            return UInt64(self[Int64])
 
     @always_inline
     fn null(self) -> Null:
         return Null()
 
     @always_inline
-    fn string(self) -> ref [self._data] String:
-        return self._data[String]
+    fn string(ref self) -> ref [self._data] String:
+        return self[String]
 
     @always_inline
     fn float(self) -> Float64:
-        return self._data[Float64]
+        return self[Float64]
 
     @always_inline
     fn bool(self) -> Bool:
-        return self._data[Bool]
+        return self[Bool]
 
     @always_inline
-    fn object(self) -> ref [self._data] Object:
-        return self._data[Object]
+    fn object(ref self) -> ref [self._data] Object:
+        return self[Object]
 
     @always_inline
-    fn array(self) -> ref [self._data] Array:
-        return self._data[Array]
+    fn array(ref self) -> ref [self._data] Array:
+        return self[Array]
 
     fn write_to[W: Writer](self, mut writer: W):
-        if self.isa[Int]():
+        if self.isa[Int64]():
             write_int(self.int(), writer)
+        elif self.isa[UInt64]():
+            write_int(self.uint(), writer)
         elif self.isa[Float64]():
             writer.write(self.float())
         elif self.isa[String]():
@@ -284,7 +312,7 @@ struct Value(JsonValue):
             self.write_to(writer)
 
     fn min_size_for_string(self) -> Int:
-        if self.isa[Int]():
+        if self.isa[Int64]() or self.isa[UInt64]():
             return 10
         elif self.isa[Float64]():
             return 10

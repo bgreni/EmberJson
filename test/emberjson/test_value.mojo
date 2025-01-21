@@ -1,6 +1,6 @@
 from emberjson.value import Value, Null
 from emberjson import Object, Array, JSON
-from emberjson.utils import write_pretty
+from emberjson.utils import *
 from testing import *
 
 
@@ -50,22 +50,40 @@ def test_null():
 
 def test_integer():
     var v = Value.from_string("123")
-    assert_true(v.isa[Int]())
-    assert_equal(v.get[Int](), 123)
+    assert_true(v.is_int())
+    assert_equal(v.int(), 123)
+    assert_equal(v.uint(), 123)
     assert_equal(String(v), "123")
+
+    # test to make signed vs unsigned comparisons work
+    assert_equal(Value(Int64(123)), Value(UInt64(123)))
+    assert_equal(Value(UInt64(123)), Value(Int64(123)))
+    assert_not_equal(Value(Int64(125)), Value(UInt64(123)))
+    assert_not_equal(Value(UInt64(125)), Value(Int64(123)))
+    assert_not_equal(Value(UInt64(Int64.MAX) + 10), Int64.MAX)
+    assert_not_equal(Value(-123), Value(UInt64(123)))
 
 
 def test_integer_leading_plus():
     v = Value.from_string("+123")
-    assert_true(v.isa[Int]())
-    assert_equal(v.get[Int](), 123)
+    assert_true(v.is_int())
+    assert_equal(v.int(), 123)
+    assert_equal(v.uint(), 123)
 
 
 def test_integer_negative():
     v = Value.from_string("-123")
-    assert_true(v.isa[Int]())
-    assert_equal(v.get[Int](), -123)
+    assert_true(v.is_int())
+    assert_equal(v.int(), -123)
     assert_equal(String(v), "-123")
+
+
+def test_signed_overflow_to_unsigned():
+    var n = UInt64(Int64.MAX) + 100
+    v = Value.from_string(String(n))
+    assert_true(v.isa[UInt64]())
+    assert_equal(v.uint(), n)
+    assert_equal(String(v), String(n))
 
 
 def test_float():

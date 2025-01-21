@@ -8,9 +8,9 @@ def test_array():
     var s = '[ 1, 2, "foo" ]'
     var arr = Array.from_string(s)
     assert_equal(len(arr), 3)
-    assert_equal(arr[0].get[Int](), 1)
-    assert_equal(arr[1].get[Int](), 2)
-    assert_equal(arr[2].get[String](), "foo")
+    assert_equal(arr[0].int(), 1)
+    assert_equal(arr[1].int(), 2)
+    assert_equal(arr[2].string(), "foo")
     assert_equal(String(arr), '[1,2,"foo"]')
     arr[0] = 10
     assert_equal(arr[0].int(), 10)
@@ -20,9 +20,9 @@ def test_array_no_space():
     var s = '[1,2,"foo"]'
     var arr = Array.from_string(s)
     assert_equal(len(arr), 3)
-    assert_equal(arr[0].get[Int](), 1)
-    assert_equal(arr[1].get[Int](), 2)
-    assert_equal(arr[2].get[String](), "foo")
+    assert_equal(arr[0].int(), 1)
+    assert_equal(arr[1].int(), 2)
+    assert_equal(arr[2].string(), "foo")
 
 
 def test_nested_object():
@@ -54,7 +54,7 @@ def test_variadic_init():
     var ob = Object()
     ob["key"] = "value"
 
-    var arr2 = Array(Int(45), 45.5, Float64(45.5), arr, ob)
+    var arr2 = Array(45, 45.5, Float64(45.5), arr, ob)
     assert_equal(arr[0].int(), 123)
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())

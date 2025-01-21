@@ -18,6 +18,10 @@ alias DefaultPrettyIndent = 4
 alias WRITER_DEFAULT_SIZE = 4096
 
 
+fn will_overflow(i: UInt64) -> Bool:
+    return i > UInt64(Int64.MAX)
+
+
 @always_inline
 fn write[T: JsonValue, //](out s: String, v: T):
     s = String()
@@ -112,7 +116,7 @@ fn branchless_ternary(t: Int, f: Int, cond: Bool) -> Int:
 
 
 fn constrain_json_type[T: CollectionElement]():
-    alias valid = _type_is_eq[T, Int]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
-        T, Bool
-    ]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
+    alias valid = _type_is_eq[T, Int64]() or _type_is_eq[T, UInt64]() or _type_is_eq[T, Float64]() or _type_is_eq[
+        T, String
+    ]() or _type_is_eq[T, Bool]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
     constrained[valid, "Invalid type for JSON"]()

@@ -7,6 +7,7 @@ from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
 from sys.intrinsics import unlikely
 from .parser import Parser
+from os import abort
 
 
 struct JSON(JsonValue, Sized, PrettyPrintable):
@@ -29,6 +30,16 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
     fn __init__(out self, owned arr: Array):
         self._data = arr^
 
+    @implicit
+    @always_inline
+    fn __init__(out self, owned l: Array.Type):
+        self._data = l^
+
+    @implicit
+    @always_inline
+    fn __init__(out self, owned o: Object.Type):
+        self._data = o^
+
     @always_inline
     fn __copyinit__(out self, other: Self):
         self._data = other._data
@@ -42,7 +53,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return self
 
     @always_inline
-    fn object(ref [_]self) -> ref [self._data] Object:
+    fn object(ref self) -> ref [self._data] Object:
         """Fetch the inner object of this json document.
 
         Returns:
@@ -51,7 +62,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return self._data[Object]
 
     @always_inline
-    fn array(ref [_]self) -> ref [self._data] Array:
+    fn array(ref self) -> ref [self._data] Array:
         """Fetch the inner array of this json document.
 
         Returns:
@@ -124,16 +135,22 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             raise Error("expected string key")
         return v.string() in self.object()
 
+    fn _type_equal(self, other: Self) -> Bool:
+        return self._data._get_discr() == other._data._get_discr()
+
     fn __eq__(self, other: Self) -> Bool:
         """Checks if this document is equal to another.
 
         Returns:
             True if the document is of same type and value as other else False.
         """
-        if self.is_object() and other.is_object():
+        if not self._type_equal(other):
+            return False
+        elif self.is_object():
             return self.object() == other.object()
-        if self.is_array() and other.is_array():
+        elif self.is_array():
             return self.array() == other.array()
+        abort("unreachable")
         return False
 
     @always_inline

@@ -432,17 +432,20 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             self.data = p
             return
 
-        var longest_digit_count = 20
+        var longest_digit_count = branchless_ternary(19, 20, neg)
+        alias SIGNED_OVERFLOW = UInt64(Int64.MAX)
         if digit_count > longest_digit_count:
             raise Error("integer overflow")
         if digit_count == longest_digit_count:
-            if i > Int64.MAX.cast[DType.uint64]():
-                raise Error("integer overflow")
             if neg:
+                if unlikely(i > SIGNED_OVERFLOW + 1):
+                    raise Error("integer overflow")
                 self.data = p
-                return Int(~i + 1)
-            elif self.data[0] != to_byte("1") or i <= Int64.MAX.cast[DType.uint64]():
+                return Int64(~i + 1)
+            elif unlikely(self.data[0] != to_byte("1") or i <= SIGNED_OVERFLOW):
                 raise Error("integer overflow")
 
         self.data = p
-        return branchless_ternary(Int(~i + 1), Int(i), neg)
+        if i > SIGNED_OVERFLOW:
+            return UInt64(i)
+        return branchless_ternary(Int64(~i + 1), Int64(i), neg)

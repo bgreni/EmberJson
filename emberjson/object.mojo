@@ -18,6 +18,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
         self._data = Self.Type(power_of_two_initial_capacity=32)
 
     @always_inline
+    @implicit
     fn __init__(out self, owned d: Self.Type):
         self._data = d^
 
