@@ -9,26 +9,7 @@ from pprint import pprint
 script_dir = os.path.dirname(os.path.abspath(__file__))
 repo_dir = os.path.dirname(script_dir)
 template_path = os.path.join(repo_dir, 'recipes', 'recipe.tmpl')
-
-
-def build_dependency_list(dependencies: dict[str, str]) -> str:
-    deps: list[str] = []
-    for name, version in dependencies.items():
-        start = 0
-        operator = "=="
-        if version[0] in {'<', '>'}:
-            if version[1] != "=":
-                operator = version[0]
-                start = 1
-            else:
-                operator = version[:2]
-                start = 2
-        if version[:2] == "==":
-            start = 2
-
-        deps.append(f"    - {name} {operator} {version[start:]}")
-
-    return "\n".join(deps)
+    
 
 
 def main():
@@ -68,7 +49,25 @@ def main():
     recipe = recipe.replace("{{VERSION}}", config["project"]["version"] + "." + max_version)
     # recipe = recipe.replace("{{VERSION}}", config["project"]["version"])
 
-    deps = build_dependency_list(config['dependencies'])
+    deps: list[str] = []
+    for name, version in config['dependencies'].items():
+        start = 0
+        operator = "=="
+        if version[0] in {'<', '>'}:
+            if version[1] != "=":
+                operator = version[0]
+                start = 1
+            else:
+                operator = version[:2]
+                start = 2
+        if version[:2] == "==":
+            start = 2
+
+        if name == "max":
+            version = ''.join([version.split('dev')[0], max_version])
+        deps.append(f"    - {name} {operator} {version[start:]}")
+
+    deps = "\n".join(deps)
     recipe = recipe.replace("{{DEPENDENCIES}}", deps)
 
     # Write the final recipe.
