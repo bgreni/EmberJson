@@ -29,6 +29,11 @@ alias NEG = to_byte("-")
 alias ZERO_CHAR = to_byte("0")
 
 
+@always_inline
+fn append_digit(v: Scalar, to_add: Scalar) -> __type_of(v):
+    return (10 * v) + to_add.cast[v.element_type]()
+
+
 fn isdigit(char: Byte) -> Bool:
     alias ord_0 = to_byte("0")
     alias ord_9 = to_byte("9")
@@ -211,10 +216,9 @@ fn parse_eight_digits(out val: UInt64, p: BytePtr):
 
 
 @always_inline
-fn parse_digit(p: BytePtr, mut i: Scalar) -> Bool:
-    var dig = isdigit(p[])
-    i = branchless_ternary(i * 10 + (p[] - ZERO_CHAR).cast[i.type](), i, dig)
-    return dig
+fn parse_digit(out dig: Bool, p: BytePtr, mut i: Scalar):
+    dig = isdigit(p[])
+    i = branchless_ternary(dig, i * 10 + (p[] - ZERO_CHAR).cast[i.type](), i)
 
 
 @always_inline

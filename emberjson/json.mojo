@@ -209,6 +209,8 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
             writer: The writer to write to.
             indent: If an int denotes the number of space characters to use,
                     if a string then use the given string to indent.
+            curr_depth: The current depth into the json document, controls the
+                    current level of indendation.
         """
         if self.is_object():
             self.object().pretty_to(writer, indent, curr_depth=curr_depth)

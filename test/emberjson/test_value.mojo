@@ -16,6 +16,7 @@ def test_bool():
     assert_true(v.isa[Bool]())
     assert_equal(v.get[Bool](), True)
     assert_equal(String(v), s)
+    assert_true(v.is_bool())
 
     # with assert_raises(contains="Expected 'false'"):
     #     _ = Value.from_string("falsee")
@@ -35,6 +36,7 @@ def test_string():
     assert_true(v.isa[String]())
     assert_equal(v.get[String](), "Escaped")
     assert_equal(String(v), s)
+    assert_true(v.is_string())
 
 
 def test_null():
@@ -43,6 +45,7 @@ def test_null():
     assert_true(v.isa[Null]())
     assert_equal(v.get[Null](), Null())
     assert_equal(String(v), s)
+    assert_true(v.is_null())
 
     with assert_raises(contains="Expected 'null'"):
         _ = Value.from_string("nil")
@@ -54,6 +57,7 @@ def test_integer():
     assert_equal(v.int(), 123)
     assert_equal(v.uint(), 123)
     assert_equal(String(v), "123")
+    assert_true(v.is_int())
 
     # test to make signed vs unsigned comparisons work
     assert_equal(Value(Int64(123)), Value(UInt64(123)))
@@ -84,6 +88,7 @@ def test_signed_overflow_to_unsigned():
     assert_true(v.isa[UInt64]())
     assert_equal(v.uint(), n)
     assert_equal(String(v), String(n))
+    assert_true(v.is_uint())
 
 
 def test_float():
@@ -91,6 +96,7 @@ def test_float():
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5)
     assert_equal(String(v), "43.5")
+    assert_true(v.is_float())
 
 
 def test_eight_digits_after_dot():
@@ -112,6 +118,14 @@ def test_special_case_floats():
     v = Value.from_string("1e000000000000000000001")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.float(), 1e000000000000000000001)
+
+    v = Value.from_string("3.1415926535897932384626433832795028841971693993751")
+    assert_true(v.isa[Float64]())
+    assert_almost_equal(v.float(), 3.1415926535897932384626433832795028841971693993751)
+
+    with assert_raises():
+        # This is "infinite"
+        v = Value.from_string("10000000000000000000000000000000000000000000e+308")
 
 
 def test_float_leading_plus():

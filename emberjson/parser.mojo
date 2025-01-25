@@ -10,6 +10,7 @@ from collections import InlineArray
 from .parser_helper import *
 from memory.unsafe import bitcast
 from bit import count_leading_zeros
+from .slow_float_parse import from_chars_slow
 
 #######################################################
 # Certain parts inspired/taken from SonicCPP and simdjon
@@ -32,9 +33,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     var size: Int
 
     fn __init__(out self, s: String):
-        self.data = s.unsafe_ptr()
-        self.size = len(s)
-        self.end = self.data + self.size
+        self = Self(s.unsafe_ptr(), len(s))
 
     fn __init__(out self, b: BytePtr, size: Int):
         self.data = b
@@ -271,10 +270,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
         @parameter
         if use_lot:
-            if neg_power:
-                pow = power_of_ten[-Int(power)]
-            else:
-                pow = power_of_ten[Int(power)]
+            pow = power_of_ten[Int(abs(power))]
         else:
             pow = 10 ** Float64(abs(power))
 
@@ -330,7 +326,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 return
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
 
-            real_exponent = branchless_ternary(0, 1, (mantissa < (`1 << 52`)))
+            real_exponent = branchless_ternary(mantissa < (`1 << 52`), Int64(0), Int64(1))
             return to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
 
         if unlikely(lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)):
@@ -356,10 +352,12 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     fn write_float(
         self, out v: Value, negative: Bool, i: UInt64, start_digits: BytePtr, digit_count: Int, exponent: Int64
     ) raises:
-        # TODO: check for long strings
+        if unlikely(digit_count > 19 and significant_digits(self.data, digit_count) > 19):
+            return from_chars_slow(self.data)
 
         if unlikely(exponent < smallest_power or exponent > largest_power):
             if exponent < smallest_power or i == 0:
+                # can do branchless shenanigans here because -0.0 doesn't work then
                 return -0.0 if negative else 0.0
             raise Error("Invalid number: inf")
 
@@ -425,15 +423,16 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 if p > start_exp + 18:
                     exp_number = 999999999999999999
 
-            exponent += branchless_ternary(-exp_number, exp_number, neg_exp)
+            exponent += branchless_ternary(neg_exp, -exp_number, exp_number)
 
         if is_float:
             v = self.write_float(neg, i, start_digits, digit_count, exponent)
             self.data = p
             return
 
-        var longest_digit_count = branchless_ternary(19, 20, neg)
+        var longest_digit_count = branchless_ternary(neg, 19, 20)
         alias SIGNED_OVERFLOW = UInt64(Int64.MAX)
+        alias `1` = to_byte("1")
         if digit_count > longest_digit_count:
             raise Error("integer overflow")
         if digit_count == longest_digit_count:
@@ -442,10 +441,10 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                     raise Error("integer overflow")
                 self.data = p
                 return Int64(~i + 1)
-            elif unlikely(self.data[0] != to_byte("1") or i <= SIGNED_OVERFLOW):
+            elif unlikely(self.data[0] != `1` or i <= SIGNED_OVERFLOW):
                 raise Error("integer overflow")
 
         self.data = p
         if i > SIGNED_OVERFLOW:
             return UInt64(i)
-        return branchless_ternary(Int64(~i + 1), Int64(i), neg)
+        return branchless_ternary(neg, Int64(~i + 1), Int64(i))

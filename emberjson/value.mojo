@@ -166,7 +166,7 @@ struct Value(JsonValue):
                 return False
             elif self.is_uint():
                 if other.is_uint() or other.int() > 0:
-                    return self.int() == other.int()
+                    return self.uint() == other.uint()
                 return False
 
         if not self._type_equal(other):
@@ -223,6 +223,30 @@ struct Value(JsonValue):
     @always_inline
     fn is_uint(self) -> Bool:
         return self.isa[UInt64]()
+
+    @always_inline
+    fn is_string(self) -> Bool:
+        return self.isa[String]()
+
+    @always_inline
+    fn is_bool(self) -> Bool:
+        return self.isa[Bool]()
+
+    @always_inline
+    fn is_float(self) -> Bool:
+        return self.isa[Float64]()
+
+    @always_inline
+    fn is_object(self) -> Bool:
+        return self.isa[Object]()
+
+    @always_inline
+    fn is_array(self) -> Bool:
+        return self.isa[Array]()
+
+    @always_inline
+    fn is_null(self) -> Bool:
+        return self.isa[Null]()
 
     @always_inline
     fn __getitem__[T: CollectionElement](ref self) -> ref [self._data] T:
