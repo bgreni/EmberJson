@@ -74,7 +74,7 @@ struct Array(Sized, JsonValue):
 
     @always_inline
     fn __moveinit__(out self, owned other: Self):
-        self._data = other._data
+        self._data = other._data^
 
     @always_inline
     fn __getitem__(ref self, ind: Int) -> ref [self._data] Value:

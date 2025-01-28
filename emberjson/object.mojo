@@ -6,16 +6,19 @@ from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
 from collections.dict import _DictKeyIter, _DictEntryIter, _DictValueIter
+from .tree import Tree
 
 
 struct Object(Sized, JsonValue, PrettyPrintable):
     alias Type = Dict[String, Value]
+    # alias Type = Tree
     var _data: Self.Type
 
     @always_inline
     fn __init__(out self):
         # TODO: Maybe a good candidate for autotuning in the future?
         self._data = Self.Type(power_of_two_initial_capacity=32)
+        # self._data = Self.Type()
 
     @always_inline
     @implicit
@@ -28,7 +31,7 @@ struct Object(Sized, JsonValue, PrettyPrintable):
 
     @always_inline
     fn __moveinit__(out self, owned other: Self):
-        self._data = other._data
+        self._data = other._data^
 
     @always_inline
     fn copy(self) -> Self:

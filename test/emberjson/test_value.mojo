@@ -18,11 +18,6 @@ def test_bool():
     assert_equal(String(v), s)
     assert_true(v.is_bool())
 
-    # with assert_raises(contains="Expected 'false'"):
-    #     _ = Value.from_string("falsee")
-    # with assert_raises(contains="Expected 'true'"):
-    #     _ = Value.from_string("tue")
-
 
 def test_string():
     var s = '"Some String"'
