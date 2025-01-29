@@ -56,6 +56,14 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             return ""
 
     @always_inline
+    fn load_chunk(self) -> SIMD8xT:
+        return self.data.load[width=SIMD8_WIDTH]()
+
+    @always_inline
+    fn can_load_chunk(self) -> Bool:
+        return self.bytes_remaining() >= SIMD8_WIDTH
+
+    @always_inline
     fn pos(self) -> Int:
         return self.size - (self.size - ptr_dist(self.data, self.end))
 
@@ -174,7 +182,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
-                + to_string(self.data.load[width=SIMD8_WIDTH]())
+                + to_string(self.load_chunk())
                 + " : "
                 + String(block.unescaped_index())
             )
@@ -205,7 +213,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
-                + to_string(self.data.load[width=SIMD8_WIDTH]())
+                + to_string(self.load_chunk())
                 + " : "
                 + String(block.unescaped_index())
             )
@@ -221,7 +229,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         self.data += 1
         var start = self.data
         while likely(self.has_more()):
-            if self.bytes_remaining() >= SIMD8_WIDTH:
+            if self.can_load_chunk():
                 s = self.find(start)
                 self.data += 1
                 return
@@ -246,8 +254,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             return
         self.data += 1
 
-        while self.bytes_remaining() >= SIMD8_WIDTH:
-            var chunk = self.data.load[width=SIMD8_WIDTH]()
+        while self.can_load_chunk():
+            var chunk = self.load_chunk()
             var nonspace = get_non_space_bits(chunk)
             if any(nonspace):
                 self.data += first_true(nonspace)

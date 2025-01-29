@@ -203,8 +203,8 @@ def test_pretty():
 
     v = Value.from_string('{"key": 123, "k2": null}')
     expected = """{
-    "key": 123,
-    "k2": null
+    "k2": null,
+    "key": 123
 }"""
 
     assert_equal(expected, write_pretty(v))

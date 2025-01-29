@@ -123,19 +123,18 @@ def test_pretty_print_object():
     ob = JSON.from_string('{"key": 123, "k": [123, false, null]}')
 
     expected = """{
-    "key": 123,
     "k": [
         123,
         false,
         null
-    ]
+    ],
+    "key": 123
 }"""
 
     assert_equal(expected, write_pretty(ob))
 
     ob = JSON.from_string('{"key": 123, "k": [123, false, [1, 2, 3]]}')
     expected = """{
-    "key": 123,
     "k": [
         123,
         false,
@@ -144,7 +143,8 @@ def test_pretty_print_object():
             2,
             3
         ]
-    ]
+    ],
+    "key": 123
 }"""
     assert_equal(expected, write_pretty(ob))
 

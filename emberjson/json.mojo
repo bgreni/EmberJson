@@ -71,7 +71,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return self._data[Array]
 
     @always_inline
-    fn __getitem__(self, key: String) raises -> ref [self.object()._data._entries[0].value().value] Value:
+    fn __getitem__(self, key: String) raises -> ref [self.object()._data] Value:
         """Access inner object value by key.
 
         Raises:

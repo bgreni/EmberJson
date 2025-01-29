@@ -9,6 +9,8 @@ alias MANTISSA_EXPLICIT_BITS = 52
 alias MINIMUM_EXPONENT: Int32 = -1023
 alias INFINITE_POWER = 0x7FF
 alias SIGN_INDEX = 63
+alias MAX_DIGITS = 768
+alias DECIMAL_POINT_RANGE = 2047
 
 
 @value
@@ -17,8 +19,7 @@ struct Decimal:
     var decimal_point: Int32
     var truncated: Bool
     var negative: Bool
-    # TODO: Use stack allocation here
-    var digits: List[UInt8]
+    var digits: InlineArray[Byte, MAX_DIGITS, run_destructors=True]
 
     fn round(self) -> UInt64:
         if self.num_digits == 0 or self.decimal_point < 0:
@@ -158,10 +159,6 @@ struct AdjustedMantissa:
         self.power2 = 0
 
 
-alias MAX_DIGITS = 768
-alias DECIMAL_POINT_RANGE = 2047
-
-
 fn from_chars_slow(out value: Float64, owned first: BytePtr) raises:
     var negative = first[] == NEG
     first += Int(negative or first[] == PLUS)
@@ -245,8 +242,7 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
 
 fn parse_decimal(out answer: Decimal, mut p: BytePtr):
-    answer = Decimal(0, 0, False, p[] == NEG, List[UInt8]())
-    answer.digits.resize(MAX_DIGITS, 0)
+    answer = Decimal(0, 0, False, p[] == NEG, InlineArray[Byte, MAX_DIGITS, run_destructors=True](0))
 
     @parameter
     @always_inline
