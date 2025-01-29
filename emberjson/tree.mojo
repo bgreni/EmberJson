@@ -4,7 +4,7 @@ from os import abort
 
 
 @value
-struct TreeNode(Comparable):
+struct TreeNode:
     var data: Value
     var key: String
     var left: UnsafePointer[Self]
@@ -29,18 +29,6 @@ struct TreeNode(Comparable):
     @always_inline
     fn __gt__(self, other: Self) -> Bool:
         return self.key > other.key
-
-    @always_inline
-    fn __le__(self, other: Self) -> Bool:
-        return self.key <= other.key
-
-    @always_inline
-    fn __ge__(self, other: Self) -> Bool:
-        return self.key >= other.key
-
-    @always_inline
-    fn __ne__(self, other: Self) -> Bool:
-        return not self == other
 
     @always_inline
     fn __str__(self) -> String:
@@ -287,13 +275,13 @@ fn _find(node: UnsafePointer[TreeNode], key: String) -> __type_of(node):
     return _find(node[].left, key)
 
 
-fn _get_left_most(owned node: UnsafePointer[TreeNode]) -> UnsafePointer[TreeNode]:
+fn _get_left_most(owned node: UnsafePointer[TreeNode]) -> __type_of(node):
     while node[].left:
         node = node[].left
     return node
 
 
-fn _get_next(owned node: UnsafePointer[TreeNode]) -> UnsafePointer[TreeNode]:
+fn _get_next(owned node: UnsafePointer[TreeNode]) -> __type_of(node):
     if node[].right:
         return _get_left_most(node[].right)
     while node[].parent and node == node[].parent[].right:

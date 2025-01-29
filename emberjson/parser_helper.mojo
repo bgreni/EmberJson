@@ -6,6 +6,7 @@ from .tables import *
 from memory import memcpy
 from memory.unsafe import bitcast, pack_bits
 from bit import count_trailing_zeros
+from sys.info import bitwidthof
 
 alias BytePtr = UnsafePointer[Byte, mut=False]
 alias smallest_power: Int64 = -342
@@ -53,11 +54,12 @@ fn get_non_space_bits[Size: Int, //](out v: SIMDBool[Size], s: ByteVec[Size]):
 
 @always_inline
 fn pack_into_int(simd: SIMDBool) -> Int:
+    constrained[simd.size <= bitwidthof[DType.index](), "Cannot fit simdbool into Int as bits"]()
     return Int(pack_bits(simd))
 
 
 @always_inline
-fn first_true(simd: SIMD[DType.bool, _]) -> Int:
+fn first_true(simd: SIMDBool) -> Int:
     return count_trailing_zeros(pack_into_int(simd))
 
 
