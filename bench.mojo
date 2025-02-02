@@ -16,6 +16,8 @@ fn main() raises:
     var config = BenchConfig()
     config.verbose_timing = True
     config.tabular_view = True
+    config.flush_denormals = True
+    config.show_progress = True
     var m = Bench(config)
 
     var canada = get_data("canada.json")
@@ -26,11 +28,11 @@ fn main() raises:
     with open("./bench_data/users_1k.json", "r") as f:
         data = f.read()
 
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonParseSmall"), small_data)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayMedium"), medium_array)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayLarge"), large_array)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayExtraLarge"), data)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCanada"), canada)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseSmall"), small_data)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseMedium"), medium_array)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseLarge"), large_array)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseExtraLarge"), data)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCanada"), canada)
 
     @parameter
     fn benchmark_fast_float_parse(mut b: Bencher, s: String) raises:
@@ -41,16 +43,15 @@ fn main() raises:
             _ = p.parse()
 
         b.iter[do]()
-        _ = s
 
-    m.bench_with_input[String, benchmark_fast_float_parse](BenchId("CanadaFastFloat"), canada)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayTwitter"), twitter)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("JsonArrayCitmCatalog"), catalog)
+    m.bench_with_input[String, benchmark_fast_float_parse](BenchId("ParseCanadaFastFloat"), canada)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseTwitter"), twitter)
+    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCitmCatalog"), catalog)
 
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringify"), JSON.from_string(large_array))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCanada"), JSON.from_string(canada))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyTwitter"), JSON.from_string(twitter))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("JsonStringifyCitmCatalog"), JSON.from_string(catalog))
+    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyLarge"), JSON.from_string(large_array))
+    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCanada"), JSON.from_string(canada))
+    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyTwitter"), JSON.from_string(twitter))
+    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCitmCatalog"), JSON.from_string(catalog))
 
     m.bench_with_input[String, benchmark_value_parse](BenchId("ParseBool"), "false")
     m.bench_with_input[String, benchmark_value_parse](BenchId("ParseNull"), "null")
@@ -84,7 +85,6 @@ fn benchmark_value_parse(mut b: Bencher, s: String) raises:
         _ = Value.from_string(s)
 
     b.iter[do]()
-    _ = s
 
 
 @parameter
@@ -95,7 +95,6 @@ fn benchmark_json_parse(mut b: Bencher, s: String) raises:
         _ = JSON.from_string(s)
 
     b.iter[do]()
-    _ = s
 
 
 @parameter
@@ -106,7 +105,6 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
         _ = String(v)
 
     b.iter[do]()
-    _ = v
 
 
 @parameter
@@ -117,8 +115,6 @@ fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
         _ = String(json)
 
     b.iter[do]()
-
-    _ = json
 
 
 # source https://opensource.adobe.com/Spry/samples/data_region/JSONDataSetSample.html

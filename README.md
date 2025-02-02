@@ -1,5 +1,7 @@
 # EmberJson
 
+![emberlogo](./image/ember_logo.jpeg)
+
 ![license_badge](https://badgen.net/badge/License/MIT/blue)
 ![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)
 
@@ -80,6 +82,9 @@ print(json[3].bool()) # prints True
 
 # equality checks
 print(json[4] == Null()) # prints True
+
+# None converts implicitly to Null
+assert_equal(json[4], Value(None))
 
 # Implicit ctors for Value
 var v: Value = "some string"

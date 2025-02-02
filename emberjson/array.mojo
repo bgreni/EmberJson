@@ -77,11 +77,11 @@ struct Array(Sized, JsonValue):
         self._data = other._data^
 
     @always_inline
-    fn __getitem__(ref self, ind: Int) -> ref [self._data] Value:
+    fn __getitem__[T: Indexer](ref self, ind: T) -> ref [self._data] Value:
         return self._data[ind]
 
     @always_inline
-    fn __setitem__(mut self, ind: Int, owned item: Value):
+    fn __setitem__[T: Indexer](mut self, ind: T, owned item: Value):
         self._data[ind] = item^
 
     @always_inline

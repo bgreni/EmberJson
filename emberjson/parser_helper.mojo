@@ -4,9 +4,10 @@ from math import iota
 from .simd import *
 from .tables import *
 from memory import memcpy
-from memory.unsafe import bitcast, pack_bits
+from memory.unsafe import bitcast, pack_bits, _uint
 from bit import count_trailing_zeros
 from sys.info import bitwidthof
+from sys.intrinsics import _type_is_eq
 
 alias BytePtr = UnsafePointer[Byte, mut=False]
 alias smallest_power: Int64 = -342
@@ -46,21 +47,23 @@ fn is_numerical_component(char: Byte) -> Bool:
     return isdigit(char) or char == PLUS or char == NEG
 
 
-@always_inline
-fn get_non_space_bits[Size: Int, //](out v: SIMDBool[Size], s: ByteVec[Size]):
-    v = (s == SPACE) | (s == NEWLINE) | (s == TAB) | (s == LINE_FEED)
-    return ~v
+alias Bits_T = Scalar[_uint(SIMD8_WIDTH)]
 
 
 @always_inline
-fn pack_into_int(simd: SIMDBool) -> Int:
-    constrained[simd.size <= bitwidthof[DType.index](), "Cannot fit simdbool into Int as bits"]()
-    return Int(pack_bits(simd))
+fn get_non_space_bits(s: SIMD8xT) -> Bits_T:
+    var vec = (s == SPACE) | (s == NEWLINE) | (s == TAB) | (s == CARRIAGE)
+    return ~pack_into_integer(vec)
 
 
 @always_inline
-fn first_true(simd: SIMDBool) -> Int:
-    return count_trailing_zeros(pack_into_int(simd))
+fn pack_into_integer(simd: SIMDBool) -> Bits_T:
+    return Bits_T(pack_bits(simd))
+
+
+@always_inline
+fn first_true(simd: SIMDBool) -> Bits_T:
+    return count_trailing_zeros(pack_into_integer(simd))
 
 
 @always_inline
@@ -70,27 +73,27 @@ fn ptr_dist(start: BytePtr, end: BytePtr) -> Int:
 
 @register_passable("trivial")
 struct StringBlock:
-    alias BitMask = SIMD8xT._Mask
+    alias BitMask = SIMD[DType.bool, SIMD8_WIDTH]
 
-    var bs_bits: Int
-    var quote_bits: Int
-    var unescaped_bits: Int
+    var bs_bits: Bits_T
+    var quote_bits: Bits_T
+    var unescaped_bits: Bits_T
 
-    fn __init__(out self, bs: SIMDBool, qb: SIMDBool, un: SIMDBool):
-        self.bs_bits = pack_into_int(bs)
-        self.quote_bits = pack_into_int(qb)
-        self.unescaped_bits = pack_into_int(un)
+    fn __init__(out self, bs: Self.BitMask, qb: Self.BitMask, un: Self.BitMask):
+        self.bs_bits = pack_into_integer(bs)
+        self.quote_bits = pack_into_integer(qb)
+        self.unescaped_bits = pack_into_integer(un)
 
     @always_inline
-    fn quote_index(self) -> Int:
+    fn quote_index(self) -> Bits_T:
         return count_trailing_zeros(self.quote_bits)
 
     @always_inline
-    fn bs_index(self) -> UInt64:
+    fn bs_index(self) -> Bits_T:
         return count_trailing_zeros(self.bs_bits)
 
     @always_inline
-    fn unescaped_index(self) -> Int:
+    fn unescaped_index(self) -> Bits_T:
         return count_trailing_zeros(self.unescaped_bits)
 
     @always_inline
@@ -114,14 +117,12 @@ struct StringBlock:
 
 
 @always_inline
-fn hex_to_u32(out out: UInt32, p: BytePtr):
-    alias other = ByteVec[4](630, 420, 210, 0)
-    out = 0
+fn hex_to_u32(p: BytePtr) -> UInt32:
     var v = p.load[width=4]().cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
     alias shifts = SIMD[DType.uint32, 4](12, 8, 4, 0)
     v <<= shifts
-    out = v.reduce_or()
+    return v.reduce_or()
 
 
 fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:

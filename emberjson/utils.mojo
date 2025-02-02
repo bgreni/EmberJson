@@ -45,7 +45,7 @@ fn to_byte(s: String) -> Byte:
 
 @always_inline
 fn is_space(char: Byte) -> Bool:
-    return char == SPACE or char == NEWLINE or char == TAB or char == LINE_FEED
+    return char == SPACE or char == NEWLINE or char == TAB or char == CARRIAGE
 
 
 @always_inline

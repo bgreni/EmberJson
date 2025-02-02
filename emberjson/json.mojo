@@ -10,7 +10,7 @@ from .parser import Parser
 from os import abort
 
 
-struct JSON(JsonValue, Sized, PrettyPrintable):
+struct JSON(JsonValue, Sized):
     """Top level JSON object, can either be an Array, or an Object."""
 
     alias Type = Variant[Object, Array]
@@ -71,7 +71,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return self._data[Array]
 
     @always_inline
-    fn __getitem__(self, key: String) raises -> ref [self.object()._data] Value:
+    fn __getitem__(ref self, key: String) raises -> ref [self.object()._data] Value:
         """Access inner object value by key.
 
         Raises:
@@ -85,7 +85,7 @@ struct JSON(JsonValue, Sized, PrettyPrintable):
         return self.object().__getitem__(key)
 
     @always_inline
-    fn __getitem__(self, ind: Int) raises -> ref [self.array()._data] Value:
+    fn __getitem__[T: Indexer](ref self, ind: T) raises -> ref [self.array()._data] Value:
         """Access the inner array by index.
 
         Raises:

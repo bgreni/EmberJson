@@ -14,7 +14,7 @@ alias COMMA = to_byte(",")
 alias NEWLINE = to_byte("\n")
 alias TAB = to_byte("\t")
 alias SPACE = to_byte(" ")
-alias LINE_FEED = to_byte("\r")
+alias CARRIAGE = to_byte("\r")
 alias RSOL = to_byte("\\")
 
 alias LOW_E = to_byte("e")

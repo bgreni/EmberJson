@@ -242,7 +242,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
                         raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
-                alias control_chars = ByteVec[4](NEWLINE, TAB, LINE_FEED, LINE_FEED)
+                alias control_chars = ByteVec[4](NEWLINE, TAB, CARRIAGE, CARRIAGE)
                 if unlikely(self.data[] in control_chars):
                     raise Error("Control characters must be escaped: " + String(self.data[]))
                 self.data += 1
@@ -257,8 +257,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         while self.can_load_chunk():
             var chunk = self.load_chunk()
             var nonspace = get_non_space_bits(chunk)
-            if any(nonspace):
-                self.data += first_true(nonspace)
+            if nonspace != 0:
+                self.data += count_trailing_zeros(nonspace)
                 return
             else:
                 self.data += SIMD8_WIDTH
@@ -454,5 +454,5 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
         self.data = p
         if i > SIGNED_OVERFLOW:
-            return UInt64(i)
+            return i
         return branchless_ternary(neg, Int64(~i + 1), Int64(i))

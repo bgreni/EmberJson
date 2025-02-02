@@ -49,6 +49,10 @@ struct Null(JsonValue):
     fn write_to[W: Writer](self, mut writer: W):
         writer.write(self.__str__())
 
+    @always_inline
+    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+        writer.write(self)
+
 
 @value
 struct Value(JsonValue):
@@ -57,6 +61,11 @@ struct Value(JsonValue):
 
     @always_inline
     fn __init__(out self):
+        self._data = Null()
+
+    @implicit
+    @always_inline
+    fn __init__(out self, n: NoneType._mlir_type):
         self._data = Null()
 
     @implicit
@@ -249,27 +258,23 @@ struct Value(JsonValue):
         return self.isa[Null]()
 
     @always_inline
-    fn __getitem__[T: CollectionElement](ref self) -> ref [self._data] T:
+    fn get[T: CollectionElement](ref self) -> ref [self._data] T:
         constrain_json_type[T]()
         return self._data[T]
 
     @always_inline
-    fn get[T: CollectionElement](ref self) -> ref [self._data] T:
-        return self[T]
-
-    @always_inline
     fn int(self) -> Int64:
         if self.is_int():
-            return self[Int64]
+            return self.get[Int64]()
         else:
-            return Int64(self[UInt64])
+            return Int64(self.get[UInt64]())
 
     @always_inline
     fn uint(self) -> UInt64:
         if self.is_uint():
-            return self[UInt64]
+            return self.get[UInt64]()
         else:
-            return UInt64(self[Int64])
+            return UInt64(self.get[Int64]())
 
     @always_inline
     fn null(self) -> Null:
@@ -277,23 +282,23 @@ struct Value(JsonValue):
 
     @always_inline
     fn string(ref self) -> ref [self._data] String:
-        return self[String]
+        return self.get[String]()
 
     @always_inline
     fn float(self) -> Float64:
-        return self[Float64]
+        return self.get[Float64]()
 
     @always_inline
     fn bool(self) -> Bool:
-        return self[Bool]
+        return self.get[Bool]()
 
     @always_inline
     fn object(ref self) -> ref [self._data] Object:
-        return self[Object]
+        return self.get[Object]()
 
     @always_inline
     fn array(ref self) -> ref [self._data] Array:
-        return self[Array]
+        return self.get[Array]()
 
     fn write_to[W: Writer](self, mut writer: W):
         if self.isa[Int64]():

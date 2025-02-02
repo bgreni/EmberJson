@@ -170,6 +170,7 @@ struct Tree(CollectionElement, Sized, ExplicitlyCopyable):
     fn __del__(owned self):
         fn do_del(node: Self.NodePtr):
             if node:
+                node.destroy_pointee()
                 node.free()
 
         for_each[do_del](self.root)

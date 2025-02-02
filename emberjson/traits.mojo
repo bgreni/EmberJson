@@ -21,5 +21,6 @@ trait JsonValue(
     Boolable,
     ImplicitlyBoolable,
     ExplicitlyCopyable,
+    PrettyPrintable,
 ):
     pass

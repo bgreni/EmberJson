@@ -8,7 +8,7 @@ from .parser import Parser
 from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
 
 
-struct Object(Sized, JsonValue, PrettyPrintable):
+struct Object(Sized, JsonValue):
     alias Type = Tree
     var _data: Self.Type
 

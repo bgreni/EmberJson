@@ -42,6 +42,8 @@ def test_null():
     assert_equal(String(v), s)
     assert_true(v.is_null())
 
+    assert_true(Value(None).is_null())
+
     with assert_raises(contains="Expected 'null'"):
         _ = Value.from_string("nil")
 
@@ -220,6 +222,6 @@ def test_booling():
     for t in trues:
         assert_true(t[])
 
-    var falsies = Array("", 0, 0.0, False, Null())
+    var falsies = Array("", 0, 0.0, False, Null(), None)
     for f in falsies:
         assert_false(f[])
