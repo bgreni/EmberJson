@@ -173,7 +173,6 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value")
 
-    # @always_inline
     fn find_and_move(mut self, start: BytePtr, out s: String) raises:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():

@@ -1,6 +1,7 @@
 # EmberJson
 
-![emberlogo](./image/ember_logo.jpeg)
+<!-- ![emberlogo](./image/ember_logo.jpeg) -->
+<image src='./image/ember_logo.jpeg' width='300'/>
 
 ![license_badge](https://badgen.net/badge/License/MIT/blue)
 ![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)

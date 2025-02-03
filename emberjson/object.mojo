@@ -9,6 +9,10 @@ from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
 
 
 struct Object(Sized, JsonValue):
+    """Represents a key-value pair object.
+    All keys are String and all values are of type `Value` which is
+    a variant type of any valid JSON type.
+    """
     alias Type = Tree
     var _data: Self.Type
 

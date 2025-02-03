@@ -41,7 +41,11 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
 
 
 struct Array(Sized, JsonValue):
-    """Represents a json array."""
+    """Represents a heterogeneous array of json types.
+
+    This is accomplished by using `Value` for the collection type, which
+    is essentially a variant type of the possible valid json types.
+    """
 
     alias Type = List[Value]
     var _data: Self.Type
