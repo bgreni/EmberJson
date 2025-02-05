@@ -1,10 +1,10 @@
-from .json import JSON
 from .array import Array
 from .object import Object
 from .value import Value, Null
 from .utils import write, write_pretty
 from .parser import Parser, ParseOptions
 
+alias JSON = Value
 
 @always_inline
 fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:

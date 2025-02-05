@@ -1,5 +1,4 @@
 from .utils import *
-from .json import JSON
 from .simd import *
 from .array import Array
 from .object import Object
