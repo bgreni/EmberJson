@@ -13,68 +13,79 @@ fn get_data(file: String) -> String:
 
 
 fn main() raises:
-    var config = BenchConfig()
-    config.verbose_timing = True
-    config.tabular_view = True
-    config.flush_denormals = True
-    config.show_progress = True
-    var m = Bench(config)
+	var config = BenchConfig()
+	config.verbose_timing = True
+	config.tabular_view = True
+	config.flush_denormals = True
+	config.show_progress = True
+	var m = Bench(config)
 
-    var canada = get_data("canada.json")
-    var catalog = get_data("citm_catalog.json")
-    var twitter = get_data("twitter.json")
+	var canada = get_data("canada.json")
+	var catalog = get_data("citm_catalog.json")
+	var twitter = get_data("twitter.json")
 
-    var data: String
-    with open("./bench_data/users_1k.json", "r") as f:
-        data = f.read()
+	var data: String
+	with open("./bench_data/users_1k.json", "r") as f:
+		data = f.read()
 
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseSmall"), small_data)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseMedium"), medium_array)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseLarge"), large_array)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseExtraLarge"), data)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCanada"), canada)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseSmall"), small_data)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseMedium"), medium_array)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseLarge"), large_array)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseExtraLarge"), data)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCanada"), canada)
 
-    @parameter
-    fn benchmark_fast_float_parse(mut b: Bencher, s: String) raises:
-        @always_inline
-        @parameter
-        fn do() raises:
-            var p = Parser[ParseOptions(fast_float_parsing=True)](s.unsafe_ptr(), len(s))
-            _ = p.parse()
+	@parameter
+	fn benchmark_fast_float_parse(mut b: Bencher, s: String) raises:
+		@always_inline
+		@parameter
+		fn do() raises:
+			var p = Parser[ParseOptions(fast_float_parsing=True)](s.unsafe_ptr(), len(s))
+			_ = p.parse()
 
-        b.iter[do]()
+		b.iter[do]()
 
-    m.bench_with_input[String, benchmark_fast_float_parse](BenchId("ParseCanadaFastFloat"), canada)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseTwitter"), twitter)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCitmCatalog"), catalog)
+	@parameter
+	fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
+		@always_inline
+		@parameter
+		fn do() raises:
+			var p = Parser[ParseOptions(ignore_unicode=True)](s.unsafe_ptr(), len(s))
+			_ = p.parse()
+		b.iter[do]()
 
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyLarge"), JSON.from_string(large_array))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCanada"), JSON.from_string(canada))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyTwitter"), JSON.from_string(twitter))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCitmCatalog"), JSON.from_string(catalog))
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseHeavyUnicode"), unicode)
+	m.bench_with_input[String, benchmark_ignore_unicode](BenchId("ParseHeavyIgnoreUnicode"), unicode)
+	m.bench_with_input[String, benchmark_fast_float_parse](BenchId("ParseCanadaFastFloat"), canada)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseTwitter"), twitter)
+	m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCitmCatalog"), catalog)
 
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseBool"), "false")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseNull"), "null")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseInt"), "12345")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloat"), "453.45643")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloatLongDec"), "453.456433232")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloatExp"), "4546.5E23")
-    m.bench_with_input[String, benchmark_json_parse](
-        BenchId("ParseFloatCoordinate"), "[-57.94027699999998,54.923607000000004]"
-    )
-    m.bench_with_input[String, benchmark_value_parse](
-        BenchId("ParseString"), '"some example string of short length, not all that long really"'
-    )
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyLarge"), JSON.from_string(large_array))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCanada"), JSON.from_string(canada))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyTwitter"), JSON.from_string(twitter))
+	m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCitmCatalog"), JSON.from_string(catalog))
 
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyBool"), False)
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyNull"), Null())
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyInt"), Int(12345))
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyFloat"), Float64(456.345))
-    m.bench_with_input[Value, benchmark_value_stringify](
-        BenchId("StringifyString"), "some example string of short length, not all that long really"
-    )
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ParseBool"), "false")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ParseNull"), "null")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ParseInt"), "12345")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloat"), "453.45643")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloatLongDec"), "453.456433232")
+	m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloatExp"), "4546.5E23")
+	m.bench_with_input[String, benchmark_json_parse](
+		BenchId("ParseFloatCoordinate"), "[-57.94027699999998,54.923607000000004]"
+	)
+	m.bench_with_input[String, benchmark_value_parse](
+		BenchId("ParseString"), '"some example string of short length, not all that long really"'
+	)
 
-    m.dump_report()
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyBool"), False)
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyNull"), Null())
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyInt"), Int(12345))
+	m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyFloat"), Float64(456.345))
+	m.bench_with_input[Value, benchmark_value_stringify](
+		BenchId("StringifyString"), "some example string of short length, not all that long really"
+	)
+
+	m.dump_report()
 
 
 @parameter
@@ -220,3 +231,151 @@ var medium_array = """
 
 var large_array = """
 [{"id":0,"name":"Elijah","city":"Austin","age":78,"friends":[{"name":"Michelle","hobbies":["Watching Sports","Reading","Skiing & Snowboarding"]},{"name":"Robert","hobbies":["Traveling","Video Games"]}]},{"id":1,"name":"Noah","city":"Boston","age":97,"friends":[{"name":"Oliver","hobbies":["Watching Sports","Skiing & Snowboarding","Collecting"]},{"name":"Olivia","hobbies":["Running","Music","Woodworking"]},{"name":"Robert","hobbies":["Woodworking","Calligraphy","Genealogy"]},{"name":"Ava","hobbies":["Walking","Church Activities"]},{"name":"Michael","hobbies":["Music","Church Activities"]},{"name":"Michael","hobbies":["Martial Arts","Painting","Jewelry Making"]}]},{"id":2,"name":"Evy","city":"San Diego","age":48,"friends":[{"name":"Joe","hobbies":["Reading","Volunteer Work"]},{"name":"Joe","hobbies":["Genealogy","Golf"]},{"name":"Oliver","hobbies":["Collecting","Writing","Bicycling"]},{"name":"Liam","hobbies":["Church Activities","Jewelry Making"]},{"name":"Amelia","hobbies":["Calligraphy","Dancing"]}]},{"id":3,"name":"Oliver","city":"St. Louis","age":39,"friends":[{"name":"Mateo","hobbies":["Watching Sports","Gardening"]},{"name":"Nora","hobbies":["Traveling","Team Sports"]},{"name":"Ava","hobbies":["Church Activities","Running"]},{"name":"Amelia","hobbies":["Gardening","Board Games","Watching Sports"]},{"name":"Leo","hobbies":["Martial Arts","Video Games","Reading"]}]},{"id":4,"name":"Michael","city":"St. Louis","age":95,"friends":[{"name":"Mateo","hobbies":["Movie Watching","Collecting"]},{"name":"Chris","hobbies":["Housework","Bicycling","Collecting"]}]},{"id":5,"name":"Michael","city":"Portland","age":19,"friends":[{"name":"Jack","hobbies":["Painting","Television"]},{"name":"Oliver","hobbies":["Walking","Watching Sports","Movie Watching"]},{"name":"Charlotte","hobbies":["Podcasts","Jewelry Making"]},{"name":"Elijah","hobbies":["Eating Out","Painting"]}]},{"id":6,"name":"Lucas","city":"Austin","age":76,"friends":[{"name":"John","hobbies":["Genealogy","Cooking"]},{"name":"John","hobbies":["Socializing","Yoga"]}]},{"id":7,"name":"Michelle","city":"San Antonio","age":25,"friends":[{"name":"Jack","hobbies":["Music","Golf"]},{"name":"Daniel","hobbies":["Socializing","Housework","Walking"]},{"name":"Robert","hobbies":["Collecting","Walking"]},{"name":"Nora","hobbies":["Painting","Church Activities"]},{"name":"Mia","hobbies":["Running","Painting"]}]},{"id":8,"name":"Emily","city":"Austin","age":61,"friends":[{"name":"Nora","hobbies":["Bicycling","Skiing & Snowboarding","Watching Sports"]},{"name":"Ava","hobbies":["Writing","Reading","Collecting"]},{"name":"Amelia","hobbies":["Eating Out","Watching Sports"]},{"name":"Daniel","hobbies":["Skiing & Snowboarding","Martial Arts","Writing"]},{"name":"Zoey","hobbies":["Board Games","Tennis"]}]},{"id":9,"name":"Liam","city":"New Orleans","age":33,"friends":[{"name":"Chloe","hobbies":["Traveling","Bicycling","Shopping"]},{"name":"Evy","hobbies":["Eating Out","Watching Sports"]},{"name":"Grace","hobbies":["Jewelry Making","Yoga","Podcasts"]}]}]"""
+
+alias unicode = r"""{
+  "user": {
+    "id": 123456,
+    "username": "maría_87",
+    "email": "maria87@example.com",
+    "bio": "Soy una persona que ama la música, los libros, y la tecnología. Siempre en busca de nuevas aventuras. \uD83C\uDFA7 \uD83D\uDCBB",
+    "location": {
+      "city": "Ciudad de México",
+      "country": "México",
+      "region": "CDMX",
+      "coordinates": {
+        "latitude": 19.4326,
+        "longitude": -99.1332
+      }
+    },
+    "language": "\u00A1Hola! Soy biling\u00FCe, hablo espa\u00F1ol y \u004E\u006F\u0062\u006C\u0065\u0073\u0065 (ingl\u00E9s).",
+    "time_zone": "UTC-6",
+    "favorites": {
+      "color": "\u0042\u006C\u0075\u0065",
+      "food": "\u00F1\u006F\u0067\u0068\u006F\u0072\u0065\u0061\u006B\u0069\u0074\u0061",
+      "animal": "\uD83D\uDC3E"
+    }
+  },
+  "posts": [
+    {
+      "post_id": 101,
+      "date": "2025-01-10T08:00:00Z",
+      "content": "El clima de esta mañana es fr\u00EDo y nublado, ideal para un caf\u00E9. \uD83C\uDF75",
+      "likes": 142,
+      "comments": [
+        {
+          "user": "juan_91",
+          "comment": "Suena genial, \u00F3jala que el clima mejore pronto. \uD83C\uDF0D"
+        },
+        {
+          "user": "ana_love",
+          "comment": "Perfecto para leer un buen libro, \u00F3jala pueda descansar. \uD83D\uDCDA"
+        }
+      ]
+    },
+    {
+      "post_id": 102,
+      "date": "2025-01-15T12:00:00Z",
+      "content": "Estaba en el parque y vi una \uD83D\uDC2F. Nunca imagin\u00E9 encontrar una tan cerca de la ciudad.",
+      "likes": 98,
+      "comments": [
+        {
+          "user": "carlos_88",
+          "comment": "Eso es asombroso. Las \uD83D\uDC2F son muy raras en el centro urbano."
+        },
+        {
+          "user": "luisita_23",
+          "comment": "¡Es increíble! Nunca vi una tan cerca de mi casa. \uD83D\uDC36"
+        }
+      ]
+    },
+    {
+      "post_id": 103,
+      "date": "2025-01-20T09:30:00Z",
+      "content": "¡Feliz de haber terminado un proyecto importante! \uD83D\uDE0D Ahora toca disfrutar del descanso. \uD83C\uDF77",
+      "likes": 210,
+      "comments": [
+        {
+          "user": "pedro_74",
+          "comment": "¡Felicidades! \uD83D\uDC4F Ahora rel\u00E1jate y disfruta un poco. \uD83C\uDF89"
+        },
+        {
+          "user": "marta_92",
+          "comment": "¡Te lo mereces! Yo estoy en medio de un proyecto, espero terminar pronto. \uD83D\uDCDD"
+        }
+      ]
+    }
+  ],
+  "notifications": [
+    {
+      "notification_id": 201,
+      "date": "2025-01-16T10:45:00Z",
+      "message": "Tu solicitud de amistad fue aceptada por \u00C1lvaro. \uD83D\uDC6B",
+      "status": "unread"
+    },
+    {
+      "notification_id": 202,
+      "date": "2025-01-17T14:30:00Z",
+      "message": "Tienes un nuevo comentario en tu publicaci\u00F3n sobre el clima. \uD83C\uDF0A",
+      "status": "read"
+    },
+    {
+      "notification_id": 203,
+      "date": "2025-01-18T16:20:00Z",
+      "message": "Te han mencionado en una conversaci\u00F3n sobre el caf\u00E9 de la ma\u00F1ana. \uD83C\uDF75",
+      "status": "unread"
+    }
+  ],
+  "settings": {
+    "privacy": "public",
+    "notifications": "enabled",
+    "theme": "\u003C\u003E\u003C\u003E\u003C\u003E Dark \u003C\u003E\u003C\u003E\u003C\u003E"
+  },
+  "friends": [
+    {
+      "id": 201,
+      "name": "Álvaro",
+      "status": "active",
+      "last_active": "2025-01-19T18:00:00Z"
+    },
+    {
+      "id": 202,
+      "name": "Carlos",
+      "status": "inactive",
+      "last_active": "2025-01-10T12:00:00Z"
+    },
+    {
+      "id": 203,
+      "name": "Lucía",
+      "status": "active",
+      "last_active": "2025-01-21T09:45:00Z"
+    },
+    {
+      "id": 204,
+      "name": "Marta",
+      "status": "active",
+      "last_active": "2025-01-18T10:10:00Z"
+    }
+  ],
+  "favorite_books": [
+    {
+      "title": "Cien años de soledad",
+      "author": "Gabriel García Márquez",
+      "description": "Un gran clásico de la literatura latinoamericana. \u201CLa realidad y la fantasía se entrelazan de forma magistral\u201D.",
+      "year": 1967
+    },
+    {
+      "title": "La sombra del viento",
+      "author": "Carlos Ruiz Zafón",
+      "description": "Una novela gótica que recorre los secretos de Barcelona, con misterios, amor y literatura. \u201CUn viaje fascinante\u201D.",
+      "year": 2001
+    },
+    {
+      "title": "1984",
+      "author": "George Orwell",
+      "description": "Una reflexión sobre el totalitarismo y el control social. \u201CLa vigilancia constante es el peor enemigo de la libertad\u201D.",
+      "year": 1949
+    }
+  ],
+  "settings_updated": "\u003C\u003E\u003C\u003E\u003C\u003E La configuraci\u00F3n se ha actualizado correctamente \uD83D\uDCE5."
+}
+"""

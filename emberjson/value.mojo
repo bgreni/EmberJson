@@ -20,6 +20,7 @@ struct Null(JsonValue):
     """Represents "null" json value.
     Can be implicitly converted from `None`.
     """
+
     @always_inline
     fn __eq__(self, n: Null) -> Bool:
         return True

@@ -6,6 +6,7 @@ from .parser import Parser, ParseOptions
 
 alias JSON = Value
 
+
 @always_inline
 fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
     """Parses a JSON object from a String.
@@ -18,7 +19,7 @@ fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
 
     Returns:
         A JSON object.
-    
+
     Raises:
         If an invalid JSON string is provided.
     """
@@ -32,13 +33,14 @@ fn to_string[*, pretty: Bool = False](out s: String, j: JSON):
 
     Parameters:
         pretty: Pretty prints the object is True, else uses condensed representation.
-    
+
     Args:
         j: The input JSON object to be stringified.
-    
+
     Returns:
         The String representation of the JSON object.
     """
+
     @parameter
     if pretty:
         s = write_pretty(j)

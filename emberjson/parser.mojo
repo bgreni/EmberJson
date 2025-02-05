@@ -20,10 +20,18 @@ from .slow_float_parse import from_chars_slow
 
 @value
 struct ParseOptions:
-    var fast_float_parsing: Bool
+    """JSON parsing options.
 
-    fn __init__(out self, *, fast_float_parsing: Bool = False):
+    Fields:
+        fast_float_parsing: Always use float fast path, may result in reduced accuracy.
+        ignore_unicode: Do not decode escaped unicode characters for a slight increase in performance.
+    """
+    var fast_float_parsing: Bool
+    var ignore_unicode: Bool
+
+    fn __init__(out self, *, fast_float_parsing: Bool = False, ignore_unicode: Bool = False):
         self.fast_float_parsing = fast_float_parsing
+        self.ignore_unicode = ignore_unicode
 
 
 struct Parser[options: ParseOptions = ParseOptions()]:
@@ -50,7 +58,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     @always_inline
     fn remaining(self) -> String:
         try:
-            return copy_to_string(self.data, self.end)
+            return copy_to_string[True](self.data, self.end)
         except:
             return ""
 
@@ -176,7 +184,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string(start, self.data)
+            return copy_to_string[options.ignore_unicode](start, self.data)
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
@@ -207,7 +215,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string(start, self.data)
+            return copy_to_string[options.ignore_unicode](start, self.data)
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
@@ -233,7 +241,7 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 return
             else:
                 if self.data[] == QUOTE:
-                    s = copy_to_string(start, self.data)
+                    s = copy_to_string[options.ignore_unicode](start, self.data)
                     self.data += 1
                     return
                 if self.data[] == RSOL:

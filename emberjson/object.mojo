@@ -13,6 +13,7 @@ struct Object(Sized, JsonValue):
     All keys are String and all values are of type `Value` which is
     a variant type of any valid JSON type.
     """
+
     alias Type = Tree
     var _data: Self.Type
 
