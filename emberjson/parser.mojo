@@ -26,6 +26,7 @@ struct ParseOptions:
         fast_float_parsing: Always use float fast path, may result in reduced accuracy.
         ignore_unicode: Do not decode escaped unicode characters for a slight increase in performance.
     """
+
     var fast_float_parsing: Bool
     var ignore_unicode: Bool
 

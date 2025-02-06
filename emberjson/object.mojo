@@ -49,13 +49,6 @@ struct Object(Sized, JsonValue):
     fn copy(self) -> Self:
         return self
 
-    fn min_size_for_string(self) -> Int:
-        var n = 2 + len(self)  # include ':' for each pairing
-        for item in self._data:
-            n += 3 + len(item[].key) + item[].data.min_size_for_string()
-        n -= 1
-        return n
-
     @always_inline
     fn __setitem__(mut self, owned key: String, owned item: Value):
         self._data[key^] = item^

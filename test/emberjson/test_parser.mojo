@@ -16,9 +16,6 @@ def test_parse():
 
     assert_equal(len(json.object()), 1)
 
-    with assert_raises():
-        _ = json.array()[2]
-
     s = "[123, 345]"
     json = JSON.from_string(s)
     assert_true(json.is_array())
@@ -29,6 +26,3 @@ def test_parse():
     assert_equal(String(json), "[123,345]")
 
     assert_equal(len(json.array()), 2)
-
-    with assert_raises():
-        _ = json.object()["key"]

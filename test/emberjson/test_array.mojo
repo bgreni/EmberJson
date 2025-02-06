@@ -79,10 +79,6 @@ def test_reverse_array():
     assert_equal(arr.reversed().collect(), Array(4, 3, 2, 1))
 
 
-# def test_min_size_for_string():
-#     assert_equal(Array(123, "foo", Null(), True).min_size_for_string(), 21)
-
-
 def test_list_ctr():
     var arr = Array(List[Value](123, "foo", Null(), False))
     assert_equal(arr[0].int(), 123)

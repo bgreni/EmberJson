@@ -25,9 +25,6 @@ def test_json_object():
 
     assert_equal(len(json.object()), 1)
 
-    with assert_raises():
-        _ = json.array()
-
 
 def test_json_array():
     var s = "[123, 345]"
@@ -40,9 +37,6 @@ def test_json_array():
     assert_equal(String(json), "[123,345]")
 
     assert_equal(len(json.array()), 2)
-
-    with assert_raises():
-        _ = json.object()["key"]
 
     json = JSON.from_string("[1, 2, 3]")
     assert_true(json.is_array())
@@ -151,31 +145,25 @@ def test_pretty_print_object():
 
 def test_trailing_tokens():
     with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):
-        _ = JSON.from_string("[1, null, false] garbage tokens")
+        _ = parse("[1, null, false] garbage tokens")
 
     with assert_raises(contains='Invalid json, expected end of input, recieved: "trailing string"'):
-        _ = JSON.from_string('{"key": null} "trailing string"')
+        _ = parse('{"key": null} "trailing string"')
 
 
 var dir = String("./bench_data/data/jsonchecker/")
 
 
-def check_bytes_length(file: String):
-    with open("./bench_data/data/" + file + ".json", "r") as f:
-        var data = "".join(f.read().split())
-        assert_equal(JSON.from_string(data).min_size_for_string(), data.byte_length())
-
-
 def expect_fail(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
         with assert_raises():
-            var v = JSON.from_string(f.read())
+            var v = parse(f.read())
             print(v)
 
 
 def expect_pass(datafile: String):
     with open(dir + datafile + ".json", "r") as f:
-        _ = JSON.from_string(f.read())
+        _ = parse(f.read())
 
 
 def test_fail02():

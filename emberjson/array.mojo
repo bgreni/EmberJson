@@ -161,14 +161,6 @@ struct Array(Sized, JsonValue):
     fn append(mut self, owned item: Value):
         self._data.append(item^)
 
-    fn min_size_for_string(self) -> Int:
-        var n = 2
-        for item in self._data:
-            n += item[].min_size_for_string() + 1
-        n -= 1
-
-        return n
-
     @staticmethod
     @always_inline
     fn from_string(out arr: Array, input: String) raises:

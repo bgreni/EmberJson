@@ -3,18 +3,12 @@ trait PrettyPrintable:
         ...
 
 
-trait StringSize:
-    fn min_size_for_string(self) -> Int:
-        ...
-
-
 trait JsonValue(
     EqualityComparableCollectionElement,
     Writable,
     Stringable,
     Representable,
-    StringSize,
-    Defaultable,
+    # Defaultable,
     Boolable,
     ImplicitlyBoolable,
     ExplicitlyCopyable,

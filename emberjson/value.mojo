@@ -38,10 +38,6 @@ struct Null(JsonValue):
         return self.__str__()
 
     @always_inline
-    fn min_size_for_string(self) -> Int:
-        return 4
-
-    @always_inline
     fn __bool__(self) -> Bool:
         return False
 
@@ -63,9 +59,9 @@ struct Value(JsonValue):
     alias Type = Variant[Int64, UInt64, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
-    @always_inline
-    fn __init__(out self):
-        self._data = Null()
+    # @always_inline
+    # fn __init__(out self):
+    #     self._data = Null()
 
     @implicit
     @always_inline
@@ -343,24 +339,6 @@ struct Value(JsonValue):
             self.array().pretty_to(writer, indent, curr_depth=curr_depth)
         else:
             self.write_to(writer)
-
-    fn min_size_for_string(self) -> Int:
-        if self.isa[Int64]() or self.isa[UInt64]():
-            return 10
-        elif self.isa[Float64]():
-            return 10
-        elif self.isa[String]():
-            return len(self.string()) + 2  # include the surrounding quotes
-        elif self.isa[Bool]():
-            return 4 if self.bool() else 5
-        elif self.isa[Null]():
-            return Null().min_size_for_string()
-        elif self.isa[Object]():
-            return self.object().min_size_for_string()
-        elif self.isa[Array]():
-            return self.array().min_size_for_string()
-
-        return 0
 
     @always_inline
     fn __str__(self) -> String:

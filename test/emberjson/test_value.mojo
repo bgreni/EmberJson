@@ -124,6 +124,12 @@ def test_special_case_floats():
         # This is "infinite"
         v = Value.from_string("10000000000000000000000000000000000000000000e+308")
 
+    v = Value.from_string(String(Float64.MAX_FINITE))
+    assert_equal(v.float(), Float64.MAX_FINITE)
+
+    v = Value.from_string(String(Float64.MIN_FINITE))
+    assert_equal(v.float(), Float64.MIN_FINITE)
+
 
 def test_float_leading_plus():
     v = Value.from_string("+43.5")
@@ -182,16 +188,6 @@ def test_implicit_conversion():
     assert_equal(val.object(), Object())
     val = Array(1, 2, 3)
     assert_equal(val.array(), Array(1, 2, 3))
-    val = JSON()
-    assert_equal(val.object(), Object())
-
-
-# def test_min_size_for_string():
-#     assert_equal(Value(12345).min_size_for_string(), 5)
-#     assert_equal(Value("foobar").min_size_for_string(), 8)
-#     assert_equal(Value(Null()).min_size_for_string(), 4)
-#     assert_equal(Value(True).min_size_for_string(), 4)
-#     assert_equal(Value(False).min_size_for_string(), 5)
 
 
 def test_pretty():
