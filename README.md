@@ -73,19 +73,19 @@ var json = parse('{"key": 123}')
 print(json.is_object()) # prints True
 
 # dict style access
-print(json["key"].int()) # prints 123
+print(json.object()["key"].int()) # prints 123
 
 # array
-var array = parse('[123, 4.5, "string", True, null]')
+var array = parse('[123, 4.5, "string", True, null]').array()
 
 # array style access
-print(json[3].bool()) # prints True
+print(array[3].bool()) # prints True
 
 # equality checks
-print(json[4] == Null()) # prints True
+print(array[4] == Null()) # prints True
 
 # None converts implicitly to Null
-assert_equal(json[4], Value(None))
+assert_equal(array[4], Value(None))
 
 # Implicit ctors for Value
 var v: Value = "some string"

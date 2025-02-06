@@ -70,56 +70,6 @@ struct JSON(JsonValue, Sized):
         """
         return self._data[Array]
 
-    @always_inline
-    fn __getitem__(ref self, key: String) raises -> ref [self.object()._data] Value:
-        """Access inner object value by key.
-
-        Raises:
-            If this document does not contain an object.
-
-        Returns:
-            A reference to the value associated with the given key.
-        """
-        if not self.is_object():
-            raise Error("Array index must be an int")
-        return self.object().__getitem__(key)
-
-    @always_inline
-    fn __getitem__[T: Indexer](ref self, ind: T) raises -> ref [self.array()._data] Value:
-        """Access the inner array by index.
-
-        Raises:
-            If this document does not contain an array.
-
-        Returns:
-            A reference to the value at the given index.
-        """
-        if not self.is_array():
-            raise Error("Object key expected to be string")
-        return self.array().__getitem__(ind)
-
-    @always_inline
-    fn __setitem__(mut self, owned key: String, owned item: Value) raises:
-        """Mutate the inner object.
-
-        Raises:
-            If this document does not contain an object.
-        """
-        if not self.is_object():
-            raise Error("Object key expected to be string")
-        self.object()[key^] = item^
-
-    @always_inline
-    fn __setitem__(mut self, ind: Int, owned item: Value) raises:
-        """Mutate the inner array.
-
-        Raises:
-            If this document does not contain an array.
-        """
-        if not self.is_array():
-            raise Error("Array index must be an int")
-        self.array()[ind] = item^
-
     fn __contains__(self, v: Value) raises -> Bool:
         """Check if the given value exists in the document.
 
@@ -283,14 +233,6 @@ struct JSON(JsonValue, Sized):
         """
         var parser = Parser(input.unsafe_ptr(), len(input))
         data = parser.parse()
-
-    fn min_size_for_string(self) -> Int:
-        """Should only be used as an estimatation. Sizes of float values are
-        unreliable.
-        """
-        if self.is_array():
-            return self.array().min_size_for_string()
-        return self.object().min_size_for_string()
 
     @staticmethod
     fn try_from_string(input: String) -> Optional[JSON]:

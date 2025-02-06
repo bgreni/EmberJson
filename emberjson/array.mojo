@@ -52,8 +52,7 @@ struct Array(Sized, JsonValue):
 
     @always_inline
     fn __init__(out self):
-        # TODO: Maybe a good candidate for autotuning in the future?
-        self._data = Self.Type(capacity=8)
+        self._data = Self.Type()
 
     @always_inline
     fn __init__(out self, *, capacity: Int):
@@ -169,4 +168,5 @@ struct Array(Sized, JsonValue):
 
     fn to_list(owned self, out l: List[Value]):
         l = self._data^
-        self._data = Self.Type()
+        __disable_del self
+        # self._data = Self.Type()

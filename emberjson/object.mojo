@@ -141,7 +141,6 @@ struct Object(Sized, JsonValue):
 
     @always_inline
     fn to_dict(owned self, out d: Dict[String, Value]):
-        # TODO: Avoid copies here
         d = Dict[String, Value]()
         for item in self.items():
             d[item[].key] = item[].data

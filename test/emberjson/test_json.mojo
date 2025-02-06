@@ -19,7 +19,7 @@ def test_json_object():
     var json = JSON.from_string(s)
     assert_true(json.is_object())
     assert_equal(json.object()["key"].int(), 123)
-    assert_equal(json["key"].int(), 123)
+    assert_equal(json.object()["key"].int(), 123)
 
     assert_equal(String(json), '{"key":123}')
 
@@ -32,7 +32,7 @@ def test_json_array():
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
-    assert_equal(json[0].int(), 123)
+    assert_equal(json.array()[0].int(), 123)
 
     assert_equal(String(json), "[123,345]")
 
@@ -40,9 +40,9 @@ def test_json_array():
 
     json = JSON.from_string("[1, 2, 3]")
     assert_true(json.is_array())
-    assert_equal(json[0], 1)
-    assert_equal(json[1], 2)
-    assert_equal(json[2], 3)
+    assert_equal(json.array()[0], 1)
+    assert_equal(json.array()[1], 2)
+    assert_equal(json.array()[2], 3)
 
 
 def test_equality():
@@ -51,23 +51,23 @@ def test_equality():
     var arr = JSON.from_string("[123, 345]")
 
     assert_equal(ob, ob2)
-    ob["key"] = 456
+    ob.object()["key"] = 456
     assert_not_equal(ob, ob2)
     assert_not_equal(ob, arr)
 
 
 def test_setter_object():
     var ob: JSON = Object()
-    ob["key"] = "foo"
+    ob.object()["key"] = "foo"
     assert_true("key" in ob)
-    assert_equal(ob["key"], "foo")
+    assert_equal(ob.object()["key"], "foo")
 
 
 def test_setter_array():
     var arr: JSON = Array(123, "foo")
-    arr[0] = Null()
-    assert_true(arr[0].isa[Null]())
-    assert_equal(arr[1], "foo")
+    arr.array()[0] = Null()
+    assert_true(arr.array()[0].isa[Null]())
+    assert_equal(arr.array()[1], "foo")
 
 
 def test_stringify_array():
