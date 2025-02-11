@@ -6,7 +6,6 @@ from .utils import write, write_pretty
 from .parser import Parser, ParseOptions
 
 
-
 @always_inline
 fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
     """Parses a JSON object from a String.

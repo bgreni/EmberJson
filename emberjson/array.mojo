@@ -128,12 +128,12 @@ struct Array(Sized, JsonValue):
         self._data.reserve(n)
 
     fn write_to[W: Writer](self, mut writer: W):
-        ("[").write_to(writer)
+        writer.write("[")
         for i in range(len(self._data)):
-            self._data[i].write_to(writer)
+            writer.write(self._data[i])
             if i != len(self._data) - 1:
-                (",").write_to(writer)
-        ("]").write_to(writer)
+                writer.write(",")
+        writer.write("]")
 
     fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         writer.write("[\n")
@@ -169,4 +169,3 @@ struct Array(Sized, JsonValue):
     fn to_list(owned self, out l: List[Value]):
         l = self._data^
         __disable_del self
-        # self._data = Self.Type()

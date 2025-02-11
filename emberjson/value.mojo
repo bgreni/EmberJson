@@ -59,9 +59,9 @@ struct Value(JsonValue):
     alias Type = Variant[Int64, UInt64, Float64, String, Bool, Object, Array, Null]
     var _data: Self.Type
 
-    # @always_inline
-    # fn __init__(out self):
-    #     self._data = Null()
+    @always_inline
+    fn __init__(out self):
+        self._data = Null()
 
     @implicit
     @always_inline

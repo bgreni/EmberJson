@@ -8,7 +8,7 @@ trait JsonValue(
     Writable,
     Stringable,
     Representable,
-    # Defaultable,
+    Defaultable,
     Boolable,
     ImplicitlyBoolable,
     ExplicitlyCopyable,

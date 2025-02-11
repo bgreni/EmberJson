@@ -12,6 +12,22 @@ fn get_data(file: String) -> String:
     return "READ FAILED"
 
 
+fn get_gbs_measure(input: String) raises -> ThroughputMeasure:
+    return ThroughputMeasure(BenchMetric.bytes, input.byte_length())
+
+
+fn run[func: fn (mut Bencher, String) raises capturing, name: String](mut m: Bench, data: String) raises:
+    m.bench_with_input[String, func](BenchId(name), data, get_gbs_measure(data))
+
+
+fn run[func: fn (mut Bencher, JSON) raises capturing, name: String](mut m: Bench, data: JSON) raises:
+    m.bench_with_input[JSON, func](BenchId(name), data, get_gbs_measure(String(data)))
+
+
+fn run[func: fn (mut Bencher, Value) raises capturing, name: String](mut m: Bench, data: Value) raises:
+    m.bench_with_input[Value, func](BenchId(name), data, get_gbs_measure(String(data)))
+
+
 fn main() raises:
     var config = BenchConfig()
     config.verbose_timing = True
@@ -27,12 +43,6 @@ fn main() raises:
     var data: String
     with open("./bench_data/users_1k.json", "r") as f:
         data = f.read()
-
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseSmall"), small_data)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseMedium"), medium_array)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseLarge"), large_array)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseExtraLarge"), data)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCanada"), canada)
 
     @parameter
     fn benchmark_fast_float_parse(mut b: Bencher, s: String) raises:
@@ -54,36 +64,38 @@ fn main() raises:
 
         b.iter[do]()
 
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseHeavyUnicode"), unicode)
-    m.bench_with_input[String, benchmark_ignore_unicode](BenchId("ParseHeavyIgnoreUnicode"), unicode)
-    m.bench_with_input[String, benchmark_fast_float_parse](BenchId("ParseCanadaFastFloat"), canada)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseTwitter"), twitter)
-    m.bench_with_input[String, benchmark_json_parse](BenchId("ParseCitmCatalog"), catalog)
+    run[benchmark_json_parse, "ParseSmall"](m, small_data)
+    run[benchmark_json_parse, "ParseMedium"](m, medium_array)
+    run[benchmark_json_parse, "ParseLarge"](m, large_array)
+    run[benchmark_json_parse, "ParseExtraLarge"](m, data)
+    run[benchmark_json_parse, "ParseCanada"](m, canada)
+    run[benchmark_fast_float_parse, "ParseCanadaFastFloat"](m, canada)
 
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyLarge"), JSON.from_string(large_array))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCanada"), JSON.from_string(canada))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyTwitter"), JSON.from_string(twitter))
-    m.bench_with_input[JSON, benchmark_json_stringify](BenchId("StringifyCitmCatalog"), JSON.from_string(catalog))
+    run[benchmark_json_parse, "ParseHeavyUnicode"](m, unicode)
+    run[benchmark_ignore_unicode, "ParseHeavyIgnoreUnicode"](m, unicode)
+    run[benchmark_json_parse, "ParseTwitter"](m, twitter)
+    run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
 
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseBool"), "false")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseNull"), "null")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseInt"), "12345")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloat"), "453.45643")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloatLongDec"), "453.456433232")
-    m.bench_with_input[String, benchmark_value_parse](BenchId("ParseFloatExp"), "4546.5E23")
-    m.bench_with_input[String, benchmark_json_parse](
-        BenchId("ParseFloatCoordinate"), "[-57.94027699999998,54.923607000000004]"
-    )
-    m.bench_with_input[String, benchmark_value_parse](
-        BenchId("ParseString"), '"some example string of short length, not all that long really"'
-    )
+    run[benchmark_value_parse, "ParseBool"](m, "false")
+    run[benchmark_value_parse, "ParseNull"](m, "null")
+    run[benchmark_value_parse, "ParseInt"](m, "12345")
+    run[benchmark_value_parse, "ParseFloat"](m, "453.45643")
+    run[benchmark_value_parse, "ParseFloatLongDec"](m, "453.456433232")
+    run[benchmark_value_parse, "ParseFloatExp"](m, "4546.5E23")
+    run[benchmark_json_parse, "ParseFloatCoordinate"](m, "[-57.94027699999998,54.923607000000004]")
+    run[benchmark_value_parse, "ParseString"](m, '"some example string of short length, not all that long really"')
 
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyBool"), False)
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyNull"), Null())
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyInt"), Int(12345))
-    m.bench_with_input[Value, benchmark_value_stringify](BenchId("StringifyFloat"), Float64(456.345))
-    m.bench_with_input[Value, benchmark_value_stringify](
-        BenchId("StringifyString"), "some example string of short length, not all that long really"
+    run[benchmark_json_stringify, "StringifyLarge"](m, JSON.from_string(large_array))
+    run[benchmark_json_stringify, "StringifyCanada"](m, JSON.from_string(canada))
+    run[benchmark_json_stringify, "StringifyTwitter"](m, JSON.from_string(twitter))
+    run[benchmark_json_stringify, "StringifyCitmCatalog"](m, JSON.from_string(catalog))
+
+    run[benchmark_value_stringify, "StringifyBool"](m, False)
+    run[benchmark_value_stringify, "StringifyNull"](m, Null())
+    run[benchmark_value_stringify, "StringifyInt"](m, Int(12345))
+    run[benchmark_value_stringify, "StringifyFloat"](m, Float64(456.345))
+    run[benchmark_value_stringify, "StringifyString"](
+        m, "some example string of short length, not all that long really"
     )
 
     m.dump_report()

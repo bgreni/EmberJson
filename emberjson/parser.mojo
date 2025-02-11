@@ -294,6 +294,10 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if negative:
             d = -d
 
+    # @always_inline
+    # fn compute_float_kinda_fast(self, out raw: UInt64, power: Int64, man: UInt64, negative: Bool):
+    #     var exact = False
+
     @always_inline
     fn compute_float64(self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool) raises:
         alias min_fast_power = Int64(-22)
