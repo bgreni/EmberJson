@@ -92,7 +92,9 @@ fn main() raises:
 
     run[benchmark_value_stringify, "StringifyBool"](m, False)
     run[benchmark_value_stringify, "StringifyNull"](m, Null())
-    run[benchmark_value_stringify, "StringifyInt"](m, Int(12345))
+    # These should be basically the same so its more of a sanity check here
+    run[benchmark_value_stringify, "StringifyInt"](m, Int64(12345))
+    run[benchmark_value_stringify, "StringifyUInt"](m, UInt64(12345))
     run[benchmark_value_stringify, "StringifyFloat"](m, Float64(456.345))
     run[benchmark_value_stringify, "StringifyString"](
         m, "some example string of short length, not all that long really"
