@@ -2,7 +2,6 @@ from .object import Object
 from .value import Value
 from .utils import *
 from .constants import *
-from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
 

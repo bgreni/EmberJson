@@ -182,42 +182,24 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value")
 
-    fn find_and_move(mut self, start: BytePtr, out s: String) raises:
-        var block = StringBlock.find(self.data)
-        if block.has_quote_first():
-            self.data += block.quote_index()
-            return copy_to_string[options.ignore_unicode](start, self.data)
-        if unlikely(block.has_unescaped()):
-            raise Error(
-                "Control characters must be escaped: "
-                + to_string(self.load_chunk())
-                + " : "
-                + String(block.unescaped_index())
-            )
-        if not block.has_backslash():
-            self.data += SIMD8_WIDTH
-            return self.find_and_move(start)
-        self.data += block.bs_index()
-        return self.cont(start)
-
-    fn cont(mut self, start: BytePtr, out s: String) raises:
+    fn cont(mut self, start: BytePtr, found_unicode: Bool, out s: String) raises:
         self.data += 1
         if self.data[] == U:
             self.data += 1
-            return self.find_and_move(start)
+            return self.find(start, True)
         else:
             if unlikely(self.data[] not in acceptable_escapes):
                 raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
         self.data += 1
         if self.data[] == RSOL:
-            return self.cont(start)
-        return self.find_and_move(start)
+            return self.cont(start, found_unicode)
+        return self.find(start, found_unicode)
 
-    fn find(mut self, start: BytePtr, out s: String) raises:
+    fn find(mut self, start: BytePtr, found_unicode: Bool, out s: String) raises:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string[options.ignore_unicode](start, self.data)
+            return copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
@@ -227,29 +209,30 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             )
         if not block.has_backslash():
             self.data += SIMD8_WIDTH
-            return self.find(start)
-
+            return self.find(start, found_unicode)
         self.data += block.bs_index()
-
-        return self.cont(start)
+        return self.cont(start, found_unicode)
 
     fn read_string(mut self, out s: String) raises:
         self.data += 1
         var start = self.data
+        var found_unicode = False
         while likely(self.has_more()):
             if self.can_load_chunk():
-                s = self.find(start)
+                s = self.find(start, False)
                 self.data += 1
                 return
             else:
                 if self.data[] == QUOTE:
-                    s = copy_to_string[options.ignore_unicode](start, self.data)
+                    s = copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
                     self.data += 1
                     return
                 if self.data[] == RSOL:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
                         raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
+                    if self.data[] == U:
+                        found_unicode = True
                 alias control_chars = ByteVec[4](NEWLINE, TAB, CARRIAGE, CARRIAGE)
                 if unlikely(self.data[] in control_chars):
                     raise Error("Control characters must be escaped: " + String(self.data[]))

@@ -118,7 +118,7 @@ fn benchmark_json_parse(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        _ = JSON.from_string(s)
+        _ = parse(s)
 
     b.iter[do]()
 
@@ -128,7 +128,7 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
     @parameter
     fn do():
-        _ = String(v)
+        _ = String.write(v)
 
     b.iter[do]()
 
@@ -138,7 +138,7 @@ fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
     @always_inline
     @parameter
     fn do() raises:
-        _ = String(json)
+        _ = String.write(json)
 
     b.iter[do]()
 

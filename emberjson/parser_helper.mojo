@@ -163,11 +163,15 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
 
 
 @always_inline
-fn copy_to_string[ignore_unicode: Bool = False](out s: String, start: BytePtr, end: BytePtr) raises:
+fn copy_to_string[
+    ignore_unicode: Bool = False
+](out s: String, start: BytePtr, end: BytePtr, found_unicode: Bool = True) raises:
     var length = ptr_dist(start, end)
 
     @parameter
-    if not ignore_unicode:
+    fn decode_unicode(out res: String) raises:
+        # This will usually slightly overallocate if the string contains
+        # escaped unicode
         var l = Bytes(capacity=length + 1)
         var p = start
 
@@ -178,15 +182,24 @@ fn copy_to_string[ignore_unicode: Bool = False](out s: String, start: BytePtr, e
             else:
                 l.append(p[])
                 p += 1
-
-        l.size = length
         l.append(0)
-        s = String(l^)
+        res = String(l^)
+
+    @parameter
+    fn bulk_copy(out res: String):
+        res = String()
+        res.reserve(length)
+        memcpy(res.unsafe_ptr(), start, length)
+        res._buffer.size = length + 1
+
+    @parameter
+    if not ignore_unicode:
+        if found_unicode:
+            return decode_unicode()
+        else:
+            return bulk_copy()
     else:
-        s = String()
-        s.reserve(length)
-        memcpy(s.unsafe_ptr(), start, length)
-        s._buffer.size = length + 1
+        return bulk_copy()
 
 
 @always_inline

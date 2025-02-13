@@ -1,7 +1,11 @@
 from emberjson import JSON, Null, Array, Object, parse, ParseOptions
 from emberjson import write_pretty
 from testing import *
+from sys.param_env import is_defined
 
+@always_inline
+fn files_enabled() -> Bool:
+    return not is_defined["DISABLE_TEST_FILES"]()
 
 def test_reject_comment():
     var s = """
@@ -155,15 +159,20 @@ var dir = String("./bench_data/data/jsonchecker/")
 
 
 def expect_fail(datafile: String):
-    with open(dir + datafile + ".json", "r") as f:
-        with assert_raises():
-            var v = parse(f.read())
-            print(v)
+
+    @parameter
+    if files_enabled():
+        with open(dir + datafile + ".json", "r") as f:
+            with assert_raises():
+                var v = parse(f.read())
+                print(v)
 
 
 def expect_pass(datafile: String):
-    with open(dir + datafile + ".json", "r") as f:
-        _ = parse(f.read())
+    @parameter
+    if files_enabled():
+        with open(dir + datafile + ".json", "r") as f:
+            _ = parse(f.read())
 
 
 def test_fail02():
@@ -297,11 +306,13 @@ def test_pass():
 
 
 def round_trip_test(filename: String):
-    var d = String("./bench_data/data/roundtrip/")
-    with open(d + filename + ".json", "r") as f:
-        var src = f.read()
-        var json = JSON.from_string(src)
-        assert_equal(String(json), src)
+    @parameter
+    if files_enabled():
+        var d = String("./bench_data/data/roundtrip/")
+        with open(d + filename + ".json", "r") as f:
+            var src = f.read()
+            var json = JSON.from_string(src)
+            assert_equal(String(json), src)
 
 
 def test_roundtrip01():

@@ -1,6 +1,6 @@
 [project]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
@@ -11,7 +11,7 @@ homepage = "https://github.com/bgreni/EmberJson"
 repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
-build = { cmd = "magic run template && magic run rattler-build build --recipe recipes -c https://conda.modular.com/max-nightly -c conda-forge --skip-existing=all", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"} }
+build = { cmd = "magic run template && magic run rattler-build build --recipe recipes -c https://conda.modular.com/max -c conda-forge --skip-existing=all", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"} }
 template = { cmd = "magic run python3 scripts/templater.py" }
 format = { cmd = "magic run mojo format -l 120 emberjson test bench.mojo" }
 test = { cmd = "magic run clean ; magic run mojo test" }
@@ -22,4 +22,4 @@ publish = { cmd = "./scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_
 precommit = { cmd = "magic run format && magic run test" }
 
 [dependencies]
-max = ">=25.1.0.dev2025021016"
+max = "==25.1"
