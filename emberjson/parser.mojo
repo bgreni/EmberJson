@@ -4,7 +4,7 @@ from .simd import *
 from .array import Array
 from .object import Object
 from .value import Value
-from memory import UnsafePointer
+from memory import UnsafePointer, memset, memcpy
 from sys.intrinsics import unlikely, likely
 from collections import InlineArray
 from .parser_helper import *
@@ -24,15 +24,12 @@ struct ParseOptions:
     """JSON parsing options.
 
     Fields:
-        fast_float_parsing: Always use float fast path, may result in reduced accuracy.
         ignore_unicode: Do not decode escaped unicode characters for a slight increase in performance.
     """
 
-    var fast_float_parsing: Bool
     var ignore_unicode: Bool
 
-    fn __init__(out self, *, fast_float_parsing: Bool = False, ignore_unicode: Bool = False):
-        self.fast_float_parsing = fast_float_parsing
+    fn __init__(out self, *, ignore_unicode: Bool = False):
         self.ignore_unicode = ignore_unicode
 
 
@@ -262,16 +259,12 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     #####################################################################################################################
 
     @always_inline
-    fn compute_float_fast[*, use_lot: Bool](self, out d: Float64, power: Int64, i: UInt64, negative: Bool):
+    fn compute_float_fast(self, out d: Float64, power: Int64, i: UInt64, negative: Bool):
         d = Float64(i)
         var pow: Float64
         var neg_power = power < 0
 
-        @parameter
-        if use_lot:
-            pow = power_of_ten[Int(abs(power))]
-        else:
-            pow = 10 ** Float64(abs(power))
+        pow = power_of_ten[Int(abs(power))]
 
         d = d / pow if neg_power else d * pow
         if negative:
@@ -282,12 +275,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         alias min_fast_power = Int64(-22)
         alias max_fast_power = Int64(22)
 
-        @parameter
-        if options.fast_float_parsing:
-            return self.compute_float_fast[use_lot=False](power, i, negative)
-
         if min_fast_power <= power <= max_fast_power and i <= 9007199254740991:
-            return self.compute_float_fast[use_lot=True](power, i, negative)
+            return self.compute_float_fast(power, i, negative)
 
         if unlikely(i == 0 or power < -342):
             return -0.0 if negative else 0.0
@@ -447,3 +436,64 @@ struct Parser[options: ParseOptions = ParseOptions()]:
         if i > SIGNED_OVERFLOW:
             return i
         return branchless_ternary(neg, Int64(~i + 1), Int64(i))
+
+
+fn minify(s: String, out out_str: String) raises:
+    alias padding = String(" ") * SIMD8_WIDTH
+    var padded = String(s, padding)
+    var output = UnsafePointer[Byte].alloc(len(s))
+    memset(output, 0, len(s))
+    var curr_pos = output
+
+    var ptr = padded.unsafe_ptr()
+    var end = ptr + len(s)
+    var written = 0
+
+    while ptr < end:
+        var chunk = ptr.load[width=SIMD8_WIDTH]()
+
+        var bits = get_non_space_bits(chunk)
+        while bits == 0 and ptr < end:
+            ptr += SIMD8_WIDTH
+            chunk = ptr.load[width=SIMD8_WIDTH]()
+            bits = get_non_space_bits(chunk)
+
+        var trailing = count_trailing_zeros(bits)
+        ptr += trailing
+
+        if ptr[] == QUOTE:
+            var p = ptr
+            p += 1
+            var block = StringBlock.find(p)
+            var length = 1
+
+            while not block.has_quote_first() and p < end:
+                if block.has_unescaped():
+                    raise "Invalid JSON, unescaped control character"
+                elif block.has_backslash():
+                    var ind = Int(block.bs_index()) + 2
+                    length += ind
+                    p += ind
+                else:
+                    length += SIMD8_WIDTH
+                    p += SIMD8_WIDTH
+                block = StringBlock.find(p)
+
+            length += Int(block.quote_index()) + 1
+            memcpy(curr_pos, ptr, length)
+            written += length
+            ptr += length
+            curr_pos += length
+
+        else:
+            var chunk = ptr.load[width=SIMD8_WIDTH]()
+            var quotes = pack_into_integer(chunk == QUOTE)
+            var valid_bits = Int(count_trailing_zeros(~get_non_space_bits(chunk)))
+            if quotes != 0:
+                valid_bits = min(valid_bits, Int(count_trailing_zeros(quotes)))
+            memcpy(curr_pos, ptr, valid_bits)
+            written += valid_bits
+            ptr += valid_bits
+            curr_pos += valid_bits
+
+    out_str = String(ptr=output, length=written + 1)

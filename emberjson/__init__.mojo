@@ -3,7 +3,7 @@ from .array import Array
 from .object import Object
 from .value import Value, Null
 from .utils import write, write_pretty
-from .parser import Parser, ParseOptions
+from .parser import Parser, ParseOptions, minify
 
 
 @always_inline

@@ -33,6 +33,12 @@ def test_string():
     assert_equal(String(v), s)
     assert_true(v.is_string())
 
+    # check short string
+    s = '"s"'
+    v = Value.from_string(s)
+    assert_equal(v.string(), "s")
+    assert_equal(String(v), s)
+
 
 def test_null():
     var s = "null"

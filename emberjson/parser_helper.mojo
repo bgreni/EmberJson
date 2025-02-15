@@ -9,7 +9,6 @@ from bit import count_trailing_zeros
 from sys.info import bitwidthof
 from sys.intrinsics import _type_is_eq
 
-alias BytePtr = UnsafePointer[Byte, mut=False]
 alias smallest_power: Int64 = -342
 alias largest_power: Int64 = 308
 
