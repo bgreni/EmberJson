@@ -45,16 +45,6 @@ fn main() raises:
         data = f.read()
 
     @parameter
-    fn benchmark_fast_float_parse(mut b: Bencher, s: String) raises:
-        @always_inline
-        @parameter
-        fn do() raises:
-            var p = Parser[ParseOptions(fast_float_parsing=True)](s.unsafe_ptr(), len(s))
-            _ = p.parse()
-
-        b.iter[do]()
-
-    @parameter
     fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
         @always_inline
         @parameter
@@ -64,12 +54,20 @@ fn main() raises:
 
         b.iter[do]()
 
+    @parameter
+    fn benchmark_minify(mut b: Bencher, s: String) raises:
+        @always_inline
+        @parameter
+        fn do() raises:
+            _ = minify(s)
+
+        b.iter[do]()
+
     run[benchmark_json_parse, "ParseSmall"](m, small_data)
     run[benchmark_json_parse, "ParseMedium"](m, medium_array)
     run[benchmark_json_parse, "ParseLarge"](m, large_array)
     run[benchmark_json_parse, "ParseExtraLarge"](m, data)
     run[benchmark_json_parse, "ParseCanada"](m, canada)
-    run[benchmark_fast_float_parse, "ParseCanadaFastFloat"](m, canada)
 
     run[benchmark_json_parse, "ParseHeavyUnicode"](m, unicode)
     run[benchmark_ignore_unicode, "ParseHeavyIgnoreUnicode"](m, unicode)
@@ -85,10 +83,10 @@ fn main() raises:
     run[benchmark_json_parse, "ParseFloatCoordinate"](m, "[-57.94027699999998,54.923607000000004]")
     run[benchmark_value_parse, "ParseString"](m, '"some example string of short length, not all that long really"')
 
-    run[benchmark_json_stringify, "StringifyLarge"](m, JSON.from_string(large_array))
-    run[benchmark_json_stringify, "StringifyCanada"](m, JSON.from_string(canada))
-    run[benchmark_json_stringify, "StringifyTwitter"](m, JSON.from_string(twitter))
-    run[benchmark_json_stringify, "StringifyCitmCatalog"](m, JSON.from_string(catalog))
+    run[benchmark_json_stringify, "StringifyLarge"](m, parse(large_array))
+    run[benchmark_json_stringify, "StringifyCanada"](m, parse(canada))
+    run[benchmark_json_stringify, "StringifyTwitter"](m, parse(twitter))
+    run[benchmark_json_stringify, "StringifyCitmCatalog"](m, parse(catalog))
 
     run[benchmark_value_stringify, "StringifyBool"](m, False)
     run[benchmark_value_stringify, "StringifyNull"](m, Null())
@@ -99,6 +97,8 @@ fn main() raises:
     run[benchmark_value_stringify, "StringifyString"](
         m, "some example string of short length, not all that long really"
     )
+
+    run[benchmark_minify, "MinifyCitmCatalog"](m, catalog)
 
     m.dump_report()
 

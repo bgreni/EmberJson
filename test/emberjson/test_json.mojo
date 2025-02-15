@@ -1,11 +1,17 @@
-from emberjson import JSON, Null, Array, Object, parse, ParseOptions
+from emberjson import JSON, Null, Array, Object, parse, ParseOptions, minify
 from emberjson import write_pretty
 from testing import *
 from sys.param_env import is_defined
 
+
 @always_inline
 fn files_enabled() -> Bool:
     return not is_defined["DISABLE_TEST_FILES"]()
+
+
+def test_minify():
+    assert_equal(minify('{"key": 123, "k": [123, false, [1, 2, 3]]}'), '{"key":123,"k":[123,false,[1,2,3]]}')
+
 
 def test_reject_comment():
     var s = """
@@ -20,7 +26,7 @@ def test_reject_comment():
 
 def test_json_object():
     var s = '{"key": 123}'
-    var json = JSON.from_string(s)
+    var json = parse(s)
     assert_true(json.is_object())
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json.object()["key"].int(), 123)
@@ -32,7 +38,7 @@ def test_json_object():
 
 def test_json_array():
     var s = "[123, 345]"
-    var json = JSON.from_string(s)
+    var json = parse(s)
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
@@ -42,7 +48,7 @@ def test_json_array():
 
     assert_equal(len(json), 2)
 
-    json = JSON.from_string("[1, 2, 3]")
+    json = parse("[1, 2, 3]")
     assert_true(json.is_array())
     assert_equal(json.array()[0], 1)
     assert_equal(json.array()[1], 2)
@@ -50,9 +56,9 @@ def test_json_array():
 
 
 def test_equality():
-    var ob = JSON.from_string('{"key": 123}')
-    var ob2 = JSON.from_string('{"key": 123}')
-    var arr = JSON.from_string("[123, 345]")
+    var ob = parse('{"key": 123}')
+    var ob2 = parse('{"key": 123}')
+    var arr = parse("[123, 345]")
 
     assert_equal(ob, ob2)
     ob.object()["key"] = 456
@@ -75,12 +81,12 @@ def test_setter_array():
 
 
 def test_stringify_array():
-    var arr = JSON.from_string('[123,"foo",false,null]')
+    var arr = parse('[123,"foo",false,null]')
     assert_equal(String(arr), '[123,"foo",false,null]')
 
 
 def test_pretty_print_array():
-    var arr = JSON.from_string('[123,"foo",false,null]')
+    var arr = parse('[123,"foo",false,null]')
     var expected = """[
     123,
     "foo",
@@ -97,7 +103,7 @@ iamateapotnull
 ]"""
     assert_equal(expected, write_pretty(arr, indent=String("iamateapot")))
 
-    arr = JSON.from_string('[123,"foo",false,{"key": null}]')
+    arr = parse('[123,"foo",false,{"key": null}]')
     expected = """[
     123,
     "foo",
@@ -111,14 +117,14 @@ iamateapotnull
 
 
 def test_pretty_print_object():
-    var ob = JSON.from_string('{"k1": null, "k2": 123}')
+    var ob = parse('{"k1": null, "k2": 123}')
     var expected = """{
     "k1": null,
     "k2": 123
 }"""
     assert_equal(expected, write_pretty(ob))
 
-    ob = JSON.from_string('{"key": 123, "k": [123, false, null]}')
+    ob = parse('{"key": 123, "k": [123, false, null]}')
 
     expected = """{
     "k": [
@@ -131,7 +137,7 @@ def test_pretty_print_object():
 
     assert_equal(expected, write_pretty(ob))
 
-    ob = JSON.from_string('{"key": 123, "k": [123, false, [1, 2, 3]]}')
+    ob = parse('{"key": 123, "k": [123, false, [1, 2, 3]]}')
     expected = """{
     "k": [
         123,
@@ -159,7 +165,6 @@ var dir = String("./bench_data/data/jsonchecker/")
 
 
 def expect_fail(datafile: String):
-
     @parameter
     if files_enabled():
         with open(dir + datafile + ".json", "r") as f:
@@ -311,8 +316,16 @@ def round_trip_test(filename: String):
         var d = String("./bench_data/data/roundtrip/")
         with open(d + filename + ".json", "r") as f:
             var src = f.read()
-            var json = JSON.from_string(src)
+            var json = parse(src)
             assert_equal(String(json), src)
+
+
+def test_minify_citm_catalog():
+    @parameter
+    if files_enabled():
+        with open("./bench_data/data/citm_catalog.json", "r") as formatted:
+            with open("./bench_data/data/citm_catalog_minify.json", "r") as minified:
+                assert_equal(minify(formatted.read()), minified.read())
 
 
 def test_roundtrip01():

@@ -12,6 +12,7 @@ from sys.intrinsics import _type_is_eq
 alias Bytes = List[Byte, True]
 alias ByteVec = SIMD[DType.uint8, _]
 alias ByteView = Span[Byte, _]
+alias BytePtr = UnsafePointer[Byte, mut=False]
 
 alias DefaultPrettyIndent = 4
 

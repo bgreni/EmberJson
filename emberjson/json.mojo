@@ -242,6 +242,6 @@ struct JSON(JsonValue, Sized):
             An optional parsed JSON document, returns None if the input is invalid.
         """
         try:
-            return JSON.from_string(input)
+            return parse(input)
         except:
             return None
