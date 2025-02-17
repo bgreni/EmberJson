@@ -94,3 +94,9 @@ def test_equality():
 def test_bad_value():
     with assert_raises():
         _ = Object.from_string('{"key": nil}')
+
+def test_write():
+    var ob = Object()
+    ob['foo'] = 'stuff'
+    ob['bar'] = 123
+    assert_equal(String(ob), '{"bar":123,"foo":"stuff"}')

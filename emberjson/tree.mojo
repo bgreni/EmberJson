@@ -237,7 +237,7 @@ struct Tree(CollectionElement, Sized, ExplicitlyCopyable):
     fn __contains__(self, key: String) -> Bool:
         return Bool(self.find(key))
 
-    fn write_nodes[W: Writer](self, mut writer: W, node: Self.NodePtr, written: Int):
+    fn write_nodes[W: Writer](self, mut writer: W, node: Self.NodePtr, mut written: Int):
         if not node:
             return
 
@@ -246,8 +246,9 @@ struct Tree(CollectionElement, Sized, ExplicitlyCopyable):
         writer.write(node[])
         if written < self.size - 1:
             writer.write(",")
+        written += 1
 
-        self.write_nodes(writer, node[].right, written + 1)
+        self.write_nodes(writer, node[].right, written)
 
     @always_inline
     fn __str__(self) -> String:
