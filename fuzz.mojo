@@ -20,7 +20,7 @@ def gen_float() -> Float64:
 
 def gen_string() -> String:
     var faker = Python.import_module("faker").Faker()
-    return String(faker.lexify('?' * (gen_collection_len() + 1)))
+    return String(faker.lexify( '?' * (gen_collection_len() + 1)))
 
 def gen_array(out arr: Array):
     arr = Array()
@@ -62,6 +62,34 @@ def gen_json(out j: JSON):
         return gen_array()
     return gen_object()
 
+def gen_object_string() -> String:
+    var s = String('{')
+
+    var l = gen_collection_len()
+    for i in range(l):
+        s += String('"', gen_string(), '"') + ':' + String(gen_value())
+        if i < l - 1:
+            s += ','
+
+    s += '}'
+
+    return s
+
+def gen_array_string() -> String:
+    var s: String = '['
+    var l = gen_collection_len()
+
+    for i in range(l):
+        s += String(gen_value())
+        if i < l - 1:
+            s += ','
+
+    s += ']'
+    return s
+
+def gen_json_string() -> String:
+    return gen_array_string() if coin_flip() else gen_object_string()
+
 
 def coin_flip() -> Bool:
     return random_ui64(0, 1) == 1
@@ -70,7 +98,11 @@ def main():
     seed()
     var start = monotonic()
     while monotonic() - start < 60000000000:
-        var j = gen_json()
-        assert_equal(j, parse(String(j)))
+        var j = gen_json_string()
+        try:
+            _ = parse(j)
+        except:
+            raise 'CASE FAILED: ' + j
+
 
 

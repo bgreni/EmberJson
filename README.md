@@ -20,13 +20,12 @@ Use the `parse` function to parse a JSON value from a string. It accepts a
 from emberjson import parse
 
 struct ParseOptions:
-    # Always use the fast past during float point value parsing.
-    # Use this only if you are comfortable with potentially reduced accuracy.
-    var fast_float_parsing: Bool
+    # ignore unicode for a small performance boost
+    var ignore_unicode: Bool
 
 ...
 
-var json = parse[ParseOptions(fast_float_parsing=True)]('{"key": 123}')
+var json = parse[ParseOptions(ignore_unicode=True)](r'["\uD83D\uDD25"]')
 ```
 
 EmberJSON supports decoding escaped unicode characters.
