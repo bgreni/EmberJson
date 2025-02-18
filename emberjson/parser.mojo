@@ -56,6 +56,11 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn remaining(self) -> String:
+        """Used for debug purposes.
+
+        Returns:
+            A string containing the remaining unprocessed data from parser input.
+        """
         try:
             return copy_to_string[True](self.data, self.end)
         except:
@@ -146,8 +151,11 @@ struct Parser[options: ParseOptions = ParseOptions()]:
     fn parse_value(mut self, out v: Value) raises:
         self.skip_whitespace()
         var n = self.data[]
+        # Handle string
         if n == QUOTE:
             v = self.read_string()
+
+        # Handle "true" atom
         elif n == T:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
@@ -155,6 +163,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 raise Error("Expected 'true', received: " + to_string(w))
             v = True
             self.data += 4
+
+        # handle "false" atom
         elif n == F:
             self.data += 1
             var w: UInt32 = 0
@@ -163,6 +173,8 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 raise Error("Expected 'false', received: " + to_string(w))
             v = False
             self.data += 4
+
+        # handle "null" atom
         elif n == N:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
@@ -170,10 +182,16 @@ struct Parser[options: ParseOptions = ParseOptions()]:
                 raise Error("Expected 'null', received: " + to_string(w))
             v = Null()
             self.data += 4
+
+        # handle object
         elif n == LCURLY:
             v = self.parse_object()
+
+        # handle array
         elif n == LBRACKET:
             v = self.parse_array()
+
+        # handle number
         elif is_numerical_component(n):
             v = self.parse_number()
         else:
@@ -439,6 +457,11 @@ struct Parser[options: ParseOptions = ParseOptions()]:
 
 
 fn minify(s: String, out out_str: String) raises:
+    """Removes whitespace characters from JSON string.
+
+    Returns:
+        A copy of the input string will all whitespace characters removed.
+    """
     alias padding = String(" ") * SIMD8_WIDTH
     var padded = String(s, padding)
     var output = UnsafePointer[Byte].alloc(len(s))
@@ -468,7 +491,7 @@ fn minify(s: String, out out_str: String) raises:
             var length = 1
 
             while not block.has_quote_first() and p < end:
-                if block.has_unescaped():
+                if unlikely(block.has_unescaped()):
                     raise "Invalid JSON, unescaped control character"
                 elif block.has_backslash():
                     var ind = Int(block.bs_index()) + 2
