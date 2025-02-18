@@ -161,6 +161,17 @@ def test_trailing_tokens():
         _ = parse('{"key": null} "trailing string"')
 
 
+def test_incomplete_data():
+    with assert_raises():
+        _ = parse("[1 null, false,")
+
+    with assert_raises():
+        _ = parse('{"key": 123')
+
+    with assert_raises():
+        _ = parse('["asdce]')
+
+
 var dir = String("./bench_data/data/jsonchecker/")
 
 

@@ -1,0 +1,17 @@
+name: Run quick fuzz test
+
+on:
+    workflow_call:
+
+jobs:
+    fuzz:
+        name: Run tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Run the test suite  
+              run: |
+                curl -ssL https://magic.modular.com | bash
+                source $HOME/.bash_profile
+                magic run fuzz
