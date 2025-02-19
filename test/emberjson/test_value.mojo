@@ -39,6 +39,21 @@ def test_string():
     assert_equal(v.string(), "s")
     assert_equal(String(v), s)
 
+    with assert_raises():
+        _ = Value.from_string(r"Invalid unicode \u123z escape")
+
+    with assert_raises():
+        _ = Value.from_string(r"Another invalid \uXYZG escape")
+
+    with assert_raises():
+        _ = Value.from_string(r"Wrong format \u12Z4 escape")
+
+    with assert_raises():
+        _ = Value.from_string(r"Wrong format \uFFFF escape")
+
+    with assert_raises():
+        _ = Value.from_string(r"Incomplete escape \u12 escape")
+
 
 def test_null():
     var s = "null"

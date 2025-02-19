@@ -101,3 +101,29 @@ def test_write():
     ob["foo"] = "stuff"
     ob["bar"] = 123
     assert_equal(String(ob), '{"bar":123,"foo":"stuff"}')
+
+def test_iter():
+    var ob = Object()
+    ob["a"] = "stuff"
+    ob["b"] = 123
+    ob["c"] = 3.423
+
+    var keys = List("a", "b", "c")
+
+    var i = 0
+    for el in ob.keys():
+        assert_equal(el[], keys[i])
+        i += 1
+
+    i = 0
+    # check that the default is to iterate over keys
+    for el in ob:
+        assert_equal(el[], keys[i])
+        i += 1
+
+    var values = List[Value]("stuff", 123, 3.423)
+
+    i = 0
+    for el in ob.values():
+        assert_equal(el[], values[i])
+        i += 1

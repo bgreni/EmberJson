@@ -11,6 +11,15 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
     var index: Int
     var src: Pointer[Array, origin]
 
+    fn __init__(out self, src: Pointer[Array, origin]):
+        self.src = src
+
+        @parameter
+        if forward:
+            self.index = 0
+        else:
+            self.index = len(self.src[])
+
     fn __iter__(self) -> Self:
         return self
 
@@ -112,11 +121,11 @@ struct Array(Sized, JsonValue):
 
     @always_inline
     fn __iter__(ref self) -> _ArrayIter[__origin_of(self)]:
-        return _ArrayIter(0, Pointer.address_of(self))
+        return _ArrayIter(Pointer.address_of(self))
 
     @always_inline
     fn reversed(ref self) -> _ArrayIter[__origin_of(self), False]:
-        return _ArrayIter[forward=False](len(self), Pointer.address_of(self))
+        return _ArrayIter[forward=False](Pointer.address_of(self))
 
     @always_inline
     fn iter(ref self) -> _ArrayIter[__origin_of(self)]:

@@ -42,13 +42,13 @@ def main():
 
     out = subprocess.check_output("magic list --json", shell=True)
     j = json.loads(out)
-    # max_version = ''
-    # for res in j:
-    #     if res['name'] == 'max':
-    #         max_version = re.search("(dev.*)", res["version"])[1]
+    max_version = ''
+    for res in j:
+        if res['name'] == 'max':
+            max_version = re.search("(dev.*)", res["version"])[1]
     # For nightly releases
-    # recipe = recipe.replace("{{VERSION}}", config["project"]["version"] + "." + max_version)
-    recipe = recipe.replace("{{VERSION}}", config["project"]["version"])
+    recipe = recipe.replace("{{VERSION}}", config["project"]["version"] + "." + max_version)
+    # recipe = recipe.replace("{{VERSION}}", config["project"]["version"])
 
     deps: list[str] = []
     for name, version in config['dependencies'].items():
@@ -64,9 +64,9 @@ def main():
         if version[:2] == "==":
             start = 2
 
-        # if name == "max":
-        #     version = ''.join([version.split('dev')[0], max_version])
-        deps.append(f"    - {name} {operator} {version[start:]}")
+        if name == "max":
+            version = ''.join([version.split('dev')[0], max_version])
+        # deps.append(f"    - {name} {operator} {version[start:]}")
 
     deps = "\n".join(deps)
     recipe = recipe.replace("{{DEPENDENCIES}}", deps)
