@@ -42,11 +42,6 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
         else:
             return self.index
 
-    fn collect(owned self, out arr: Array):
-        arr = Array(capacity=len(self))
-        for _ in range(len(self)):
-            arr.append(self.__next__()[])
-
 
 struct Array(Sized, JsonValue):
     """Represents a heterogeneous array of json types.

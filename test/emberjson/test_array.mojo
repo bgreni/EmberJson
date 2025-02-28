@@ -74,11 +74,6 @@ def test_equality():
     assert_not_equal(arr1, arr3)
 
 
-def test_reverse_array():
-    var arr = Array(1, 2, 3, 4)
-    assert_equal(arr.reversed().collect(), Array(4, 3, 2, 1))
-
-
 def test_list_ctr():
     var arr = Array(List[Value](123, "foo", Null(), False))
     assert_equal(arr[0].int(), 123)

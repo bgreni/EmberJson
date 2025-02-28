@@ -31,7 +31,6 @@ fn run[func: fn (mut Bencher, Value) raises capturing, name: String](mut m: Benc
 fn main() raises:
     var config = BenchConfig()
     config.verbose_timing = True
-    config.tabular_view = True
     config.flush_denormals = True
     config.show_progress = True
     var m = Bench(config)
@@ -90,7 +89,7 @@ fn main() raises:
 
     run[benchmark_value_stringify, "StringifyBool"](m, False)
     run[benchmark_value_stringify, "StringifyNull"](m, Null())
-    # These should be basically the same so its more of a sanity check here
+    # These should be the same so its more of a sanity check here
     run[benchmark_value_stringify, "StringifyInt"](m, Int64(12345))
     run[benchmark_value_stringify, "StringifyUInt"](m, UInt64(12345))
     run[benchmark_value_stringify, "StringifyFloat"](m, Float64(456.345))
