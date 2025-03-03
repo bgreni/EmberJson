@@ -189,7 +189,7 @@ fn copy_to_string[
         res = String()
         res.reserve(length)
         memcpy(res.unsafe_ptr(), start, length)
-        res._buffer.size = length + 1
+        res._buffer._len = length + 1
 
     @parameter
     if not ignore_unicode:

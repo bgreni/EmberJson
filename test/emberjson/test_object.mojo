@@ -102,6 +102,7 @@ def test_write():
     ob["bar"] = 123
     assert_equal(String(ob), '{"bar":123,"foo":"stuff"}')
 
+
 def test_iter():
     var ob = Object()
     ob["a"] = "stuff"

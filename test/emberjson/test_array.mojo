@@ -83,6 +83,7 @@ def test_list_ctr():
 
     assert_equal(arr.to_list(), List[Value](123, "foo", Null(), False))
 
+
 def test_iter():
     var arr = Array(False, 123, None)
 
