@@ -62,15 +62,17 @@ fn main() raises:
 
         b.iter[do]()
 
+
+    run[benchmark_json_parse, "ParseTwitter"](m, twitter)
+    run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
+    run[benchmark_json_parse, "ParseCanada"](m, canada)
+
     run[benchmark_json_parse, "ParseSmall"](m, small_data)
     run[benchmark_json_parse, "ParseMedium"](m, medium_array)
     run[benchmark_json_parse, "ParseLarge"](m, large_array)
     run[benchmark_json_parse, "ParseExtraLarge"](m, data)
     run[benchmark_json_parse, "ParseHeavyUnicode"](m, unicode)
     run[benchmark_ignore_unicode, "ParseHeavyIgnoreUnicode"](m, unicode)
-    run[benchmark_json_parse, "ParseTwitter"](m, twitter)
-    run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
-    run[benchmark_json_parse, "ParseCanada"](m, canada)
 
     run[benchmark_value_parse, "ParseBool"](m, "false")
     run[benchmark_value_parse, "ParseNull"](m, "null")

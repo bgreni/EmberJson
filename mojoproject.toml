@@ -20,6 +20,7 @@ clean = { cmd = "rm -r output &> /dev/null" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
 publish = { cmd = "./scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_KEY" }}
 precommit = { cmd = "magic run format && magic run test" }
+update_and_test = "magic update && magic run test && magic run bench"
 
 [dependencies]
 max = ">=25.2.0.dev2025021805,<26"
