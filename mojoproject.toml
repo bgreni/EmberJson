@@ -1,6 +1,6 @@
 [project]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
@@ -23,7 +23,7 @@ precommit = { cmd = "magic run format && magic run test" }
 update_and_test = "magic update && magic run test && magic run bench"
 
 [dependencies]
-max = ">=25.2.0.dev2025021805,<26"
+max = "==25.2.0"
 
 [feature.fuzz.tasks]
 fuzz = "magic run mojo fuzz.mojo"
