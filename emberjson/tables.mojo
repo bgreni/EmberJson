@@ -1,6 +1,7 @@
-from collections import InlineArray
+from utils import StaticTuple
 
-alias power_of_ten = InlineArray[Float64, 23](
+
+alias power_of_ten = StaticTuple[Float64, 23](
     1e0,
     1e1,
     1e2,
@@ -49,7 +50,7 @@ fn full_multiplication(out answer: _U128, x: UInt64, y: UInt64):
     )
 
 
-alias power_of_five_128 = InlineArray[UInt64, 1302](
+alias power_of_five_128 = StaticTuple[UInt64, 1302](
     0xEEF453D6923BD65A,
     0x113FAA2906A13B3F,
     0x9558B4661B6565F8,

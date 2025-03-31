@@ -12,6 +12,7 @@ from sys.intrinsics import unlikely, likely
 from .parser import Parser
 from .format_int import write_int
 from sys.info import bitwidthof
+from .teju import write_f64
 
 
 @value
@@ -306,7 +307,8 @@ struct Value(JsonValue):
         elif self.isa[UInt64]():
             write_int(self.uint(), writer)
         elif self.isa[Float64]():
-            writer.write(self.float())
+            # writer.write(self.float())
+            write_f64(self.float(), writer)
         elif self.isa[String]():
             writer.write('"')
             writer.write(self.string())

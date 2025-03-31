@@ -62,7 +62,6 @@ fn main() raises:
 
         b.iter[do]()
 
-
     run[benchmark_json_parse, "ParseTwitter"](m, twitter)
     run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
     run[benchmark_json_parse, "ParseCanada"](m, canada)
