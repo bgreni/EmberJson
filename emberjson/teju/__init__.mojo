@@ -10,7 +10,8 @@ alias STORAGE_INDEX_OFFSET = -324
 
 
 fn write_f64[W: Writer](d: Float64, mut writer: W):
-    if bitcast[DType.uint64](d) >> 63 == 1:
+    alias TOP_BIT = 1 << 63
+    if bitcast[DType.uint64](d) & TOP_BIT != 0:
         writer.write("-")
 
     if d == 0.0:
@@ -96,11 +97,8 @@ struct Fields:
     var mantissa: UInt64
     var exponent: Int32
 
-    fn write_to[W: Writer](self, mut writer: W):
-        writer.write(self.mantissa, " ", self.exponent)
 
-
-fn teju(binary: Fields) -> Fields:
+fn teju(binary: Fields, out dec: Fields):
     var e = binary.exponent
     var m = binary.mantissa
 
@@ -127,25 +125,25 @@ fn teju(binary: Fields) -> Fields:
 
         if s >= a:
             if s == b:
-                if m % 2 == 0 or not is_tie(m_b, f):
+                if m & 1 == 0 or not is_tie(m_b, f):
                     return remove_trailing_zeros(q, f + 1)
-            elif s > a or (m % 2 == 0 and is_tie(m_a, f)):
+            elif s > a or (m & 1 == 0 and is_tie(m_a, f)):
                 return remove_trailing_zeros(q, f + 1)
 
-        if (a + b) % 2 == 1:
+        if (a + b) & 1 == 1:
             return Fields((a + b) // 2 + 1, f)
 
-        var m_c = 4 * m << Int(r)
+        var m_c = 4 * m << UInt64(r)
         var c_2 = mshift(m_c, u, l)
         var c = c_2 // 2
 
-        if c_2 % 2 == 0 or (c % 2 == 0 and is_tie(c_2, -f)):
+        if c_2 & 1 == 0 or (c & 1 == 0 and is_tie(c_2, -f)):
             return Fields(c, f)
         return Fields(c + 1, f)
 
-    var m_a = (4 * m_0 - 1) << Int(r)
+    var m_a = (4 * m_0 - 1) << UInt64(r)
     var a = mshift(m_a, u, l) // 2
-    var m_b = (2 * m_0 + 1) << Int(r)
+    var m_b = (2 * m_0 + 1) << UInt64(r)
     var b = mshift(m_b, u, l)
 
     if a < b:
@@ -162,7 +160,7 @@ fn teju(binary: Fields) -> Fields:
         if c == a and not is_tie_uncentered(m_a, f):
             return Fields(c + 1, f)
 
-        if c_2 % 2 == 0 or (c % 2 == 0 and is_tie(c_2, -f)):
+        if c_2 & 1 == 0 or (c & 1 == 0 and is_tie(c_2, -f)):
             return Fields(c, f)
 
         return Fields(c + 1, f)
@@ -170,27 +168,29 @@ fn teju(binary: Fields) -> Fields:
     elif is_tie_uncentered(m_a, f):
         return remove_trailing_zeros(a, f)
 
-    var m_c = 40 * m_0 << Int(r)
+    var m_c = 40 * m_0 << UInt64(r)
     var c_2 = mshift(m_c, u, l)
     var c = c_2 // 2
 
-    if c_2 % 2 == 0 or c % 2 == 0 and is_tie(c_2, -f):
+    if c_2 & 1 == 0 or c & 1 == 0 and is_tie(c_2, -f):
         return Fields(c, f - 1)
     return Fields(c + 1, f - 1)
 
 
-fn f64_to_binary(d: Float64) -> Fields:
+fn f64_to_binary(d: Float64, out bin: Fields):
     var bits = bitcast[DType.uint64](d)
     alias k = MANTISSA_SIZE - 1
+    alias MANTISSA_MASK = (((1) << (k)) - 1)
 
-    var mantissa = ((bits) & (((1) << (k)) - 1))
+    var mantissa = bits & MANTISSA_MASK
 
     bits >>= k
     var exponent = Int32(bits)
 
     if exponent != 0:
         exponent -= 1
-        mantissa |= 1 << k
+        alias `1 << k` = 1 << k
+        mantissa |= `1 << k`
 
     exponent += EXPONENT_MIN
 

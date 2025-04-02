@@ -4,10 +4,10 @@ alias LOG10_POW2_MAX: Int32 = 112815
 alias LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
 
 
-fn remove_trailing_zeros(owned m: UInt64, owned e: Int32) -> Fields:
-    alias N = UInt64(-1)
-    var minv5: UInt64 = -(N // 5)
-    var bound: UInt64 = (N // 10 + 1)
+@always_inline
+fn remove_trailing_zeros(owned m: UInt64, owned e: Int32, out f: Fields):
+    alias minv5: UInt64 = -(UInt64.MAX // 5)
+    alias bound: UInt64 = (UInt64.MAX // 10 + 1)
 
     while True:
         var q = ror(m * minv5)
@@ -29,14 +29,13 @@ fn is_small_integer(m: UInt64, e: Int32) -> Bool:
 
 @always_inline
 fn div10(n: UInt64) -> UInt64:
-    alias a = UInt128(UInt64(-1) // 10 + 1)
+    alias a = UInt128(UInt64.MAX // 10 + 1)
     return UInt64((a * UInt128(n)) >> 64)
 
 
 @always_inline
 fn is_multiple_of_pow2(m: UInt64, e: Int32) -> Bool:
-    alias N = UInt64(-1)
-    return (m & ~(N << UInt64(e))) == 0
+    return (m & ~(UInt64.MAX << UInt64(e))) == 0
 
 
 alias LOG10_POW2_MAGIC_NUM = 1292913987
@@ -62,13 +61,14 @@ fn mshift(m: UInt64, u: UInt64, l: UInt64) -> UInt64:
 
 @always_inline
 fn is_tie(m: UInt64, f: Int32) -> Bool:
-    return Int32(0) <= f < Int32(len(MINIVERSE)) and is_multiple_of_pow5(m, f)
+    alias LEN_MINIVERSE = Int32(len(MINIVERSE))
+    return Int32(0) <= f < LEN_MINIVERSE and is_multiple_of_pow5(m, f)
 
 
 @always_inline
 fn is_multiple_of_pow5(n: UInt64, f: Int32) -> Bool:
     var p = MINIVERSE[f]
-    return UInt64(n * p[0]) <= p[1]
+    return n * p[0] <= p[1]
 
 
 @always_inline

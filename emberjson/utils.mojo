@@ -76,20 +76,6 @@ fn to_string(owned i: UInt32) -> String:
 
 
 @always_inline
-fn compare_bytes(l: ByteView[_], r: ByteView[_]) -> Bool:
-    if unlikely(len(l) != len(r)):
-        return False
-    return memcmp(l.unsafe_ptr(), r.unsafe_ptr(), len(l)) == 0
-
-
-@always_inline
-fn compare_simd[size: Int, //](s: ByteView[_], r: SIMD[DType.uint8, size]) -> Bool:
-    if unlikely(len(s) != size):
-        return False
-    return (s.unsafe_ptr().load[width=size]() == r).reduce_and()
-
-
-@always_inline
 fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: UnsafePointer[Byte]):
     """Copy bytes from a byte array directly into another value by doing a sketchy
     bitcast to get around the type system restrictions on the mojo stdlib memcpy.
