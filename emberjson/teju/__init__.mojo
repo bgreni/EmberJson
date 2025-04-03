@@ -52,7 +52,7 @@ fn write_f64[W: Writer](d: Float64, mut writer: W):
             writer.write("e-")
             exp = -exp
         else:
-            writer.write("e+")
+            writer.write("e")
         # Pad exponent with a 0 if less than two digits
         if exp < 10:
             writer.write("0")

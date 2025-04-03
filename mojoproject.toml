@@ -11,7 +11,7 @@ homepage = "https://github.com/bgreni/EmberJson"
 repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
-build = { cmd = "magic run template && magic run rattler-build build --recipe recipes -c https://conda.modular.com/max-nightly -c conda-forge --skip-existing=all", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"} }
+build = { cmd = "magic run rattler-build build --recipe recipes -c https://conda.modular.com/max-nightly -c conda-forge --skip-existing=all", env = {MODULAR_MOJO_IMPORT_PATH = "$CONDA_PREFIX/lib/mojo"}, depends-on=["template"] }
 template = { cmd = "magic run python3 scripts/templater.py" }
 format = { cmd = "magic run mojo format -l 120 emberjson test bench.mojo fuzz.mojo" }
 test = { cmd = "magic run clean ; magic run mojo test" }
@@ -19,7 +19,7 @@ bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
 clean = { cmd = "rm -r output &> /dev/null" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
 publish = { cmd = "./scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_KEY" }}
-precommit = { cmd = "magic run format && magic run test" }
+precommit = { depends-on = ["format", "test"] }
 update_and_test = "magic update && magic run test && magic run bench"
 
 [dependencies]
