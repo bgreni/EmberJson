@@ -9,6 +9,7 @@ alias EXPONENT_MIN: Int32 = -1074
 alias STORAGE_INDEX_OFFSET = -324
 
 
+@always_inline
 fn write_f64[W: Writer](d: Float64, mut writer: W):
     alias TOP_BIT = 1 << 63
     if bitcast[DType.uint64](d) & TOP_BIT != 0:
@@ -98,6 +99,7 @@ struct Fields:
     var exponent: Int32
 
 
+@always_inline
 fn teju(binary: Fields, out dec: Fields):
     var e = binary.exponent
     var m = binary.mantissa
@@ -177,6 +179,7 @@ fn teju(binary: Fields, out dec: Fields):
     return Fields(c + 1, f - 1)
 
 
+@always_inline
 fn f64_to_binary(d: Float64, out bin: Fields):
     var bits = bitcast[DType.uint64](d)
     alias k = MANTISSA_SIZE - 1

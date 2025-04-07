@@ -5,7 +5,6 @@ from utils import Variant
 from .constants import *
 from .traits import JsonValue, PrettyPrintable
 from collections import InlineArray
-from utils import StringSlice
 from memory import UnsafePointer
 from .simd import *
 from sys.intrinsics import unlikely, likely

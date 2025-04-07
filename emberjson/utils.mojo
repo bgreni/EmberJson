@@ -1,5 +1,5 @@
 from .constants import *
-from utils import Variant, StringSlice
+from utils import Variant
 from memory import Span
 from memory import memcmp, memcpy, UnsafePointer
 from utils.write import _WriteBufferStack
@@ -72,7 +72,7 @@ fn to_string(b: Byte) -> String:
 @always_inline
 fn to_string(owned i: UInt32) -> String:
     # This is meant to be a sequence of 4 characters
-    return to_string(UnsafePointer.address_of(i).bitcast[Byte]().load[width=4]())
+    return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
 
 
 @always_inline
@@ -80,7 +80,7 @@ fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: Unsaf
     """Copy bytes from a byte array directly into another value by doing a sketchy
     bitcast to get around the type system restrictions on the mojo stdlib memcpy.
     """
-    memcpy(UnsafePointer.address_of(dest).bitcast[Byte](), src, len)
+    memcpy(UnsafePointer(to=dest).bitcast[Byte](), src, len)
 
 
 @always_inline

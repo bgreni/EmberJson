@@ -87,7 +87,7 @@ struct _TreeKeyIter:
     @always_inline
     fn __next__(mut self, out p: UnsafePointer[String, mut=False]):
         self.seen += 1
-        p = UnsafePointer.address_of(self.curr[].key)
+        p = UnsafePointer(to=self.curr[].key)
         self.curr = _get_next(self.curr)
 
     @always_inline
@@ -112,7 +112,7 @@ struct _TreeValueIter:
     @always_inline
     fn __next__(mut self, out p: UnsafePointer[Value, mut=False]):
         self.seen += 1
-        p = UnsafePointer.address_of(self.curr[].data)
+        p = UnsafePointer(to=self.curr[].data)
         self.curr = _get_next(self.curr)
 
     @always_inline
