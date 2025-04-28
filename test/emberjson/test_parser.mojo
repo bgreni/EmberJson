@@ -4,7 +4,7 @@ from testing import *
 
 
 def test_parse():
-    var s = '{"key": 123}'
+    var s: String = '{"key": 123}'
     var p = Parser(s.unsafe_ptr(), len(s))
     var json = p.parse()
     _ = s

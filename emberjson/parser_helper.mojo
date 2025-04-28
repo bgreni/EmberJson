@@ -124,7 +124,7 @@ fn hex_to_u32(p: BytePtr) -> UInt32:
     return v.reduce_or()
 
 
-fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
+fn handle_unicode_codepoint(mut p: BytePtr, mut dest: String) raises:
     var c1 = hex_to_u32(p)
     p += 4
     if c1 >= 0xD800 and c1 < 0xDC00:
@@ -140,22 +140,22 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: Bytes) raises:
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) + 0x10000
         p += 4
     if c1 <= 0x7F:
-        dest.append(c1.cast[DType.uint8]())
+        dest.append_byte(c1.cast[DType.uint8]())
         return
     elif c1 <= 0x7FF:
-        dest.append(((c1 >> 6) + 192).cast[DType.uint8]())
-        dest.append(((c1 & 63) + 128).cast[DType.uint8]())
+        dest.append_byte(((c1 >> 6) + 192).cast[DType.uint8]())
+        dest.append_byte(((c1 & 63) + 128).cast[DType.uint8]())
         return
     elif c1 <= 0xFFFF:
-        dest.append(((c1 >> 12) + 224).cast[DType.uint8]())
-        dest.append((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
-        dest.append(((c1 & 63) + 128).cast[DType.uint8]())
+        dest.append_byte(((c1 >> 12) + 224).cast[DType.uint8]())
+        dest.append_byte((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
+        dest.append_byte(((c1 & 63) + 128).cast[DType.uint8]())
         return
     elif c1 <= 0x10FFFF:
-        dest.append(((c1 >> 18) + 240).cast[DType.uint8]())
-        dest.append((((c1 >> 12) & 63) + 128).cast[DType.uint8]())
-        dest.append((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
-        dest.append(((c1 & 63) + 128).cast[DType.uint8]())
+        dest.append_byte(((c1 >> 18) + 240).cast[DType.uint8]())
+        dest.append_byte((((c1 >> 12) & 63) + 128).cast[DType.uint8]())
+        dest.append_byte((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
+        dest.append_byte(((c1 & 63) + 128).cast[DType.uint8]())
         return
     else:
         raise Error("Invalid unicode")
@@ -171,7 +171,7 @@ fn copy_to_string[
     fn decode_unicode(out res: String) raises:
         # This will usually slightly overallocate if the string contains
         # escaped unicode
-        var l = Bytes(capacity=length + 1)
+        var l = String(capacity=length + 1)
         var p = start
 
         while p < end:
@@ -179,17 +179,15 @@ fn copy_to_string[
                 p += 2
                 handle_unicode_codepoint(p, l)
             else:
-                l.append(p[])
+                l.append_byte(p[])
                 p += 1
-        l.append(0)
-        res = String(l^)
+        l.append_byte(0)
+        res = l^
 
     @parameter
     fn bulk_copy(out res: String):
-        res = String()
-        res.reserve(length)
-        memcpy(res.unsafe_ptr(), start, length)
-        res._buffer._len = length + 1
+        var slice = StringSlice(ptr=start, length=length)
+        res = String(bytes=slice.as_bytes())
 
     @parameter
     if not ignore_unicode:
