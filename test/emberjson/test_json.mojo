@@ -157,16 +157,10 @@ def test_pretty_print_object():
 
 
 def test_trailing_tokens():
-    with assert_raises(
-        contains="Invalid json, expected end of input, recieved: garbage tokens"
-    ):
+    with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):
         _ = parse("[1, null, false] garbage tokens")
 
-    with assert_raises(
-        contains=(
-            'Invalid json, expected end of input, recieved: "trailing string"'
-        )
-    ):
+    with assert_raises(contains='Invalid json, expected end of input, recieved: "trailing string"'):
         _ = parse('{"key": null} "trailing string"')
 
 
@@ -344,9 +338,7 @@ def test_minify_citm_catalog():
     @parameter
     if files_enabled():
         with open("./bench_data/data/citm_catalog.json", "r") as formatted:
-            with open(
-                "./bench_data/data/citm_catalog_minify.json", "r"
-            ) as minified:
+            with open("./bench_data/data/citm_catalog_minify.json", "r") as minified:
                 assert_equal(minify(formatted.read()), minified.read())
 
 

@@ -464,8 +464,8 @@ fn minify(s: String, out out_str: String) raises:
     """
     alias padding = String(" ") * SIMD8_WIDTH
     var padded = String(s, padding)
-    var output = UnsafePointer[Byte].alloc(len(s)+1)
-    memset(output, 0, len(s)+1)
+    var output = UnsafePointer[Byte].alloc(len(s) + 1)
+    memset(output, 0, len(s) + 1)
     var curr_pos = output
 
     var ptr = padded.unsafe_ptr()
