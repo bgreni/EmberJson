@@ -5,7 +5,7 @@ from testing import *
 
 
 def test_bool():
-    var s = "false"
+    var s: String = "false"
     var v = Value.from_string(s)
     assert_true(v.isa[Bool]())
     assert_equal(v.get[Bool](), False)
@@ -20,7 +20,7 @@ def test_bool():
 
 
 def test_string():
-    var s = '"Some String"'
+    var s: String = '"Some String"'
     var v = Value.from_string(s)
     assert_true(v.isa[String]())
     assert_equal(v.get[String](), "Some String")
@@ -56,7 +56,7 @@ def test_string():
 
 
 def test_null():
-    var s = "null"
+    var s: String = "null"
     var v = Value.from_string(s)
     assert_true(v.isa[Null]())
     assert_equal(v.get[Null](), Null())
@@ -87,14 +87,14 @@ def test_integer():
 
 
 def test_integer_leading_plus():
-    v = Value.from_string("+123")
+    var v = Value.from_string("+123")
     assert_true(v.is_int())
     assert_equal(v.int(), 123)
     assert_equal(v.uint(), 123)
 
 
 def test_integer_negative():
-    v = Value.from_string("-123")
+    var v = Value.from_string("-123")
     assert_true(v.is_int())
     assert_equal(v.int(), -123)
     assert_equal(String(v), "-123")
@@ -102,7 +102,7 @@ def test_integer_negative():
 
 def test_signed_overflow_to_unsigned():
     var n = UInt64(Int64.MAX) + 100
-    v = Value.from_string(String(n))
+    var v = Value.from_string(String(n))
     assert_true(v.isa[UInt64]())
     assert_equal(v.uint(), n)
     assert_equal(String(v), String(n))
@@ -110,7 +110,7 @@ def test_signed_overflow_to_unsigned():
 
 
 def test_float():
-    v = Value.from_string("43.5")
+    var v = Value.from_string("43.5")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5)
     assert_equal(String(v), "43.5")
@@ -118,14 +118,14 @@ def test_float():
 
 
 def test_eight_digits_after_dot():
-    v = Value.from_string("342.12345678")
+    var v = Value.from_string("342.12345678")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 342.12345678)
     assert_equal(String(v), "342.12345678")
 
 
 def test_special_case_floats():
-    v = Value.from_string("2.2250738585072013e-308")
+    var v = Value.from_string("2.2250738585072013e-308")
     assert_almost_equal(v.float(), 2.2250738585072013e-308)
     assert_true(v.isa[Float64]())
 
@@ -153,25 +153,25 @@ def test_special_case_floats():
 
 
 def test_float_leading_plus():
-    v = Value.from_string("+43.5")
+    var v = Value.from_string("+43.5")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5)
 
 
 def test_float_negative():
-    v = Value.from_string("-43.5")
+    var v = Value.from_string("-43.5")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), -43.5)
 
 
 def test_float_exponent():
-    v = Value.from_string("43.5e10")
+    var v = Value.from_string("43.5e10")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 43.5e10)
 
 
 def test_float_exponent_negative():
-    v = Value.from_string("-43.5e10")
+    var v = Value.from_string("-43.5e10")
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), -43.5e10)
 
@@ -213,7 +213,7 @@ def test_implicit_conversion():
 
 def test_pretty():
     var v = Value.from_string("[123, 43564, false]")
-    var expected = """[
+    var expected: String = """[
     123,
     43564,
     false

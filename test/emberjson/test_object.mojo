@@ -109,7 +109,7 @@ def test_iter():
     ob["b"] = 123
     ob["c"] = 3.423
 
-    var keys = List("a", "b", "c")
+    var keys = List[String]("a", "b", "c")
 
     var i = 0
     for el in ob.keys():

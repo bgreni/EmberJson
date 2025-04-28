@@ -10,7 +10,10 @@ fn files_enabled() -> Bool:
 
 
 def test_minify():
-    assert_equal(minify('{"key": 123, "k": [123, false, [1, 2, 3]]}'), '{"key":123,"k":[123,false,[1,2,3]]}')
+    assert_equal(
+        minify('{"key": 123, "k": [123, false, [1, 2, 3]]}'),
+        '{"key":123,"k":[123,false,[1,2,3]]}',
+    )
 
 
 def test_reject_comment():
@@ -87,7 +90,7 @@ def test_stringify_array():
 
 def test_pretty_print_array():
     var arr = parse('[123,"foo",false,null]')
-    var expected = """[
+    var expected: String = """[
     123,
     "foo",
     false,
@@ -121,7 +124,7 @@ def test_pretty_print_object():
     var expected = """{
     "k1": null,
     "k2": 123
-}"""
+}""".as_string_slice()
     assert_equal(expected, write_pretty(ob))
 
     ob = parse('{"key": 123, "k": [123, false, null]}')
@@ -133,7 +136,7 @@ def test_pretty_print_object():
         null
     ],
     "key": 123
-}"""
+}""".as_string_slice()
 
     assert_equal(expected, write_pretty(ob))
 
@@ -149,15 +152,21 @@ def test_pretty_print_object():
         ]
     ],
     "key": 123
-}"""
+}""".as_string_slice()
     assert_equal(expected, write_pretty(ob))
 
 
 def test_trailing_tokens():
-    with assert_raises(contains="Invalid json, expected end of input, recieved: garbage tokens"):
+    with assert_raises(
+        contains="Invalid json, expected end of input, recieved: garbage tokens"
+    ):
         _ = parse("[1, null, false] garbage tokens")
 
-    with assert_raises(contains='Invalid json, expected end of input, recieved: "trailing string"'):
+    with assert_raises(
+        contains=(
+            'Invalid json, expected end of input, recieved: "trailing string"'
+        )
+    ):
         _ = parse('{"key": null} "trailing string"')
 
 
@@ -335,7 +344,9 @@ def test_minify_citm_catalog():
     @parameter
     if files_enabled():
         with open("./bench_data/data/citm_catalog.json", "r") as formatted:
-            with open("./bench_data/data/citm_catalog_minify.json", "r") as minified:
+            with open(
+                "./bench_data/data/citm_catalog_minify.json", "r"
+            ) as minified:
                 assert_equal(minify(formatted.read()), minified.read())
 
 

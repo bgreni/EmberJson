@@ -4,7 +4,9 @@ trait PrettyPrintable:
 
 
 trait JsonValue(
-    EqualityComparableCollectionElement,
+    EqualityComparable,
+    Copyable,
+    Movable,
     Writable,
     Stringable,
     Representable,
