@@ -1,6 +1,6 @@
 from .parser_helper import BytePtr, NEG, PLUS, ZERO_CHAR, isdigit, DOT, ptr_dist, is_exp_char, append_digit
 from .utils import branchless_ternary, unsafe_memcpy
-from collections import InlineArray
+from .utils import StackArray
 from memory.unsafe import bitcast
 from memory import UnsafePointer
 
@@ -19,7 +19,7 @@ struct Decimal:
     var decimal_point: Int32
     var truncated: Bool
     var negative: Bool
-    var digits: InlineArray[Byte, MAX_DIGITS, run_destructors=True]
+    var digits: StackArray[Byte, MAX_DIGITS]
 
     fn round(self) -> UInt64:
         if self.num_digits == 0 or self.decimal_point < 0:
@@ -181,7 +181,7 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
     alias MAX_SHIFT = 60
     alias NUM_POWERS = 19
-    alias POWERS = InlineArray[UInt8, NUM_POWERS](
+    alias POWERS = StackArray[UInt8, NUM_POWERS](
         0, 3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46, 49, 53, 56, 59
     )
 
@@ -244,7 +244,7 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
 
 fn parse_decimal(out answer: Decimal, mut p: BytePtr):
-    answer = Decimal(0, 0, False, p[] == NEG, InlineArray[Byte, MAX_DIGITS, run_destructors=True](0))
+    answer = Decimal(0, 0, False, p[] == NEG, StackArray[Byte, MAX_DIGITS](0))
 
     @parameter
     @always_inline
@@ -299,7 +299,7 @@ fn parse_decimal(out answer: Decimal, mut p: BytePtr):
         answer.decimal_point += branchless_ternary(neg_exp, -exp_number, exp_number)
 
 
-alias number_of_digits_decimal_left_shift_table = InlineArray[UInt16, 65](
+alias number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x0000,
     0x0800,
     0x0801,
@@ -367,7 +367,7 @@ alias number_of_digits_decimal_left_shift_table = InlineArray[UInt16, 65](
     0x051C,
 )
 
-alias number_of_digits_decimal_left_shift_table_powers_of_5 = InlineArray[UInt8, 0x051C](
+alias number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[UInt8, 0x051C](
     5,
     2,
     5,

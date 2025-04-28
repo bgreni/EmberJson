@@ -1,7 +1,7 @@
 from memory.unsafe import bitcast
 from .helpers import *
 from .tables import *
-from utils import StaticTuple
+from ..utils import StackArray
 from emberjson.format_int import write_int
 
 alias MANTISSA_SIZE: UInt64 = 53
@@ -26,7 +26,7 @@ fn write_f64[W: Writer](d: Float64, mut writer: W):
 
     var orig_sig = sig
     var abs_exp = abs(exp)
-    var digits = StaticTuple[UInt64, 21]()
+    var digits = StackArray[UInt64, 21](fill=0)
     var idx = 0
     while sig > 0:
         digits[idx] = sig % 10
@@ -57,7 +57,7 @@ fn write_f64[W: Writer](d: Float64, mut writer: W):
         # Pad exponent with a 0 if less than two digits
         if exp < 10:
             writer.write("0")
-        var exp_digits = StaticTuple[Int32, 10]()
+        var exp_digits = StackArray[Int32, 10](fill=0)
         var exp_idx = 0
         while exp > 0:
             exp_digits[exp_idx] = exp % 10

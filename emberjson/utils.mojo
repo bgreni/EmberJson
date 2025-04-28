@@ -18,6 +18,8 @@ alias DefaultPrettyIndent = 4
 
 alias WRITER_DEFAULT_SIZE = 4096
 
+alias StackArray = InlineArray[_, _, run_destructors=True]
+
 
 fn will_overflow(i: UInt64) -> Bool:
     return i > UInt64(Int64.MAX)
