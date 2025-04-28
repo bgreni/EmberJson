@@ -79,3 +79,8 @@ fn is_tie_uncentered(m_a: UInt64, f: Int32, out res: Bool):
 @always_inline
 fn is_div_pow2(val: UInt64, e: Int32, out res: Bool):
     return val & UInt64((1 << e) - 1) == 0
+
+
+@always_inline
+fn wins_tiebreak(val: UInt64, out res: Bool):
+    return val & 1 == 0

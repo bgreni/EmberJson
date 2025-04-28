@@ -125,11 +125,10 @@ fn teju(binary: Fields, out dec: Fields):
         var q = div10(b)
         var s = 10 * q
 
-        if s >= a:
-            if s == b:
-                if m & 1 == 0 or not is_tie(m_b, f):
-                    return remove_trailing_zeros(q, f + 1)
-            elif s > a or (m & 1 == 0 and is_tie(m_a, f)):
+        if a < s:
+            if s < b or wins_tiebreak(m) or not is_tie(m_b, f):
+                return remove_trailing_zeros(q, f + 1)
+            elif s == a and wins_tiebreak(m) and is_tie(m_a, f):
                 return remove_trailing_zeros(q, f + 1)
 
         if (a + b) & 1 == 1:
@@ -139,7 +138,7 @@ fn teju(binary: Fields, out dec: Fields):
         var c_2 = mshift(m_c, u, l)
         var c = c_2 // 2
 
-        if c_2 & 1 == 0 or (c & 1 == 0 and is_tie(c_2, -f)):
+        if wins_tiebreak(c_2) or (wins_tiebreak(c) and is_tie(c_2, -f)):
             return Fields(c, f)
         return Fields(c + 1, f)
 
@@ -152,7 +151,10 @@ fn teju(binary: Fields, out dec: Fields):
         var q = div10(b)
         var s = 10 * q
 
-        if s > a or (s == a and is_tie_uncentered(m_a, f)):
+        if a < s:
+            if s < b or wins_tiebreak(m_0) or not is_tie_uncentered(m_b, f):
+                return remove_trailing_zeros(q, f + 1)
+        elif s == a and wins_tiebreak(m_0) and is_tie_uncentered(m_a, f):
             return remove_trailing_zeros(q, f + 1)
 
         var log2_m_c = UInt64(MANTISSA_SIZE) + UInt64(r) + 1
@@ -162,7 +164,7 @@ fn teju(binary: Fields, out dec: Fields):
         if c == a and not is_tie_uncentered(m_a, f):
             return Fields(c + 1, f)
 
-        if c_2 & 1 == 0 or (c & 1 == 0 and is_tie(c_2, -f)):
+        if wins_tiebreak(c_2) or (wins_tiebreak(c) and is_tie(c_2, -f)):
             return Fields(c, f)
 
         return Fields(c + 1, f)
@@ -174,7 +176,7 @@ fn teju(binary: Fields, out dec: Fields):
     var c_2 = mshift(m_c, u, l)
     var c = c_2 // 2
 
-    if c_2 & 1 == 0 or c & 1 == 0 and is_tie(c_2, -f):
+    if wins_tiebreak(c_2) or (wins_tiebreak(c) and is_tie(c_2, -f)):
         return Fields(c, f - 1)
     return Fields(c + 1, f - 1)
 
