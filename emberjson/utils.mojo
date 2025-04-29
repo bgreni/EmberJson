@@ -25,7 +25,6 @@ fn will_overflow(i: UInt64) -> Bool:
     return i > UInt64(Int64.MAX)
 
 
-@always_inline
 fn write[T: JsonValue, //](out s: String, v: T):
     s = String()
     var writer = _WriteBufferStack[WRITER_DEFAULT_SIZE](s)

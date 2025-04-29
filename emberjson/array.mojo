@@ -7,6 +7,7 @@ from .parser import Parser
 
 
 @value
+@register_passable("trivial")
 struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True]:
     var index: Int
     var src: Pointer[Array, origin]

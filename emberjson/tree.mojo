@@ -50,6 +50,7 @@ struct TreeNode:
 
 
 @value
+@register_passable("trivial")
 struct _TreeIter:
     var curr: UnsafePointer[TreeNode]
     var seen: Int
@@ -75,6 +76,7 @@ struct _TreeIter:
 
 
 @value
+@register_passable("trivial")
 struct _TreeKeyIter:
     var curr: UnsafePointer[TreeNode]
     var seen: Int
@@ -100,6 +102,7 @@ struct _TreeKeyIter:
 
 
 @value
+@register_passable("trivial")
 struct _TreeValueIter:
     var curr: UnsafePointer[TreeNode]
     var seen: Int
