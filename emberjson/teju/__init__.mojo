@@ -4,6 +4,9 @@ from .tables import *
 from ..utils import StackArray
 from emberjson.format_int import write_int
 
+
+# Mojo port of the Teju Jagua algorithm https://github.com/cassioneri/teju_jagua
+
 alias MANTISSA_SIZE: UInt64 = 53
 alias EXPONENT_MIN: Int32 = -1074
 alias STORAGE_INDEX_OFFSET = -324
