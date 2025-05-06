@@ -3,7 +3,7 @@
 <!-- ![emberlogo](./image/ember_logo.jpeg) -->
 <image src='./image/ember_logo.jpeg' width='300'/>
 
-![license_badge](https://badgen.net/static/license/Apache2.0/blue)
+![license_badge](https://badgen.net/static/license/Apache-2.0/blue)
 ![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)
 
 A lightweight JSON parsing library for Mojo.
