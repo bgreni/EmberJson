@@ -1,6 +1,6 @@
 from emberjson import *
 from benchmark import *
-from json import loads
+from json import loads, dumps
 
 
 fn get_data(file: String) -> String:
@@ -127,21 +127,18 @@ fn main() raises:
 
 
     # json module doesn't export json value struct
+    run[benchmark_json_stringify_stdlib, "StringifyLarge"](stdlib, large_array)
+    run[benchmark_json_stringify_stdlib, "StringifyCanada"](stdlib, canada)    
+    run[benchmark_json_stringify_stdlib, "StringifyTwitter"](stdlib, twitter)
+    run[benchmark_json_stringify_stdlib, "StringifyCitmCatalog"](stdlib, catalog)
 
-    # run[benchmark_json_stringify_stdlib, "StringifyLarge"](stdlib, parse(large_array))
-    # run[benchmark_json_stringify_stdlib, "StringifyCanada"](stdlib, parse(canada))
-    # run[benchmark_json_stringify_stdlib, "StringifyTwitter"](stdlib, parse(twitter))
-    # run[benchmark_json_stringify_stdlib, "StringifyCitmCatalog"](stdlib, parse(catalog))
-
-    # run[benchmark_json_stringify_stdlib, "StringifyBool"](stdlib, False)
-    # run[benchmark_json_stringify_stdlib, "StringifyNull"](stdlib, None)
-    # # These should be the same so its more of a sanity check here
-    # run[benchmark_json_stringify_stdlib, "StringifyInt"](stdlib, Int64(12345))
-    # run[benchmark_json_stringify_stdlib, "StringifyUInt"](stdlib, UInt64(12345))
-    # run[benchmark_json_stringify_stdlib, "StringifyFloat"](stdlib, Float64(456.345))
-    # run[benchmark_json_stringify_stdlib, "StringifyString"](
-    #     stdlib, "some example string of short length, not all that long really"
-    # )
+    run[benchmark_json_stringify_stdlib, "StringifyBool"](stdlib, 'false')
+    run[benchmark_json_stringify_stdlib, "StringifyNull"](stdlib, 'null')
+    run[benchmark_json_stringify_stdlib, "StringifyInt"](stdlib, '12345')
+    run[benchmark_json_stringify_stdlib, "StringifyFloat"](stdlib, '456.345')
+    run[benchmark_json_stringify_stdlib, "StringifyString"](
+        stdlib, '"some example string of short length, not all that long really"'
+    )
 
     stdlib.dump_report()
 
@@ -155,14 +152,17 @@ fn benchmark_json_parse_stdlib(mut b: Bencher, s: String) raises:
 
     b.iter[do]()
 
-# @parameter
-# fn benchmark_json_stringify_stdlib(mut b: Bencher, json: JSONValue) raises:
-#     @always_inline
-#     @parameter
-#     fn do() raises:
-#         _ = dumps(json)
+@parameter
+fn benchmark_json_stringify_stdlib(mut b: Bencher, json: String) raises:
+    var ob = loads(json)
+    @always_inline
+    @parameter
+    fn do() raises:
+        _ = dumps(ob)
 
-#     b.iter[do]()
+    b.iter[do]()
+    _ = ob
+    
 
 
 @parameter
