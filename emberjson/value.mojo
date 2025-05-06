@@ -221,7 +221,7 @@ struct Value(JsonValue):
         return Bool(self)
 
     @always_inline
-    fn isa[T: CollectionElement](self) -> Bool:
+    fn isa[T: Movable & Copyable](self) -> Bool:
         constrain_json_type[T]()
         return self._data.isa[T]()
 
@@ -258,7 +258,7 @@ struct Value(JsonValue):
         return self.isa[Null]()
 
     @always_inline
-    fn get[T: CollectionElement](ref self) -> ref [self._data] T:
+    fn get[T: Movable & Copyable](ref self) -> ref [self._data] T:
         constrain_json_type[T]()
         return self._data[T]
 

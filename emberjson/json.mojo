@@ -186,7 +186,7 @@ struct JSON(JsonValue, Sized):
         return self.__str__()
 
     @always_inline
-    fn isa[T: CollectionElement](self) -> Bool:
+    fn isa[T: Movable & Copyable](self) -> Bool:
         return self._data.isa[T]()
 
     @always_inline

@@ -4,7 +4,7 @@ from os import abort
 
 
 @value
-struct TreeNode:
+struct TreeNode(Writable, Stringable, Representable):
     var data: Value
     var key: String
     var left: UnsafePointer[Self]
@@ -51,7 +51,7 @@ struct TreeNode:
 
 @value
 @register_passable("trivial")
-struct _TreeIter:
+struct _TreeIter(Sized):
     var curr: UnsafePointer[TreeNode]
     var seen: Int
     var total: Int
@@ -77,7 +77,7 @@ struct _TreeIter:
 
 @value
 @register_passable("trivial")
-struct _TreeKeyIter:
+struct _TreeKeyIter(Sized):
     var curr: UnsafePointer[TreeNode]
     var seen: Int
     var total: Int
@@ -103,7 +103,7 @@ struct _TreeKeyIter:
 
 @value
 @register_passable("trivial")
-struct _TreeValueIter:
+struct _TreeValueIter(Sized):
     var curr: UnsafePointer[TreeNode]
     var seen: Int
     var total: Int
@@ -127,7 +127,7 @@ struct _TreeValueIter:
         return self.total
 
 
-struct Tree(CollectionElement, Sized, ExplicitlyCopyable):
+struct Tree(Movable & Copyable, Sized, ExplicitlyCopyable, Writable, Stringable):
     alias NodePtr = UnsafePointer[TreeNode]
     var root: Self.NodePtr
     var size: UInt

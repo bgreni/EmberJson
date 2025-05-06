@@ -103,7 +103,7 @@ fn branchless_ternary(cond: Bool, t: Int, f: Int) -> Int:
     return (t * cond) | (f * ~cond)
 
 
-fn constrain_json_type[T: CollectionElement]():
+fn constrain_json_type[T: Movable & Copyable]():
     alias valid = _type_is_eq[T, Int64]() or _type_is_eq[T, UInt64]() or _type_is_eq[T, Float64]() or _type_is_eq[
         T, String
     ]() or _type_is_eq[T, Bool]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
