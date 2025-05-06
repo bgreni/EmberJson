@@ -4,7 +4,7 @@ channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
-version = "0.1.5"
+version = "0.1.6"
 license = "MIT"
 license-file = "LICENSE"
 homepage = "https://github.com/bgreni/EmberJson"
@@ -23,7 +23,8 @@ precommit = { depends-on = ["format", "test"] }
 update_and_test = "magic update && magic run test && magic run bench"
 
 [dependencies]
-max = ">=25.3.0.dev2025032705,<26"
+max = ">=25.4.0.dev2025050605,<26"
+
 
 
 [feature.fuzz.tasks]

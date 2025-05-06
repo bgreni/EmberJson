@@ -149,7 +149,7 @@ struct Decimal:
 
 
 @value
-@register_passable
+@register_passable("trivial")
 struct AdjustedMantissa:
     var mantissa: UInt64
     var power2: Int
