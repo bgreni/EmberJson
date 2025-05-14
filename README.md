@@ -5,6 +5,8 @@
 
 ![license_badge](https://badgen.net/static/license/Apache-2.0/blue)
 ![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)
+![CodeQL](https://github.com/bgreni/EmberJson/workflows/CodeQL/badge.svg)
+
 
 A lightweight JSON parsing library for Mojo.
 
