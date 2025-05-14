@@ -49,7 +49,7 @@ fn main() raises:
         @always_inline
         @parameter
         fn do() raises:
-            var p = Parser[ParseOptions(ignore_unicode=True)](s.unsafe_ptr(), len(s))
+            var p = Parser[__origin_of(s), ParseOptions(ignore_unicode=True)](s.unsafe_ptr(), len(s))
             _ = p.parse()
 
         b.iter[do]()
@@ -123,19 +123,20 @@ fn main() raises:
     run[benchmark_json_parse_stdlib, "ParseFloatLongDec"](stdlib, "453.456433232")
     run[benchmark_json_parse_stdlib, "ParseFloatExp"](stdlib, "4546.5E23")
     run[benchmark_json_parse_stdlib, "ParseFloatCoordinate"](stdlib, "[-57.94027699999998,54.923607000000004]")
-    run[benchmark_json_parse_stdlib, "ParseString"](stdlib, '"some example string of short length, not all that long really"')
-
+    run[benchmark_json_parse_stdlib, "ParseString"](
+        stdlib, '"some example string of short length, not all that long really"'
+    )
 
     # json module doesn't export json value struct
     run[benchmark_json_stringify_stdlib, "StringifyLarge"](stdlib, large_array)
-    run[benchmark_json_stringify_stdlib, "StringifyCanada"](stdlib, canada)    
+    run[benchmark_json_stringify_stdlib, "StringifyCanada"](stdlib, canada)
     run[benchmark_json_stringify_stdlib, "StringifyTwitter"](stdlib, twitter)
     run[benchmark_json_stringify_stdlib, "StringifyCitmCatalog"](stdlib, catalog)
 
-    run[benchmark_json_stringify_stdlib, "StringifyBool"](stdlib, 'false')
-    run[benchmark_json_stringify_stdlib, "StringifyNull"](stdlib, 'null')
-    run[benchmark_json_stringify_stdlib, "StringifyInt"](stdlib, '12345')
-    run[benchmark_json_stringify_stdlib, "StringifyFloat"](stdlib, '456.345')
+    run[benchmark_json_stringify_stdlib, "StringifyBool"](stdlib, "false")
+    run[benchmark_json_stringify_stdlib, "StringifyNull"](stdlib, "null")
+    run[benchmark_json_stringify_stdlib, "StringifyInt"](stdlib, "12345")
+    run[benchmark_json_stringify_stdlib, "StringifyFloat"](stdlib, "456.345")
     run[benchmark_json_stringify_stdlib, "StringifyString"](
         stdlib, '"some example string of short length, not all that long really"'
     )
@@ -152,9 +153,11 @@ fn benchmark_json_parse_stdlib(mut b: Bencher, s: String) raises:
 
     b.iter[do]()
 
+
 @parameter
 fn benchmark_json_stringify_stdlib(mut b: Bencher, json: String) raises:
     var ob = loads(json)
+
     @always_inline
     @parameter
     fn do() raises:
@@ -162,7 +165,6 @@ fn benchmark_json_stringify_stdlib(mut b: Bencher, json: String) raises:
 
     b.iter[do]()
     _ = ob
-    
 
 
 @parameter
@@ -173,6 +175,7 @@ fn benchmark_value_parse(mut b: Bencher, s: String) raises:
         _ = Value.from_string(s)
 
     b.iter[do]()
+
 
 @parameter
 fn benchmark_json_parse(mut b: Bencher, s: String) raises:

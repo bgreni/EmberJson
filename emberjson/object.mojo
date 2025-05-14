@@ -136,7 +136,7 @@ struct Object(Sized, JsonValue):
     @staticmethod
     @always_inline
     fn from_string(out o: Object, s: String) raises:
-        var p = Parser(s)
+        var p = Parser[__origin_of(s)](s)
         o = p.parse_object()
 
     @always_inline

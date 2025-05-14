@@ -1,5 +1,5 @@
 from .parser_helper import BytePtr, NEG, PLUS, ZERO_CHAR, isdigit, DOT, ptr_dist, is_exp_char, append_digit
-from .utils import branchless_ternary, unsafe_memcpy
+from .utils import branchless_ternary
 from .utils import StackArray
 from memory.unsafe import bitcast
 from memory import UnsafePointer

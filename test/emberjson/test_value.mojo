@@ -118,7 +118,7 @@ def test_float():
 
 
 def test_eight_digits_after_dot():
-    var v = Value.from_string("342.12345678")
+    var v = Value.from_string("[342.12345678]").array()[0]
     assert_true(v.isa[Float64]())
     assert_almost_equal(v.get[Float64](), 342.12345678)
     assert_equal(String(v), "342.12345678")

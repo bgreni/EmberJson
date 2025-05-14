@@ -33,13 +33,13 @@ struct ParseOptions:
         self.ignore_unicode = ignore_unicode
 
 
-struct Parser[options: ParseOptions = ParseOptions()]:
+struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
     var data: BytePtr
     var end: BytePtr
     var size: Int
 
     fn __init__(out self, s: String):
-        self = Self(s.unsafe_ptr(), len(s))
+        self = Self(s.unsafe_ptr(), s.byte_length())
 
     fn __init__(out self, b: BytePtr, size: Int):
         self.data = b
@@ -393,18 +393,15 @@ struct Parser[options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-
             if self.bytes_remaining() >= 8 and is_made_of_eight_digits_fast(p):
                 i = i * 100000000 + parse_eight_digits(p)
                 p += 8
-
             while parse_digit(p, i):
                 p += 1
             exponent = ptr_dist(p, first_after_period)
             if exponent == 0:
                 raise Error("Invalid number")
             digit_count = ptr_dist(start_digits, p)
-
         if is_exp_char(p[]):
             is_float = True
             p += 1

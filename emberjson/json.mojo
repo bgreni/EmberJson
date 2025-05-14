@@ -231,7 +231,7 @@ struct JSON(JsonValue, Sized):
         Returns:
             A parsed JSON document.
         """
-        var parser = Parser(input.unsafe_ptr(), len(input))
+        var parser = Parser[origin](input.unsafe_ptr(), len(input))
         data = parser.parse()
 
     @staticmethod
