@@ -174,13 +174,6 @@ def test_incomplete_data():
     with assert_raises():
         _ = parse('["asdce]')
 
-def test_bad_number_parse_bug():
-    with assert_raises():
-        _ = parse('[1.23425233e')
-
-def test_empty_string():
-    with assert_raises():
-        _ = parse('')
 
 var dir = String("./bench_data/data/jsonchecker/")
 

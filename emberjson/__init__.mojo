@@ -22,14 +22,8 @@ fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
     Raises:
         If an invalid JSON string is provided.
     """
-    if not s._capacity_or_data.has_nul_terminator():
-        var copy = s
-        var ptr = copy.unsafe_cstr_ptr().origin_cast[mut=False]().bitcast[Byte]()
-        var p = Parser[ptr.origin, options](ptr, copy.byte_length())
-        j = p.parse()
-    else:
-        var p = Parser[__origin_of(s), options](s)
-        j = p.parse()
+    var p = Parser[__origin_of(s), options](s)
+    j = p.parse()
 
 
 @always_inline
