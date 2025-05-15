@@ -133,11 +133,6 @@ struct Object(Sized, JsonValue):
     fn __repr__(self) -> String:
         return self.__str__()
 
-    @staticmethod
-    @always_inline
-    fn from_string(out o: Object, s: String) raises:
-        var p = Parser[__origin_of(s)](s)
-        o = p.parse_object()
 
     @always_inline
     fn to_dict(owned self, out d: Dict[String, Value]):

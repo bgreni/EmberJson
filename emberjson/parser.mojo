@@ -41,7 +41,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
     fn __init__(out self, s: String):
         self = Self(s.unsafe_ptr(), s.byte_length())
 
-    fn __init__(out self, b: BytePtr, size: Int):
+    fn __init__(out self, b: UnsafePointer[Byte, mut=False, origin=origin], size: Int):
         self.data = b
         self.size = size
         self.end = self.data + self.size
@@ -405,7 +405,6 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         if is_exp_char(p[]):
             is_float = True
             p += 1
-
             var neg_exp = p[] == NEG
             p += Int(neg_exp or p[] == PLUS)
 

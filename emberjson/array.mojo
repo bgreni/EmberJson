@@ -164,12 +164,6 @@ struct Array(Sized, JsonValue):
     fn append(mut self, owned item: Value):
         self._data.append(item^)
 
-    @staticmethod
-    @always_inline
-    fn from_string(out arr: Array, input: String) raises:
-        var p = Parser[__origin_of(input)](input)
-        arr = p.parse_array()
-
     fn to_list(owned self, out l: List[Value]):
         l = self._data^
         __disable_del self

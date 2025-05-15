@@ -1,13 +1,16 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
+from emberjson import parse
 from testing import *
 from collections import Dict
 
+def parse_object(s: String) -> Object:
+    return parse(s).object()
 
 def test_object():
     var s = '{"thing":123}'
-    var ob = Object.from_string(s)
+    var ob = parse_object(s)
     assert_true("thing" in ob)
     assert_equal(ob["thing"].int(), 123)
     assert_equal(String(ob), s)
@@ -26,14 +29,14 @@ def test_to_from_dict():
 
 def test_object_spaces():
     var s = '{ "Key" : "some value" }'
-    var ob = Object.from_string(s)
+    var ob = parse_object(s)
     assert_true("Key" in ob)
     assert_equal(ob["Key"].string(), "some value")
 
 
 def test_nested_object():
-    var s = '{"nested": { "foo": null } }"'
-    var ob = Object.from_string(s)
+    var s = '{"nested": { "foo": null } }'
+    var ob = parse_object(s)
     assert_true("nested" in ob)
     assert_true(ob["nested"].isa[Object]())
     assert_true(ob["nested"].object()["foo"].isa[Null]())
@@ -44,7 +47,7 @@ def test_nested_object():
 
 def test_arr_in_object():
     var s = '{"arr": [null, 2, "foo"]}'
-    var ob = Object.from_string(s)
+    var ob = parse_object(s)
     assert_true("arr" in ob)
     assert_true(ob["arr"].isa[Array]())
     assert_equal(ob["arr"].array()[0].null(), Null())
@@ -54,7 +57,7 @@ def test_arr_in_object():
 
 def test_multiple_keys():
     var s = '{"k1": 123, "k2": 456}'
-    var ob = Object.from_string(s)
+    var ob = parse_object(s)
     assert_true("k1" in ob)
     assert_true("k2" in ob)
     assert_equal(ob["k1"].int(), 123)
@@ -65,19 +68,19 @@ def test_multiple_keys():
 def test_invalid_key():
     var s = "{key: 123}"
     with assert_raises():
-        _ = Object.from_string(s)
+        _ = parse_object(s)
 
 
 def test_single_quote_identifier():
     var s = "'key': 123"
     with assert_raises():
-        _ = Object.from_string(s)
+        _ = parse_object(s)
 
 
 def test_single_quote_value():
     var s = "\"key\": '123'"
     with assert_raises():
-        _ = Object.from_string(s)
+        _ = parse_object(s)
 
 
 def test_equality():
@@ -93,7 +96,7 @@ def test_equality():
 
 def test_bad_value():
     with assert_raises():
-        _ = Object.from_string('{"key": nil}')
+        _ = parse_object('{"key": nil}')
 
 
 def test_write():
