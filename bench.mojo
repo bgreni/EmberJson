@@ -102,76 +102,13 @@ fn main() raises:
 
     m.dump_report()
 
-    var stdlib = Bench(config)
-
-    run[benchmark_json_parse_stdlib, "ParseTwitter"](stdlib, twitter)
-    run[benchmark_json_parse_stdlib, "ParseCitmCatalog"](stdlib, catalog)
-    run[benchmark_json_parse_stdlib, "ParseCanada"](stdlib, canada)
-
-    run[benchmark_json_parse_stdlib, "ParseSmall"](stdlib, small_data)
-    run[benchmark_json_parse_stdlib, "ParseMedium"](stdlib, medium_array)
-    run[benchmark_json_parse_stdlib, "ParseLarge"](stdlib, large_array)
-    run[benchmark_json_parse_stdlib, "ParseExtraLarge"](stdlib, data)
-
-    # Incorrect result
-    # run[benchmark_json_parse_stdlib, "ParseHeavyUnicode"](stdlib, unicode)
-
-    run[benchmark_json_parse_stdlib, "ParseBool"](stdlib, "false")
-    run[benchmark_json_parse_stdlib, "ParseNull"](stdlib, "null")
-    run[benchmark_json_parse_stdlib, "ParseInt"](stdlib, "12345")
-    run[benchmark_json_parse_stdlib, "ParseFloat"](stdlib, "453.45643")
-    run[benchmark_json_parse_stdlib, "ParseFloatLongDec"](stdlib, "453.456433232")
-    run[benchmark_json_parse_stdlib, "ParseFloatExp"](stdlib, "4546.5E23")
-    run[benchmark_json_parse_stdlib, "ParseFloatCoordinate"](stdlib, "[-57.94027699999998,54.923607000000004]")
-    run[benchmark_json_parse_stdlib, "ParseString"](
-        stdlib, '"some example string of short length, not all that long really"'
-    )
-
-    # json module doesn't export json value struct
-    run[benchmark_json_stringify_stdlib, "StringifyLarge"](stdlib, large_array)
-    run[benchmark_json_stringify_stdlib, "StringifyCanada"](stdlib, canada)
-    run[benchmark_json_stringify_stdlib, "StringifyTwitter"](stdlib, twitter)
-    run[benchmark_json_stringify_stdlib, "StringifyCitmCatalog"](stdlib, catalog)
-
-    run[benchmark_json_stringify_stdlib, "StringifyBool"](stdlib, "false")
-    run[benchmark_json_stringify_stdlib, "StringifyNull"](stdlib, "null")
-    run[benchmark_json_stringify_stdlib, "StringifyInt"](stdlib, "12345")
-    run[benchmark_json_stringify_stdlib, "StringifyFloat"](stdlib, "456.345")
-    run[benchmark_json_stringify_stdlib, "StringifyString"](
-        stdlib, '"some example string of short length, not all that long really"'
-    )
-
-    stdlib.dump_report()
-
-
-@parameter
-fn benchmark_json_parse_stdlib(mut b: Bencher, s: String) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = loads(s)
-
-    b.iter[do]()
-
-
-@parameter
-fn benchmark_json_stringify_stdlib(mut b: Bencher, json: String) raises:
-    var ob = loads(json)
-
-    @always_inline
-    @parameter
-    fn do() raises:
-        _ = dumps(ob)
-
-    b.iter[do]()
-    _ = ob
-
 
 @parameter
 fn benchmark_value_parse(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
+        var p = Parser[__origin_of(s)](s)
         _ = Value.from_string(s)
 
     b.iter[do]()
