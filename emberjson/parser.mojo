@@ -282,7 +282,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         var pow: Float64
         var neg_power = power < 0
 
-        pow = power_of_ten[Int(abs(power))]
+        pow = power_of_ten.unsafe_get(Int(abs(power)))
 
         d = d / pow if neg_power else d * pow
         if negative:
@@ -304,10 +304,10 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         var index = Int(2 * (power - smallest_power))
 
-        var first_product = full_multiplication(i, power_of_five_128[index])
+        var first_product = full_multiplication(i, power_of_five_128.unsafe_get(index))
 
         if unlikely(first_product[1] & 0x1FF == 0x1FF):
-            second_product = full_multiplication(i, power_of_five_128[index + 1])
+            second_product = full_multiplication(i, power_of_five_128.unsafe_get(index + 1))
             first_product[0] += second_product[1]
             if second_product[1] > first_product[0]:
                 first_product[1] += 1

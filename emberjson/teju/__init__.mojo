@@ -114,7 +114,7 @@ fn teju(binary: Fields, out dec: Fields):
     var r = log10_pow2_residual(e)
     var i = f - STORAGE_INDEX_OFFSET
 
-    var mult = MULTIPLIERS[i]
+    var mult = MULTIPLIERS.unsafe_get(i)
     var u = mult[0]
     var l = mult[1]
 

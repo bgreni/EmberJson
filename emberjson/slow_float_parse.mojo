@@ -35,10 +35,10 @@ struct Decimal:
 
         var round_up = False
         if dp < self.num_digits:
-            round_up = self.digits[dp] >= 5
+            round_up = self.digits.unsafe_get(dp) >= 5
 
-            if self.digits[dp] == 5 and dp + 1 == self.num_digits:
-                round_up = self.truncated or ((dp > 0) and Bool(1 & self.digits[dp - 1]))
+            if self.digits.unsafe_get(dp) == 5 and dp + 1 == self.num_digits:
+                round_up = self.truncated or ((dp > 0) and Bool(1 & self.digits.unsafe_get(dp - 1)))
         if round_up:
             n += 1
         return n
@@ -51,7 +51,7 @@ struct Decimal:
 
         while (n >> shift) == 0:
             if read_index < self.num_digits:
-                n = append_digit(n, self.digits[read_index])
+                n = append_digit(n, self.digits.unsafe_get(read_index))
                 read_index += 1
             elif n == 0:
                 return
@@ -70,16 +70,16 @@ struct Decimal:
         var mask: UInt64 = (UInt64(1) << shift) - 1
         while read_index < self.num_digits:
             var new_digit = (n >> shift).cast[DType.uint8]()
-            n = append_digit(n & mask, self.digits[read_index])
+            n = append_digit(n & mask, self.digits.unsafe_get(read_index))
             read_index += 1
-            self.digits[write_index] = new_digit
+            self.digits.unsafe_get(write_index) = new_digit
             write_index += 1
 
         while n > 0:
             var new_digit = (n >> shift).cast[DType.uint8]()
             n = 10 * (n & mask)
             if write_index < MAX_DIGITS:
-                self.digits[write_index] = new_digit
+                self.digits.unsafe_get(write_index) = new_digit
                 write_index += 1
             elif new_digit > 0:
                 self.truncated = True
@@ -95,11 +95,11 @@ struct Decimal:
         var n: UInt64 = 0
 
         while read_index >= 0:
-            n += self.digits[read_index].cast[DType.uint64]() << shift
+            n += self.digits.unsafe_get(read_index).cast[DType.uint64]() << shift
             var quotient = n / 10
             var remainder = n - (10 * quotient)
             if write_index < MAX_DIGITS:
-                self.digits[write_index] = UInt8(remainder)
+                self.digits.unsafe_get(write_index) = UInt8(remainder)
             elif remainder > 0:
                 self.truncated = True
             n = quotient
@@ -109,7 +109,7 @@ struct Decimal:
             var quotient = n / 10
             var remainder = n - (10 * quotient)
             if write_index < MAX_DIGITS:
-                self.digits[write_index] = UInt8(remainder)
+                self.digits.unsafe_get(write_index) = UInt8(remainder)
             elif remainder > 0:
                 self.truncated = True
             n = quotient
@@ -121,14 +121,14 @@ struct Decimal:
         self.trim()
 
     fn trim(mut self):
-        while self.num_digits > 0 and self.digits[self.num_digits - 1] == 0:
+        while self.num_digits > 0 and self.digits.unsafe_get(self.num_digits - 1) == 0:
             self.num_digits -= 1
 
     fn number_of_digits_decimal_left_shift(self, owned shift: UInt64) -> UInt32:
         shift &= 63
 
-        var x_a = number_of_digits_decimal_left_shift_table[shift].cast[DType.uint32]()
-        var x_b = number_of_digits_decimal_left_shift_table[shift + 1].cast[DType.uint32]()
+        var x_a = number_of_digits_decimal_left_shift_table.unsafe_get(shift).cast[DType.uint32]()
+        var x_b = number_of_digits_decimal_left_shift_table.unsafe_get(shift + 1).cast[DType.uint32]()
         var num_new_digits: UInt32 = x_a >> 11
         var pow5_a = 0x7FF & x_a
         var pow5_b = 0x7FF & x_b
@@ -138,9 +138,9 @@ struct Decimal:
         for i in range(pow5_b - pow5_a):
             if i >= self.num_digits:
                 return num_new_digits - 1
-            elif self.digits[i] == pow5[i]:
+            elif self.digits.unsafe_get(i) == pow5[i]:
                 continue
-            elif self.digits[i] < pow5[i]:
+            elif self.digits.unsafe_get(i) < pow5[i]:
                 return num_new_digits - 1
             else:
                 break
@@ -187,7 +187,7 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
     while d.decimal_point > 0:
         var n = d.decimal_point.cast[DType.uint32]()
-        var shift: UInt64 = select(n < NUM_POWERS, POWERS[n].cast[DType.uint64](), MAX_SHIFT)
+        var shift: UInt64 = select(n < NUM_POWERS, POWERS.unsafe_get(n).cast[DType.uint64](), MAX_SHIFT)
         d >>= shift
         if d.decimal_point < -DECIMAL_POINT_RANGE:
             return
@@ -196,12 +196,12 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
     while d.decimal_point <= 0:
         var shift: UInt64
         if d.decimal_point == 0:
-            if d.digits[0] >= 5:
+            if d.digits.unsafe_get(0) >= 5:
                 break
-            shift = select(d.digits[0] < 2, UInt64(2), UInt64(1))
+            shift = select(d.digits.unsafe_get(0) < 2, UInt64(2), UInt64(1))
         else:
             var n: UInt32 = UInt32(-d.decimal_point)
-            shift = select(n < NUM_POWERS, POWERS[n].cast[DType.uint64](), MAX_SHIFT)
+            shift = select(n < NUM_POWERS, POWERS.unsafe_get(n).cast[DType.uint64](), MAX_SHIFT)
 
         d <<= shift
 

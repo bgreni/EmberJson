@@ -67,7 +67,7 @@ fn is_tie(m: UInt64, f: Int32, out res: Bool):
 
 @always_inline
 fn is_multiple_of_pow5(n: UInt64, f: Int32, out res: Bool):
-    var p = MINIVERSE[f]
+    var p = MINIVERSE.unsafe_get(f)
     return n * p[0] <= p[1]
 
 
