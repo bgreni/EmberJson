@@ -61,7 +61,7 @@ fn mshift(m: UInt64, u: UInt64, l: UInt64, out res: UInt64):
 
 @always_inline
 fn is_tie(m: UInt64, f: Int32, out res: Bool):
-    alias LEN_MINIVERSE = Int32(len(MINIVERSE))
+    alias LEN_MINIVERSE = 27
     return Int32(0) <= f < LEN_MINIVERSE and is_multiple_of_pow5(m, f)
 
 
