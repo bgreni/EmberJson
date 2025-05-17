@@ -1,4 +1,4 @@
-from .utils import branchless_ternary
+from .utils import select
 
 
 fn do_write_int[W: Writer](v: Scalar, mut writer: W, neg: Bool):
@@ -9,7 +9,7 @@ fn do_write_int[W: Writer](v: Scalar, mut writer: W, neg: Bool):
     else:
         if v >= 10 or v <= -10:
             do_write_int(v / 10, writer, neg)
-    writer.write(branchless_ternary(neg, abs(v % -10), v % 10))
+    writer.write(select(neg, abs(v % -10), v % 10))
 
 
 @always_inline

@@ -332,7 +332,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 return
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
 
-            real_exponent = branchless_ternary(mantissa < (`1 << 52`), Int64(0), Int64(1))
+            real_exponent = select(mantissa < (`1 << 52`), Int64(0), Int64(1))
             return to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
 
         if unlikely(lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)):
@@ -426,14 +426,14 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 if p > start_exp + 18:
                     exp_number = 999999999999999999
 
-            exponent += branchless_ternary(neg_exp, -exp_number, exp_number)
+            exponent += select(neg_exp, -exp_number, exp_number)
 
         if is_float:
             v = self.write_float(neg, i, start_digits, digit_count, exponent)
             self.data = p
             return
 
-        var longest_digit_count = branchless_ternary(neg, 19, 20)
+        var longest_digit_count = select(neg, 19, 20)
         alias SIGNED_OVERFLOW = UInt64(Int64.MAX)
         alias `1` = to_byte("1")
         if digit_count > longest_digit_count:
@@ -450,7 +450,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         self.data = p
         if i > SIGNED_OVERFLOW:
             return i
-        return branchless_ternary(neg, Int64(~i + 1), Int64(i))
+        return select(neg, Int64(~i + 1), Int64(i))
 
 
 fn minify(s: String, out out_str: String) raises:

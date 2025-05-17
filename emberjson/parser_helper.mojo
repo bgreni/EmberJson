@@ -239,7 +239,7 @@ fn parse_eight_digits(out val: UInt64, p: BytePtr):
 @always_inline
 fn parse_digit(out dig: Bool, p: BytePtr, mut i: Scalar):
     dig = isdigit(p[])
-    i = branchless_ternary(dig, i * 10 + (p[] - ZERO_CHAR).cast[i.dtype](), i)
+    i = select(dig, i * 10 + (p[] - ZERO_CHAR).cast[i.dtype](), i)
 
 
 @always_inline

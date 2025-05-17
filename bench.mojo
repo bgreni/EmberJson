@@ -108,7 +108,6 @@ fn benchmark_value_parse(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        var p = Parser[__origin_of(s)](s)
         _ = Value.from_string(s)
 
     b.iter[do]()

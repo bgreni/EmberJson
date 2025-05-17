@@ -143,7 +143,7 @@ def test_special_case_floats():
 
     with assert_raises():
         # This is "infinite"
-        v = Value.from_string("10000000000000000000000000000000000000000000e+308")
+        _ = Value.from_string("10000000000000000000000000000000000000000000e+308")
 
     v = Value.from_string(String(Float64.MAX_FINITE))
     assert_equal(v.float(), Float64.MAX_FINITE)

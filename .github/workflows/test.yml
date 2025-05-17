@@ -5,6 +5,7 @@ on:
 
 jobs:
     test:
+        timeout-minutes: 10
         name: Run tests
         runs-on: ubuntu-latest
         steps:

@@ -8,6 +8,7 @@ from os import abort
 from sys import sizeof
 from sys.intrinsics import unlikely
 from sys.intrinsics import _type_is_eq
+from utils._select import _select_register_value as select
 
 alias Bytes = List[Byte, True]
 alias ByteVec = SIMD[DType.uint8, _]
@@ -18,7 +19,7 @@ alias DefaultPrettyIndent = 4
 
 alias WRITER_DEFAULT_SIZE = 4096
 
-alias StackArray = InlineArray[_, _, run_destructors=True]
+alias StackArray = InlineArray[_, _, run_destructors=False]
 
 
 fn will_overflow(i: UInt64) -> Bool:
@@ -82,25 +83,6 @@ fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: Unsaf
     bitcast to get around the type system restrictions on the mojo stdlib memcpy.
     """
     memcpy(UnsafePointer(to=dest).bitcast[Byte](), src, len)
-
-
-@always_inline
-fn branchless_ternary(cond: Bool, t: Scalar, f: Scalar[t.dtype]) -> Scalar[t.dtype]:
-    """Returns t if cond is True else f."""
-
-    # Trick doesn't work for floats since (-0.0 + 0.0) fails
-    constrained[t.dtype.is_integral(), "Expected an integral"]()
-    # One side of the `|` will always be zero so the returned result is just the
-    # other side.
-    return (t * Int(cond)) | (f * Int(~cond))
-
-
-@always_inline
-fn branchless_ternary(cond: Bool, t: Int, f: Int) -> Int:
-    """Returns t if cond is True else f."""
-    # One side of the `|` will always be zero so the returned result is just the
-    # other side.
-    return (t * cond) | (f * ~cond)
 
 
 fn constrain_json_type[T: Movable & Copyable]():

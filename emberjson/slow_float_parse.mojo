@@ -1,5 +1,5 @@
 from .parser_helper import BytePtr, NEG, PLUS, ZERO_CHAR, isdigit, DOT, ptr_dist, is_exp_char, append_digit
-from .utils import branchless_ternary
+from .utils import select
 from .utils import StackArray
 from memory.unsafe import bitcast
 from memory import UnsafePointer
@@ -31,7 +31,7 @@ struct Decimal:
         var n: UInt64 = 0
 
         for i in range(dp):
-            n = append_digit(n, branchless_ternary(i < self.num_digits, self.digits[i], 0))
+            n = append_digit(n, select(i < self.num_digits, self.digits[i], 0))
 
         var round_up = False
         if dp < self.num_digits:
@@ -165,7 +165,7 @@ fn from_chars_slow(out value: Float64, owned first: BytePtr) raises:
     var am = compute_float(parse_decimal(first))
     var word = am.mantissa
     word |= UInt64(am.power2) << MANTISSA_EXPLICIT_BITS
-    word = branchless_ternary(negative, word | (UInt64(1) << SIGN_INDEX), word)
+    word = select(negative, word | (UInt64(1) << SIGN_INDEX), word)
 
     value = bitcast[DType.float64](word)
 
@@ -187,7 +187,7 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
     while d.decimal_point > 0:
         var n = d.decimal_point.cast[DType.uint32]()
-        var shift: UInt64 = branchless_ternary(n < NUM_POWERS, POWERS[n].cast[DType.uint64](), MAX_SHIFT)
+        var shift: UInt64 = select(n < NUM_POWERS, POWERS[n].cast[DType.uint64](), MAX_SHIFT)
         d >>= shift
         if d.decimal_point < -DECIMAL_POINT_RANGE:
             return
@@ -198,10 +198,10 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
         if d.decimal_point == 0:
             if d.digits[0] >= 5:
                 break
-            shift = branchless_ternary(d.digits[0] < 2, UInt64(2), UInt64(1))
+            shift = select(d.digits[0] < 2, UInt64(2), UInt64(1))
         else:
             var n: UInt32 = UInt32(-d.decimal_point)
-            shift = branchless_ternary(n < NUM_POWERS, POWERS[n].cast[DType.uint64](), MAX_SHIFT)
+            shift = select(n < NUM_POWERS, POWERS[n].cast[DType.uint64](), MAX_SHIFT)
 
         d <<= shift
 
@@ -294,10 +294,10 @@ fn parse_decimal(out answer: Decimal, mut p: BytePtr):
             if exp_number < 0x10000:
                 exp_number = append_digit(exp_number, p[] - ZERO_CHAR)
             p += 1
-        answer.decimal_point += branchless_ternary(neg_exp, -exp_number, exp_number)
+        answer.decimal_point += select(neg_exp, -exp_number, exp_number)
 
 
-alias number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
+var number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x0000,
     0x0800,
     0x0801,
@@ -365,7 +365,7 @@ alias number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x051C,
 )
 
-alias number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[UInt8, 0x051C](
+var number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[UInt8, 0x051C](
     5,
     2,
     5,
