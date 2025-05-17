@@ -63,7 +63,7 @@ fn to_string(out s: String, v: ByteVec):
 
     @parameter
     for i in range(v.size):
-        s += to_string(v[i])
+        s.append_byte(v[i])
 
 
 @always_inline
