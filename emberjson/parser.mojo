@@ -362,9 +362,8 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             return from_chars_slow(self.data)
 
         if unlikely(exponent < smallest_power or exponent > largest_power):
-            if exponent < smallest_power or i == 0:
-                # can do branchless shenanigans here because -0.0 doesn't work then
-                return -0.0 if negative else 0.0
+            if likely(exponent < smallest_power or i == 0):
+                return select(negative, -0.0, 0.0)
             raise Error("Invalid number: inf")
 
         return self.compute_float64(exponent, i, negative)

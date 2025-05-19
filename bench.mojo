@@ -80,6 +80,7 @@ fn main() raises:
     run[benchmark_value_parse, "ParseFloat"](m, "453.45643")
     run[benchmark_value_parse, "ParseFloatLongDec"](m, "453.456433232")
     run[benchmark_value_parse, "ParseFloatExp"](m, "4546.5E23")
+    run[benchmark_value_parse, "ParseSlowFallback"](m, "3.1415926535897932384626433832795028841971693993751")
     run[benchmark_json_parse, "ParseFloatCoordinate"](m, "[-57.94027699999998,54.923607000000004]")
     run[benchmark_value_parse, "ParseString"](m, '"some example string of short length, not all that long really"')
 
