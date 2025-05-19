@@ -181,7 +181,6 @@ fn copy_to_string[
             else:
                 l.append_byte(p[])
                 p += 1
-        l.append_byte(0)
         res = l^
 
     @parameter
