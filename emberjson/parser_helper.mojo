@@ -109,10 +109,10 @@ struct StringBlock:
 
     @staticmethod
     @always_inline
-    fn find(out block: StringBlock, src: BytePtr):
+    fn find(src: BytePtr) -> StringBlock:
         var v = src.load[width=SIMD8_WIDTH]()
         alias LAST_ESCAPE_CHAR: UInt8 = 31
-        block = StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
+        return StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
 
 
 @always_inline
@@ -218,12 +218,12 @@ fn is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
 
 
 @always_inline
-fn to_double(out d: Float64, owned mantissa: UInt64, real_exponent: UInt64, negative: Bool):
+fn to_double(owned mantissa: UInt64, real_exponent: UInt64, negative: Bool) -> Float64:
     alias `1 << 52` = 1 << 52
     mantissa &= ~(`1 << 52`)
     mantissa |= real_exponent << 52
     mantissa |= Int(negative) << 63
-    d = bitcast[DType.float64](mantissa)
+    return bitcast[DType.float64](mantissa)
 
 
 @always_inline
