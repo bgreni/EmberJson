@@ -181,7 +181,7 @@ var dir = String("./bench_data/data/jsonchecker/")
 def expect_fail(datafile: String):
     @parameter
     if files_enabled():
-        with open(dir + datafile + ".json", "r") as f:
+        with open(String(dir, datafile, ".json"), "r") as f:
             with assert_raises():
                 var v = parse(f.read())
                 print(v)
@@ -190,7 +190,7 @@ def expect_fail(datafile: String):
 def expect_pass(datafile: String):
     @parameter
     if files_enabled():
-        with open(dir + datafile + ".json", "r") as f:
+        with open(String(dir, datafile, ".json"), "r") as f:
             _ = parse(f.read())
 
 
@@ -328,7 +328,7 @@ def round_trip_test(filename: String):
     @parameter
     if files_enabled():
         var d = String("./bench_data/data/roundtrip/")
-        with open(d + filename + ".json", "r") as f:
+        with open(String(d, filename, ".json"), "r") as f:
             var src = f.read()
             var json = parse(src)
             assert_equal(String(json), src)
