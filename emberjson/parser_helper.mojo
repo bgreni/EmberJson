@@ -1,6 +1,5 @@
 from .utils import *
 from memory import UnsafePointer
-from math import iota
 from .simd import *
 from .tables import *
 from memory import memcpy

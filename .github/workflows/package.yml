@@ -5,7 +5,7 @@ on:
 
 jobs:
   package:
-    timeout-minutes: 10
+    timeout-minutes: 30
     name: Package
     runs-on: ubuntu-latest
     steps:

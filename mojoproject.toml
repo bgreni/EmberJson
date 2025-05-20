@@ -28,7 +28,7 @@ max = ">=25.4.0.dev2025050605,<26"
 
 
 [feature.fuzz.tasks]
-fuzz = "magic run mojo fuzz.mojo"
+fuzz = "magic run mojo -D ASSERT=all fuzz.mojo"
 
 [feature.fuzz.dependencies]
 faker = ">=36.1.1,<37"
