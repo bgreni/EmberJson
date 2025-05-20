@@ -50,13 +50,17 @@ struct Null(JsonValue):
         writer.write(self.__str__())
 
     @always_inline
-    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    fn pretty_to[
+        W: Writer
+    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         writer.write(self)
 
 
 @value
 struct Value(JsonValue):
-    alias Type = Variant[Int64, UInt64, Float64, String, Bool, Object, Array, Null]
+    alias Type = Variant[
+        Int64, UInt64, Float64, String, Bool, Object, Array, Null
+    ]
     var _data: Self.Type
 
     @always_inline
@@ -168,7 +172,9 @@ struct Value(JsonValue):
         return self._data._get_discr() == other._data._get_discr()
 
     fn __eq__(self, other: Self) -> Bool:
-        if (self.is_int() or self.is_uint()) and (other.is_int() or other.is_uint()):
+        if (self.is_int() or self.is_uint()) and (
+            other.is_int() or other.is_uint()
+        ):
             if self.is_int():
                 if other.is_int() or not will_overflow(other.uint()):
                     return self.int() == other.int()
@@ -321,7 +327,9 @@ struct Value(JsonValue):
         elif self.isa[Array]():
             writer.write(self.array())
 
-    fn _pretty_to_as_element[W: Writer](self, mut writer: W, indent: String, curr_depth: Int):
+    fn _pretty_to_as_element[
+        W: Writer
+    ](self, mut writer: W, indent: String, curr_depth: Int):
         if self.isa[Object]():
             writer.write("{\n")
             self.object()._pretty_write_items(writer, indent, curr_depth + 1)
@@ -333,7 +341,9 @@ struct Value(JsonValue):
         else:
             self.write_to(writer)
 
-    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    fn pretty_to[
+        W: Writer
+    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         if self.isa[Object]():
             self.object().pretty_to(writer, indent, curr_depth=curr_depth)
         elif self.isa[Array]():

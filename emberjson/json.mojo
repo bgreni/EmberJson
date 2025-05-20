@@ -152,7 +152,9 @@ struct JSON(JsonValue, Sized):
         else:
             writer.write(self.array())
 
-    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    fn pretty_to[
+        W: Writer
+    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         """Write the pretty representation to a writer.
 
         Args:
@@ -222,7 +224,9 @@ struct JSON(JsonValue, Sized):
 
     @staticmethod
     @always_inline
-    fn from_bytes[origin: ImmutableOrigin, //](out data: JSON, input: ByteView[origin]) raises:
+    fn from_bytes[
+        origin: ImmutableOrigin, //
+    ](out data: JSON, input: ByteView[origin]) raises:
         """Parse JSON document from bytes.
 
         Raises:

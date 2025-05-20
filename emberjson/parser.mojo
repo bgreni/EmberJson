@@ -90,7 +90,10 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         self.skip_whitespace()
         if unlikely(self.has_more()):
-            raise Error("Invalid json, expected end of input, recieved: " + self.remaining())
+            raise Error(
+                "Invalid json, expected end of input, recieved: "
+                + self.remaining()
+            )
 
     fn parse_array(mut self, out arr: Array) raises:
         self.data += 1
@@ -197,24 +200,34 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value")
 
-    fn cont(mut self, start: BytePtr, found_unicode: Bool, out s: String) raises:
+    fn cont(
+        mut self, start: BytePtr, found_unicode: Bool, out s: String
+    ) raises:
         self.data += 1
         if self.data[] == U:
             self.data += 1
             return self.find(start, True)
         else:
             if unlikely(self.data[] not in acceptable_escapes):
-                raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
+                raise Error(
+                    "Invalid escape sequence: "
+                    + to_string(self.data[-1])
+                    + to_string(self.data[])
+                )
         self.data += 1
         if self.data[] == RSOL:
             return self.cont(start, found_unicode)
         return self.find(start, found_unicode)
 
-    fn find(mut self, start: BytePtr, found_unicode: Bool, out s: String) raises:
+    fn find(
+        mut self, start: BytePtr, found_unicode: Bool, out s: String
+    ) raises:
         var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
+            return copy_to_string[options.ignore_unicode](
+                start, self.data, found_unicode
+            )
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: "
@@ -239,18 +252,29 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 return
             else:
                 if self.data[] == QUOTE:
-                    s = copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
+                    s = copy_to_string[options.ignore_unicode](
+                        start, self.data, found_unicode
+                    )
                     self.data += 1
                     return
                 if self.data[] == RSOL:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
-                        raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
+                        raise Error(
+                            "Invalid escape sequence: "
+                            + to_string(self.data[-1])
+                            + to_string(self.data[])
+                        )
                     if self.data[] == U:
                         found_unicode = True
-                alias control_chars = ByteVec[4](NEWLINE, TAB, CARRIAGE, CARRIAGE)
+                alias control_chars = ByteVec[4](
+                    NEWLINE, TAB, CARRIAGE, CARRIAGE
+                )
                 if unlikely(self.data[] in control_chars):
-                    raise Error("Control characters must be escaped: " + String(self.data[]))
+                    raise Error(
+                        "Control characters must be escaped: "
+                        + String(self.data[])
+                    )
                 self.data += 1
         raise Error("Invalid String")
 
@@ -277,7 +301,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
     #####################################################################################################################
 
     @always_inline
-    fn compute_float_fast(self, out d: Float64, power: Int64, i: UInt64, negative: Bool):
+    fn compute_float_fast(
+        self, out d: Float64, power: Int64, i: UInt64, negative: Bool
+    ):
         d = Float64(i)
         var pow: Float64
         var neg_power = power < 0
@@ -289,7 +315,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             d = -d
 
     @always_inline
-    fn compute_float64(self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool) raises:
+    fn compute_float64(
+        self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool
+    ) raises:
         alias min_fast_power = Int64(-22)
         alias max_fast_power = Int64(22)
 
@@ -304,10 +332,14 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         var index = Int(2 * (power - smallest_power))
 
-        var first_product = full_multiplication(i, power_of_five_128.unsafe_get(index))
+        var first_product = full_multiplication(
+            i, power_of_five_128.unsafe_get(index)
+        )
 
         if unlikely(first_product[1] & 0x1FF == 0x1FF):
-            second_product = full_multiplication(i, power_of_five_128.unsafe_get(index + 1))
+            second_product = full_multiplication(
+                i, power_of_five_128.unsafe_get(index + 1)
+            )
             first_product[0] += second_product[1]
             if second_product[1] > first_product[0]:
                 first_product[1] += 1
@@ -322,7 +354,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         alias `152170 + 65536` = 152170 + 65536
         alias `1024 + 63` = 1024 + 63
 
-        var real_exponent: Int64 = (((`152170 + 65536`) * power) >> 16) + `1024 + 63` - lz.cast[DType.int64]()
+        var real_exponent: Int64 = (
+            ((`152170 + 65536`) * power) >> 16
+        ) + `1024 + 63` - lz.cast[DType.int64]()
 
         alias `1 << 52` = 1 << 52
 
@@ -333,9 +367,13 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
 
             real_exponent = select(mantissa < (`1 << 52`), Int64(0), Int64(1))
-            return to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
+            return to_double(
+                mantissa, real_exponent.cast[DType.uint64](), negative
+            )
 
-        if unlikely(lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)):
+        if unlikely(
+            lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)
+        ):
             alias `64 - 53 - 2` = 64 - 53 - 2
             if (mantissa << (upperbit + `64 - 53 - 2`)) == upper:
                 mantissa &= ~1
@@ -356,9 +394,17 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn write_float(
-        self, out v: Value, negative: Bool, i: UInt64, start_digits: BytePtr, digit_count: Int, exponent: Int64
+        self,
+        out v: Value,
+        negative: Bool,
+        i: UInt64,
+        start_digits: BytePtr,
+        digit_count: Int,
+        exponent: Int64,
     ) raises:
-        if unlikely(digit_count > 19 and significant_digits(self.data, digit_count) > 19):
+        if unlikely(
+            digit_count > 19 and significant_digits(self.data, digit_count) > 19
+        ):
             return from_chars_slow(self.data)
 
         if unlikely(exponent < smallest_power or exponent > largest_power):
@@ -381,7 +427,10 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         var digit_count = ptr_dist(start_digits, p)
 
-        if unlikely(digit_count == 0 or (start_digits[] == ZERO_CHAR and digit_count > 1)):
+        if unlikely(
+            digit_count == 0
+            or (start_digits[] == ZERO_CHAR and digit_count > 1)
+        ):
             raise Error("Invalid number")
 
         var exponent: Int64 = 0
@@ -507,7 +556,9 @@ fn minify(s: String, out out_str: String) raises:
         else:
             var chunk = ptr.load[width=SIMD8_WIDTH]()
             var quotes = pack_into_integer(chunk == QUOTE)
-            var valid_bits = Int(count_trailing_zeros(~get_non_space_bits(chunk)))
+            var valid_bits = Int(
+                count_trailing_zeros(~get_non_space_bits(chunk))
+            )
             if quotes != 0:
                 valid_bits = min(valid_bits, Int(count_trailing_zeros(quotes)))
             memcpy(curr_pos, ptr, valid_bits)

@@ -33,7 +33,9 @@ fn write[T: JsonValue, //](out s: String, v: T):
     writer.flush()
 
 
-fn write_pretty[P: PrettyPrintable, //](out s: String, v: P, indent: Variant[Int, String] = DefaultPrettyIndent):
+fn write_pretty[
+    P: PrettyPrintable, //
+](out s: String, v: P, indent: Variant[Int, String] = DefaultPrettyIndent):
     s = String()
     var writer = _WriteBufferStack[WRITER_DEFAULT_SIZE](s)
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
@@ -78,7 +80,9 @@ fn to_string(owned i: UInt32) -> String:
 
 
 @always_inline
-fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: UnsafePointer[Byte]):
+fn unsafe_memcpy[
+    T: AnyType, //, len: Int = sizeof[T]()
+](mut dest: T, src: UnsafePointer[Byte]):
     """Copy bytes from a byte array directly into another value by doing a sketchy
     bitcast to get around the type system restrictions on the mojo stdlib memcpy.
     """
@@ -86,7 +90,15 @@ fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: Unsaf
 
 
 fn constrain_json_type[T: Movable & Copyable]():
-    alias valid = _type_is_eq[T, Int64]() or _type_is_eq[T, UInt64]() or _type_is_eq[T, Float64]() or _type_is_eq[
-        T, String
-    ]() or _type_is_eq[T, Bool]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
+    alias valid = _type_is_eq[T, Int64]() or _type_is_eq[
+        T, UInt64
+    ]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
+        T, Bool
+    ]() or _type_is_eq[
+        T, Object
+    ]() or _type_is_eq[
+        T, Array
+    ]() or _type_is_eq[
+        T, Null
+    ]()
     constrained[valid, "Invalid type for JSON"]()

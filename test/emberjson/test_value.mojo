@@ -139,11 +139,15 @@ def test_special_case_floats():
 
     v = Value.from_string("3.1415926535897932384626433832795028841971693993751")
     assert_true(v.isa[Float64]())
-    assert_almost_equal(v.float(), 3.1415926535897932384626433832795028841971693993751)
+    assert_almost_equal(
+        v.float(), 3.1415926535897932384626433832795028841971693993751
+    )
 
     with assert_raises():
         # This is "infinite"
-        _ = Value.from_string("10000000000000000000000000000000000000000000e+308")
+        _ = Value.from_string(
+            "10000000000000000000000000000000000000000000e+308"
+        )
 
     v = Value.from_string(String(Float64.MAX_FINITE))
     assert_equal(v.float(), Float64.MAX_FINITE)
