@@ -98,7 +98,7 @@ struct CheckedPointer(Copyable, Comparable):
 
     @always_inline("nodebug")
     fn expect_remaining(self, i: Int):
-        debug_assert[assert_mode='safe'](
+        debug_assert(
             self.dist() + 1 >= i,
             "Expected at least: ",
             i,
