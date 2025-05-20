@@ -10,3 +10,4 @@ recipes/recipe.yaml
 **.DS_Store**
 playground.mojo
 .env
+emberjson.mojopkg

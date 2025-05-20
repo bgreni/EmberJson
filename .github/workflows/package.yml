@@ -15,4 +15,4 @@ jobs:
           run: |
             curl -ssL https://magic.modular.com | bash
             source $HOME/.bash_profile
-            magic run mojo package emberjson -o emberjson.mojopkg
+            magic run build
