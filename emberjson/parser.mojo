@@ -441,9 +441,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-            if p.dist() >= 8 and is_made_of_eight_digits_fast(
-                p.p
-            ):
+            if p.dist() >= 8 and is_made_of_eight_digits_fast(p.p):
                 i = i * 100000000 + parse_eight_digits(p.p)
                 p += 8
             while parse_digit(p, i):
