@@ -77,7 +77,7 @@ def gen_object_string() -> String:
 
     var l = gen_collection_len()
     for i in range(l):
-        s += String('"', gen_string(), '"') + ":" + String(gen_value())
+        s += String('"', gen_string(), '"', ":", gen_value())
         if i < l - 1:
             s += ","
 

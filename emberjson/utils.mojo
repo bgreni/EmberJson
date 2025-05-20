@@ -42,7 +42,7 @@ fn write_pretty[P: PrettyPrintable, //](out s: String, v: P, indent: Variant[Int
 
 
 @always_inline
-fn to_byte(s: String) -> Byte:
+fn to_byte(s: StringSlice) -> Byte:
     return Byte(ord(s))
 
 
@@ -52,29 +52,28 @@ fn is_space(char: Byte) -> Bool:
 
 
 @always_inline
-fn to_string(b: ByteView[_]) -> String:
-    var s = String(StringSlice(unsafe_from_utf8=b))
-    return s
-
-
-fn to_string(out s: String, v: ByteVec):
-    s = String()
-    s.reserve(v.size)
-
-    @parameter
-    for i in range(v.size):
-        s.append_byte(v[i])
+fn to_string(b: ByteView[_]) -> StringSlice[b.origin]:
+    return StringSlice(unsafe_from_utf8=b)
 
 
 @always_inline
-fn to_string(b: Byte) -> String:
-    return chr(Int(b))
+fn to_string(v: ByteVec, out res: StringSlice[ImmutableAnyOrigin]):
+    return __type_of(res)(
+        ptr=UnsafePointer(to=v).bitcast[Byte]().origin_cast[mut=False, origin=ImmutableAnyOrigin](), length=v.size
+    )
 
 
 @always_inline
-fn to_string(owned i: UInt32) -> String:
+fn to_string(b: Byte, out res: StringSlice[ImmutableAnyOrigin]):
+    return __type_of(res)(ptr=UnsafePointer(to=b).origin_cast[mut=False, origin=ImmutableAnyOrigin](), length=1)
+
+
+@always_inline
+fn to_string(i: UInt32, out res: StringSlice[ImmutableAnyOrigin]):
     # This is meant to be a sequence of 4 characters
-    return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
+    return __type_of(res)(
+        ptr=UnsafePointer(to=i).bitcast[Byte]().origin_cast[mut=False, origin=ImmutableAnyOrigin](), length=4
+    )
 
 
 @always_inline

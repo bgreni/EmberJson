@@ -90,7 +90,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         self.skip_whitespace()
         if unlikely(self.has_more()):
-            raise Error("Invalid json, expected end of input, recieved: " + self.remaining())
+            raise Error("Invalid json, expected end of input, recieved: ", self.remaining())
 
     fn parse_array(mut self, out arr: Array) raises:
         self.data += 1
@@ -128,7 +128,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 var ident = self.read_string()
                 self.skip_whitespace()
                 if unlikely(self.data[] != `:`):
-                    raise Error("Invalid identifier : " + self.remaining())
+                    raise Error("Invalid identifier : ", self.remaining())
                 self.data += 1
                 var v = self.parse_value()
                 self.skip_whitespace()
@@ -160,7 +160,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
             if w != TRUE:
-                raise Error("Expected 'true', received: " + to_string(w))
+                raise Error("Expected 'true', received: ", to_string(w))
             v = True
             self.data += 4
 
@@ -170,7 +170,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
             if w != ALSE:
-                raise Error("Expected 'false', received: " + to_string(w))
+                raise Error("Expected 'false', received: ", to_string(w))
             v = False
             self.data += 4
 
@@ -179,7 +179,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
             if w != NULL:
-                raise Error("Expected 'null', received: " + to_string(w))
+                raise Error("Expected 'null', received: ", to_string(w))
             v = Null()
             self.data += 4
 
@@ -204,7 +204,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             return self.find(start, True)
         else:
             if unlikely(self.data[] not in acceptable_escapes):
-                raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
+                raise Error("Invalid escape sequence: ", to_string(self.data[-1]), to_string(self.data[]))
         self.data += 1
         if self.data[] == `\\`:
             return self.cont(start, found_unicode)
@@ -217,10 +217,10 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             return copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
         if unlikely(block.has_unescaped()):
             raise Error(
-                "Control characters must be escaped: "
-                + to_string(self.load_chunk())
-                + " : "
-                + String(block.unescaped_index())
+                "Control characters must be escaped: ",
+                to_string(self.load_chunk()),
+                " : ",
+                String(block.unescaped_index()),
             )
         if not block.has_backslash():
             self.data += SIMD8_WIDTH
@@ -245,12 +245,12 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 if self.data[] == `\\`:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
-                        raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
+                        raise Error("Invalid escape sequence: ", to_string(self.data[-1]), to_string(self.data[]))
                     if self.data[] == U:
                         found_unicode = True
                 alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
                 if unlikely(self.data[] in control_chars):
-                    raise Error("Control characters must be escaped: " + String(self.data[]))
+                    raise Error("Control characters must be escaped: ", String(self.data[]))
                 self.data += 1
         raise Error("Invalid String")
 
