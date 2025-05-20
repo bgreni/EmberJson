@@ -117,8 +117,21 @@ fn main() raises:
     )
 
     run[benchmark_minify, "MinifyCitmCatalog"](m, catalog)
+    run[benchmark_pretty_print, "WritePrettyCitmCatalog"](m, parse(catalog))
+    run[benchmark_pretty_print, "WritePrettyTwitter"](m, parse(twitter))
+
 
     m.dump_report()
+
+
+@parameter
+fn benchmark_pretty_print(mut b: Bencher, s: JSON) raises:
+    @always_inline
+    @parameter
+    fn do():
+        _ = write_pretty(s)
+
+    b.iter[do]()
 
 
 @parameter

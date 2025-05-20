@@ -12,13 +12,10 @@ repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
 build = { cmd = "magic run mojo package emberjson -o emberjson.mojopkg" }
-template = { cmd = "magic run python3 scripts/templater.py" }
 format = { cmd = "magic run mojo format -l 80 emberjson test bench.mojo fuzz.mojo" }
-test = { cmd = "magic run clean ; magic run mojo test" }
+test = { cmd = "magic run mojo test" }
 bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
-clean = { cmd = "rm -r output &> /dev/null" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
-publish = { cmd = "./scripts/publish.sh", env = { PREFIX_API_KEY = "$PREFIX_API_KEY" }}
 precommit = { depends-on = ["format", "test"] }
 update_and_test = "magic update && magic run test && magic run bench"
 
