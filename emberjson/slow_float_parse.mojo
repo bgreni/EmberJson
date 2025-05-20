@@ -1,4 +1,14 @@
-from .parser_helper import BytePtr, NEG, PLUS, ZERO_CHAR, isdigit, DOT, ptr_dist, is_exp_char, append_digit
+from .parser_helper import (
+    BytePtr,
+    NEG,
+    PLUS,
+    ZERO_CHAR,
+    isdigit,
+    DOT,
+    ptr_dist,
+    is_exp_char,
+    append_digit,
+)
 from .utils import select
 from .utils import StackArray
 from memory.unsafe import bitcast
@@ -201,7 +211,11 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
             shift = select(d.digits.unsafe_get(0) < 2, UInt64(2), UInt64(1))
         else:
             var n: UInt32 = UInt32(-d.decimal_point)
-            shift = select(n < NUM_POWERS, POWERS.unsafe_get(n).cast[DType.uint64](), MAX_SHIFT)
+            shift = select(
+                n < NUM_POWERS,
+                POWERS.unsafe_get(n).cast[DType.uint64](),
+                MAX_SHIFT,
+            )
 
         d <<= shift
 

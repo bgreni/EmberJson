@@ -23,7 +23,7 @@ alias N = to_byte("n")
 alias R = to_byte("r")
 alias T = to_byte("t")
 alias U = to_byte("u")
-alias acceptable_escapes = ByteVec[16](QUOTE, RSOL, SOL, B, F, N, R, T, U, U, U, U, U, U, U, U)
+alias acceptable_escapes = ByteVec[16](`"`, `\\`, SOL, B, F, N, R, T, U, U, U, U, U, U, U, U)
 alias DOT = to_byte(".")
 alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
@@ -51,7 +51,7 @@ alias Bits_T = Scalar[_uint(SIMD8_WIDTH)]
 
 @always_inline
 fn get_non_space_bits(s: SIMD8xT) -> Bits_T:
-    var vec = (s == SPACE) | (s == NEWLINE) | (s == TAB) | (s == CARRIAGE)
+    var vec = (s == ` `) | (s == `\n`) | (s == `\t`) | (s == `\r`)
     return ~pack_into_integer(vec)
 
 
@@ -112,7 +112,7 @@ struct StringBlock:
     fn find(src: BytePtr) -> StringBlock:
         var v = src.load[width=SIMD8_WIDTH]()
         alias LAST_ESCAPE_CHAR: UInt8 = 31
-        return StringBlock(v == RSOL, v == QUOTE, v <= LAST_ESCAPE_CHAR)
+        return StringBlock(v == `\\`, v == `"`, v <= LAST_ESCAPE_CHAR)
 
 
 @always_inline
@@ -128,7 +128,7 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: String) raises:
     var c1 = hex_to_u32(p)
     p += 4
     if c1 >= 0xD800 and c1 < 0xDC00:
-        if unlikely(p[] != RSOL and (p + 1)[] != U):
+        if unlikely(p[] != `\\` and (p + 1)[] != U):
             raise Error("Bad unicode codepoint")
 
         p += 2
@@ -175,7 +175,7 @@ fn copy_to_string[
         var p = start
 
         while p < end:
-            if p[] == RSOL and p + 1 != end and (p + 1)[] == U:
+            if p[] == `\\` and p + 1 != end and (p + 1)[] == U:
                 p += 2
                 handle_unicode_codepoint(p, l)
             else:
@@ -200,7 +200,7 @@ fn copy_to_string[
 
 @always_inline
 fn is_exp_char(char: Byte) -> Bool:
-    return char == LOW_E or char == UPPER_E
+    return char == `e` or char == `E`
 
 
 @always_inline

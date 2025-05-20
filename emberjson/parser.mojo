@@ -80,10 +80,10 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
     fn parse(mut self, out json: JSON) raises:
         self.skip_whitespace()
-        var n = self.data[]
-        if n == LBRACKET:
+        var b = self.data[]
+        if b == `[`:
             json = self.parse_array()
-        elif n == LCURLY:
+        elif b == `{`:
             json = self.parse_object()
         else:
             raise Error("Invalid json")
@@ -97,16 +97,16 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
         arr = Array()
 
-        if unlikely(self.data[] != RBRACKET):
+        if unlikely(self.data[] != `]`):
             while True:
                 arr.append(self.parse_value())
                 self.skip_whitespace()
                 var has_comma = False
-                if self.data[] == COMMA:
+                if self.data[] == `,`:
                     self.data += 1
                     has_comma = True
                     self.skip_whitespace()
-                if self.data[] == RBRACKET:
+                if self.data[] == `]`:
                     if has_comma:
                         raise Error("Illegal trailing comma")
                     break
@@ -121,24 +121,24 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         self.data += 1
         self.skip_whitespace()
 
-        if unlikely(self.data[] != RCURLY):
+        if unlikely(self.data[] != `}`):
             while True:
-                if unlikely(self.data[] != QUOTE):
+                if unlikely(self.data[] != `"`):
                     raise Error("Invalid identifier")
                 var ident = self.read_string()
                 self.skip_whitespace()
-                if unlikely(self.data[] != COLON):
+                if unlikely(self.data[] != `:`):
                     raise Error("Invalid identifier : " + self.remaining())
                 self.data += 1
                 var v = self.parse_value()
                 self.skip_whitespace()
                 var has_comma = False
-                if self.data[] == COMMA:
+                if self.data[] == `,`:
                     self.data += 1
                     self.skip_whitespace()
                     has_comma = True
                 obj[ident^] = v^
-                if self.data[] == RCURLY:
+                if self.data[] == `}`:
                     if has_comma:
                         raise Error("Illegal trailing comma")
                     break
@@ -150,13 +150,13 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
     fn parse_value(mut self, out v: Value) raises:
         self.skip_whitespace()
-        var n = self.data[]
+        var b = self.data[]
         # Handle string
-        if n == QUOTE:
+        if b == `"`:
             v = self.read_string()
 
         # Handle "true" atom
-        elif n == T:
+        elif b == `t`:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
             if w != TRUE:
@@ -165,7 +165,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             self.data += 4
 
         # handle "false" atom
-        elif n == F:
+        elif b == `f`:
             self.data += 1
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
@@ -175,7 +175,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             self.data += 4
 
         # handle "null" atom
-        elif n == N:
+        elif b == `n`:
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data)
             if w != NULL:
@@ -184,15 +184,15 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             self.data += 4
 
         # handle object
-        elif n == LCURLY:
+        elif b == `{`:
             v = self.parse_object()
 
         # handle array
-        elif n == LBRACKET:
+        elif b == `[`:
             v = self.parse_array()
 
         # handle number
-        elif is_numerical_component(n):
+        elif is_numerical_component(b):
             v = self.parse_number()
         else:
             raise Error("Invalid json value")
@@ -206,7 +206,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             if unlikely(self.data[] not in acceptable_escapes):
                 raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
         self.data += 1
-        if self.data[] == RSOL:
+        if self.data[] == `\\`:
             return self.cont(start, found_unicode)
         return self.find(start, found_unicode)
 
@@ -238,17 +238,17 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 self.data += 1
                 return
             else:
-                if self.data[] == QUOTE:
+                if self.data[] == `"`:
                     s = copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
                     self.data += 1
                     return
-                if self.data[] == RSOL:
+                if self.data[] == `\\`:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
                         raise Error("Invalid escape sequence: " + to_string(self.data[-1]) + to_string(self.data[]))
                     if self.data[] == U:
                         found_unicode = True
-                alias control_chars = ByteVec[4](NEWLINE, TAB, CARRIAGE, CARRIAGE)
+                alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
                 if unlikely(self.data[] in control_chars):
                     raise Error("Control characters must be escaped: " + String(self.data[]))
                 self.data += 1
@@ -356,7 +356,13 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn write_float(
-        self, out v: Value, negative: Bool, i: UInt64, start_digits: BytePtr, digit_count: Int, exponent: Int64
+        self,
+        out v: Value,
+        negative: Bool,
+        i: UInt64,
+        start_digits: BytePtr,
+        digit_count: Int,
+        exponent: Int64,
     ) raises:
         if unlikely(digit_count > 19 and significant_digits(self.data, digit_count) > 19):
             return from_chars_slow(self.data)
@@ -480,7 +486,7 @@ fn minify(s: String, out out_str: String) raises:
         var trailing = count_trailing_zeros(bits)
         ptr += trailing
 
-        if ptr[] == QUOTE:
+        if ptr[] == `"`:
             var p = ptr
             p += 1
             var block = StringBlock.find(p)
@@ -506,7 +512,7 @@ fn minify(s: String, out out_str: String) raises:
 
         else:
             var chunk = ptr.load[width=SIMD8_WIDTH]()
-            var quotes = pack_into_integer(chunk == QUOTE)
+            var quotes = pack_into_integer(chunk == `"`)
             var valid_bits = Int(count_trailing_zeros(~get_non_space_bits(chunk)))
             if quotes != 0:
                 valid_bits = min(valid_bits, Int(count_trailing_zeros(quotes)))
