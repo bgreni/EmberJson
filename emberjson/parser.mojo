@@ -462,20 +462,29 @@ fn minify(s: String, out out_str: String) raises:
     """Removes whitespace characters from JSON string.
 
     Returns:
-        A copy of the input string will all whitespace characters removed.
+        A copy of the input string with all whitespace characters removed.
     """
-    alias padding = String(" ") * SIMD8_WIDTH
-    var padded = String(s, padding)
-    var output = UnsafePointer[Byte].alloc(len(s) + 1)
-    memset(output, 0, len(s) + 1)
-    var curr_pos = output
+    var s_len = s.byte_length()
+    out_str = String(capacity=s_len)
 
-    var ptr = padded.unsafe_ptr()
-    var end = ptr + len(s)
-    var written = 0
+    var ptr = s.unsafe_ptr()
+    var end = ptr + s_len
+
+    @always_inline
+    @parameter
+    fn _load_chunk(p: __type_of(ptr), cond: Bool) -> SIMD[DType.uint8, SIMD8_WIDTH]:
+        if cond:
+            return ptr.load[width=SIMD8_WIDTH]()
+        else:
+            var chunk = SIMD[DType.uint8, SIMD8_WIDTH](` `)
+
+            for i in range(Int(end) - Int(ptr)):
+                chunk[i] = ptr[i]
+            return chunk
 
     while ptr < end:
-        var chunk = ptr.load[width=SIMD8_WIDTH]()
+        var is_block_iter = likely(ptr + SIMD8_WIDTH < end)
+        var chunk = _load_chunk(ptr, is_block_iter)
 
         var bits = get_non_space_bits(chunk)
         while bits == 0 and ptr < end:
@@ -490,7 +499,7 @@ fn minify(s: String, out out_str: String) raises:
             var p = ptr
             p += 1
             var block = StringBlock.find(p)
-            var length = 1
+            var length = UInt(1)
 
             while not block.has_quote_first() and p < end:
                 if unlikely(block.has_unescaped()):
@@ -500,25 +509,21 @@ fn minify(s: String, out out_str: String) raises:
                     length += ind
                     p += ind
                 else:
-                    length += SIMD8_WIDTH
-                    p += SIMD8_WIDTH
+                    var ind = SIMD8_WIDTH if is_block_iter else (Int(end) - Int(ptr))
+                    length += ind
+                    p += ind
                 block = StringBlock.find(p)
 
-            length += Int(block.quote_index()) + 1
-            memcpy(curr_pos, ptr, length)
-            written += length
+            length += UInt(block.quote_index() + 1)
+            out_str += StringSlice[ptr.origin](ptr=ptr, length=length)
             ptr += length
-            curr_pos += length
 
         else:
-            var chunk = ptr.load[width=SIMD8_WIDTH]()
-            var quotes = pack_into_integer(chunk == `"`)
-            var valid_bits = Int(count_trailing_zeros(~get_non_space_bits(chunk)))
-            if quotes != 0:
-                valid_bits = min(valid_bits, Int(count_trailing_zeros(quotes)))
-            memcpy(curr_pos, ptr, valid_bits)
-            written += valid_bits
-            ptr += valid_bits
-            curr_pos += valid_bits
+            var chunk = _load_chunk(ptr, is_block_iter)
 
-    out_str = String(unsafe_from_utf8_ptr=output)
+            var quotes = pack_into_integer(chunk == `"`)
+            var valid_bits = count_trailing_zeros(~get_non_space_bits(chunk))
+            if quotes != 0:
+                valid_bits = min(valid_bits, count_trailing_zeros(quotes))
+            out_str += StringSlice[ptr.origin](ptr=ptr, length=UInt(valid_bits))
+            ptr += valid_bits

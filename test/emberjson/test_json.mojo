@@ -11,7 +11,7 @@ fn files_enabled() -> Bool:
 
 def test_minify():
     assert_equal(
-        minify('{"key": 123, "k": [123, false, [1, 2, 3]]}'),
+        minify('{"key"\r\n: \t123\n, "k": \r\t[123, false, [1, \r2,   3]]}'),
         '{"key":123,"k":[123,false,[1,2,3]]}',
     )
 
