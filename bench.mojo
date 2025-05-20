@@ -120,7 +120,6 @@ fn main() raises:
     run[benchmark_pretty_print, "WritePrettyCitmCatalog"](m, parse(catalog))
     run[benchmark_pretty_print, "WritePrettyTwitter"](m, parse(twitter))
 
-
     m.dump_report()
 
 

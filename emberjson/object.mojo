@@ -112,17 +112,19 @@ struct Object(Sized, JsonValue):
 
     fn pretty_to[
         W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         writer.write("{\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("}")
 
     fn _pretty_write_items[
         W: Writer
-    ](self, mut writer: W, indent: String, curr_depth: Int):
+    ](self, mut writer: W, indent: String, curr_depth: UInt):
         var done = 0
         for item in self._data:
-            writer.write(indent * curr_depth, '"', item[].key, '"', ": ")
+            for _ in range(curr_depth):
+                writer.write(indent)
+            writer.write('"', item[].key, '"', ": ")
             item[].data._pretty_to_as_element(writer, indent, curr_depth)
             if done < len(self._data) - 1:
                 writer.write(",")

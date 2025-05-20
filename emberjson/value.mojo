@@ -52,7 +52,7 @@ struct Null(JsonValue):
     @always_inline
     fn pretty_to[
         W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         writer.write(self)
 
 
@@ -329,21 +329,25 @@ struct Value(JsonValue):
 
     fn _pretty_to_as_element[
         W: Writer
-    ](self, mut writer: W, indent: String, curr_depth: Int):
+    ](self, mut writer: W, indent: String, curr_depth: UInt):
         if self.isa[Object]():
             writer.write("{\n")
             self.object()._pretty_write_items(writer, indent, curr_depth + 1)
-            writer.write(indent * curr_depth, "}")
+            for _ in range(curr_depth):
+                writer.write(indent)
+            writer.write("}")
         elif self.isa[Array]():
             writer.write("[\n")
             self.array()._pretty_write_items(writer, indent, curr_depth + 1)
-            writer.write(indent * curr_depth, "]")
+            for _ in range(curr_depth):
+                writer.write(indent)
+            writer.write("]")
         else:
             self.write_to(writer)
 
     fn pretty_to[
         W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         if self.isa[Object]():
             self.object().pretty_to(writer, indent, curr_depth=curr_depth)
         elif self.isa[Array]():

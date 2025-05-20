@@ -154,7 +154,7 @@ struct JSON(JsonValue, Sized):
 
     fn pretty_to[
         W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         """Write the pretty representation to a writer.
 
         Args:
