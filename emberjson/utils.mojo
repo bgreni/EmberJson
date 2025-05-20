@@ -9,11 +9,103 @@ from sys import sizeof
 from sys.intrinsics import unlikely
 from sys.intrinsics import _type_is_eq
 from utils._select import _select_register_value as select
+from .parser_helper import ptr_dist
+from .simd import SIMD8xT, SIMD8_WIDTH
 
 alias Bytes = List[Byte, True]
 alias ByteVec = SIMD[DType.uint8, _]
 alias ByteView = Span[Byte, _]
 alias BytePtr = UnsafePointer[Byte, mut=False]
+
+
+@fieldwise_init
+@register_passable("trivial")
+struct CheckedPointer(Copyable, Comparable):
+    var p: BytePtr
+    var end: BytePtr
+
+    @always_inline("nodebug")
+    fn __add__(self, v: Int) -> Self:
+        return {self.p + v, self.end}
+
+    @always_inline("nodebug")
+    fn __iadd__(mut self, v: Int):
+        self.p += v
+
+    @always_inline("nodebug")
+    fn __eq__(self, other: Self) -> Bool:
+        return self.p == other.p
+
+    @always_inline("nodebug")
+    fn __ne__(self, other: Self) -> Bool:
+        return self.p != other.p
+
+    @always_inline("nodebug")
+    fn __gt__(self, other: Self) -> Bool:
+        return self.p > other.p
+
+    @always_inline("nodebug")
+    fn __lt__(self, other: Self) -> Bool:
+        return self.p < other.p
+
+    @always_inline("nodebug")
+    fn __ge__(self, other: Self) -> Bool:
+        return self.p >= other.p
+
+    @always_inline("nodebug")
+    fn __le__(self, other: Self) -> Bool:
+        return self.p <= other.p
+
+    @always_inline("nodebug")
+    fn __add__(self, v: SIMD) -> Self:
+        constrained[v.dtype.is_integral()]()
+        return {self.p + v, self.end}
+
+    @always_inline("nodebug")
+    fn __iadd__(mut self, v: SIMD):
+        constrained[v.dtype.is_integral()]()
+        self.p += v
+
+    @always_inline("nodebug")
+    fn __sub__(self, i: Int) -> Self:
+        return {self.p - i, self.end}
+
+    @always_inline("nodebug")
+    fn __isub__(mut self, i: Int):
+        self.p -= i
+
+    @always_inline("nodebug")
+    fn __getitem__(
+        ref self,
+    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+        self.expect_remaining(1)
+        return self.p[]
+
+    @always_inline("nodebug")
+    fn __getitem__(
+        ref self, i: Int
+    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+        self.expect_remaining(1 + i)
+        return self.p[i]
+
+    @always_inline("nodebug")
+    fn dist(self) -> Int:
+        return ptr_dist(self.p, self.end)
+
+    @always_inline("nodebug")
+    fn load_chunk(self) -> SIMD8xT:
+        return self.p.load[width=SIMD8_WIDTH]()
+
+    @always_inline("nodebug")
+    fn expect_remaining(self, i: Int):
+        debug_assert[assert_mode='safe'](
+            self.dist() + 1 >= i,
+            "Expected at least: ",
+            i,
+            " bytes remaining, received: ",
+            self.dist() + 1,
+        )
+
 
 alias DefaultPrettyIndent = 4
 
@@ -33,7 +125,9 @@ fn write[T: JsonValue, //](out s: String, v: T):
     writer.flush()
 
 
-fn write_pretty[P: PrettyPrintable, //](out s: String, v: P, indent: Variant[Int, String] = DefaultPrettyIndent):
+fn write_pretty[
+    P: PrettyPrintable, //
+](out s: String, v: P, indent: Variant[Int, String] = DefaultPrettyIndent):
     s = String()
     var writer = _WriteBufferStack[WRITER_DEFAULT_SIZE](s)
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
@@ -52,32 +146,34 @@ fn is_space(char: Byte) -> Bool:
 
 
 @always_inline
-fn to_string(b: ByteView[_]) -> StringSlice[b.origin]:
-    return StringSlice(unsafe_from_utf8=b)
+fn to_string(b: ByteView[_]) -> String:
+    return String(StringSlice(unsafe_from_utf8=b))
+
+
+fn to_string(out s: String, v: ByteVec):
+    s = String()
+    s.reserve(v.size)
+
+    @parameter
+    for i in range(v.size):
+        s.append_byte(v[i])
 
 
 @always_inline
-fn to_string(v: ByteVec, out res: StringSlice[ImmutableAnyOrigin]):
-    return __type_of(res)(
-        ptr=UnsafePointer(to=v).bitcast[Byte]().origin_cast[mut=False, origin=ImmutableAnyOrigin](), length=v.size
-    )
+fn to_string(b: Byte) -> String:
+    return chr(Int(b))
 
 
 @always_inline
-fn to_string(b: Byte, out res: StringSlice[ImmutableAnyOrigin]):
-    return __type_of(res)(ptr=UnsafePointer(to=b).origin_cast[mut=False, origin=ImmutableAnyOrigin](), length=1)
-
-
-@always_inline
-fn to_string(i: UInt32, out res: StringSlice[ImmutableAnyOrigin]):
+fn to_string(owned i: UInt32) -> String:
     # This is meant to be a sequence of 4 characters
-    return __type_of(res)(
-        ptr=UnsafePointer(to=i).bitcast[Byte]().origin_cast[mut=False, origin=ImmutableAnyOrigin](), length=4
-    )
+    return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
 
 
 @always_inline
-fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: UnsafePointer[Byte]):
+fn unsafe_memcpy[
+    T: AnyType, //, len: Int = sizeof[T]()
+](mut dest: T, src: UnsafePointer[Byte]):
     """Copy bytes from a byte array directly into another value by doing a sketchy
     bitcast to get around the type system restrictions on the mojo stdlib memcpy.
     """
@@ -85,7 +181,15 @@ fn unsafe_memcpy[T: AnyType, //, len: Int = sizeof[T]()](mut dest: T, src: Unsaf
 
 
 fn constrain_json_type[T: Movable & Copyable]():
-    alias valid = _type_is_eq[T, Int64]() or _type_is_eq[T, UInt64]() or _type_is_eq[T, Float64]() or _type_is_eq[
-        T, String
-    ]() or _type_is_eq[T, Bool]() or _type_is_eq[T, Object]() or _type_is_eq[T, Array]() or _type_is_eq[T, Null]()
+    alias valid = _type_is_eq[T, Int64]() or _type_is_eq[
+        T, UInt64
+    ]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
+        T, Bool
+    ]() or _type_is_eq[
+        T, Object
+    ]() or _type_is_eq[
+        T, Array
+    ]() or _type_is_eq[
+        T, Null
+    ]()
     constrained[valid, "Invalid type for JSON"]()

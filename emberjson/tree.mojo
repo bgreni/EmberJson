@@ -44,7 +44,9 @@ struct TreeNode(Writable, Stringable, Representable):
         writer.write('"', self.key, '"', ":", self.data)
 
     @staticmethod
-    fn make_ptr(owned key: String, owned data: Value, out p: UnsafePointer[Self]):
+    fn make_ptr(
+        owned key: String, owned data: Value, out p: UnsafePointer[Self]
+    ):
         p = UnsafePointer[Self].alloc(1)
         p.init_pointee_move(TreeNode(key^, data^))
 
@@ -127,7 +129,9 @@ struct _TreeValueIter(Sized):
         return self.total
 
 
-struct Tree(Movable & Copyable, Sized, ExplicitlyCopyable, Writable, Stringable):
+struct Tree(
+    Movable & Copyable, Sized, ExplicitlyCopyable, Writable, Stringable
+):
     alias NodePtr = UnsafePointer[TreeNode]
     var root: Self.NodePtr
     var size: UInt
@@ -240,7 +244,9 @@ struct Tree(Movable & Copyable, Sized, ExplicitlyCopyable, Writable, Stringable)
     fn __contains__(self, key: String) -> Bool:
         return Bool(self.find(key))
 
-    fn write_nodes[W: Writer](self, mut writer: W, node: Self.NodePtr, mut written: Int):
+    fn write_nodes[
+        W: Writer
+    ](self, mut writer: W, node: Self.NodePtr, mut written: Int):
         if not node:
             return
 

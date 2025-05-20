@@ -8,7 +8,9 @@ from .parser import Parser
 
 @value
 @register_passable("trivial")
-struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](Sized):
+struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
+    Sized
+):
     var index: Int
     var src: Pointer[Array, origin]
 
@@ -139,12 +141,16 @@ struct Array(Sized, JsonValue):
                 writer.write(",")
         writer.write("]")
 
-    fn pretty_to[W: Writer](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
+    fn pretty_to[
+        W: Writer
+    ](self, mut writer: W, indent: String, *, curr_depth: Int = 0):
         writer.write("[\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("]")
 
-    fn _pretty_write_items[W: Writer](self, mut writer: W, indent: String, curr_depth: Int):
+    fn _pretty_write_items[
+        W: Writer
+    ](self, mut writer: W, indent: String, curr_depth: Int):
         for i in range(len(self._data)):
             writer.write(indent * curr_depth)
             self._data[i]._pretty_to_as_element(writer, indent, curr_depth)

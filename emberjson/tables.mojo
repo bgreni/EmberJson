@@ -30,7 +30,9 @@ alias _U128 = SIMD[DType.uint64, 2]
 
 
 @always_inline
-fn _truncate[D: DType, S: Int, //, TruncateType: DType](u: SIMD[D, S]) -> SIMD[D, S]:
+fn _truncate[
+    D: DType, S: Int, //, TruncateType: DType
+](u: SIMD[D, S]) -> SIMD[D, S]:
     """Cast to DType to truncate to the width of that type, then cast back to
     original DType.
     """
@@ -42,8 +44,12 @@ fn full_multiplication(out answer: _U128, x: UInt64, y: UInt64):
     answer = SIMD[DType.uint64, 2](
         __mlir_op.`pop.bitcast`[_type = __mlir_type.`!pop.simd<2, ui64>`](
             __mlir_op.`pop.mul`(
-                __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](x.value),
-                __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](y.value),
+                __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](
+                    x.value
+                ),
+                __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](
+                    y.value
+                ),
             )
         )
     )

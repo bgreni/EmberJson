@@ -34,21 +34,19 @@ struct ParseOptions:
 
 
 struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
-    var data: BytePtr
-    var end: BytePtr
+    var data: CheckedPointer
     var size: Int
 
     fn __init__(out self, s: String):
         self = Self(s.unsafe_ptr(), s.byte_length())
 
     fn __init__(out self, b: BytePtr, size: Int):
-        self.data = b
+        self.data = CheckedPointer(b, b + size)
         self.size = size
-        self.end = self.data + self.size
 
     @always_inline
     fn bytes_remaining(self) -> Int:
-        return ptr_dist(self.data, self.end)
+        return self.data.dist()
 
     @always_inline
     fn has_more(self) -> Bool:
@@ -62,13 +60,13 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             A string containing the remaining unprocessed data from parser input.
         """
         try:
-            return copy_to_string[True](self.data, self.end)
+            return copy_to_string[True](self.data.p, self.data.end)
         except:
             return ""
 
     @always_inline
     fn load_chunk(self) -> SIMD8xT:
-        return self.data.load[width=SIMD8_WIDTH]()
+        return self.data.load_chunk()
 
     @always_inline
     fn can_load_chunk(self) -> Bool:
@@ -76,7 +74,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn pos(self) -> Int:
-        return self.size - (self.size - ptr_dist(self.data, self.end))
+        return self.size - (self.size - self.data.dist())
 
     fn parse(mut self, out json: JSON) raises:
         self.skip_whitespace()
@@ -90,7 +88,10 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         self.skip_whitespace()
         if unlikely(self.has_more()):
-            raise Error("Invalid json, expected end of input, recieved: ", self.remaining())
+            raise Error(
+                "Invalid json, expected end of input, recieved: ",
+                self.remaining(),
+            )
 
     fn parse_array(mut self, out arr: Array) raises:
         self.data += 1
@@ -157,8 +158,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         # Handle "true" atom
         elif b == `t`:
+            self.data.expect_remaining(4)
             var w: UInt32 = 0
-            unsafe_memcpy(w, self.data)
+            unsafe_memcpy(w, self.data.p)
             if w != TRUE:
                 raise Error("Expected 'true', received: ", to_string(w))
             v = True
@@ -167,17 +169,19 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         # handle "false" atom
         elif b == `f`:
             self.data += 1
+            self.data.expect_remaining(4)
             var w: UInt32 = 0
-            unsafe_memcpy(w, self.data)
+            unsafe_memcpy(w, self.data.p)
             if w != ALSE:
-                raise Error("Expected 'false', received: ", to_string(w))
+                raise Error("Expected 'false', received: f", to_string(w))
             v = False
             self.data += 4
 
         # handle "null" atom
         elif b == `n`:
+            self.data.expect_remaining(4)
             var w: UInt32 = 0
-            unsafe_memcpy(w, self.data)
+            unsafe_memcpy(w, self.data.p)
             if w != NULL:
                 raise Error("Expected 'null', received: ", to_string(w))
             v = Null()
@@ -197,24 +201,34 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value")
 
-    fn cont(mut self, start: BytePtr, found_unicode: Bool, out s: String) raises:
+    fn cont(
+        mut self, start: CheckedPointer, found_unicode: Bool, out s: String
+    ) raises:
         self.data += 1
         if self.data[] == U:
             self.data += 1
             return self.find(start, True)
         else:
             if unlikely(self.data[] not in acceptable_escapes):
-                raise Error("Invalid escape sequence: ", to_string(self.data[-1]), to_string(self.data[]))
+                raise Error(
+                    "Invalid escape sequence: ",
+                    to_string(self.data[-1]),
+                    to_string(self.data[]),
+                )
         self.data += 1
         if self.data[] == `\\`:
             return self.cont(start, found_unicode)
         return self.find(start, found_unicode)
 
-    fn find(mut self, start: BytePtr, found_unicode: Bool, out s: String) raises:
-        var block = StringBlock.find(self.data)
+    fn find(
+        mut self, start: CheckedPointer, found_unicode: Bool, out s: String
+    ) raises:
+        var block = StringBlock.find(self.data.p)
         if block.has_quote_first():
             self.data += block.quote_index()
-            return copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
+            return copy_to_string[options.ignore_unicode](
+                start.p, self.data.p, found_unicode
+            )
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: ",
@@ -239,24 +253,33 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 return
             else:
                 if self.data[] == `"`:
-                    s = copy_to_string[options.ignore_unicode](start, self.data, found_unicode)
+                    s = copy_to_string[options.ignore_unicode](
+                        start.p, self.data.p, found_unicode
+                    )
                     self.data += 1
                     return
                 if self.data[] == `\\`:
                     self.data += 1
                     if unlikely(self.data[] not in acceptable_escapes):
-                        raise Error("Invalid escape sequence: ", to_string(self.data[-1]), to_string(self.data[]))
+                        raise Error(
+                            "Invalid escape sequence: ",
+                            to_string(self.data[-1]),
+                            to_string(self.data[]),
+                        )
                     if self.data[] == U:
                         found_unicode = True
                 alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
                 if unlikely(self.data[] in control_chars):
-                    raise Error("Control characters must be escaped: ", String(self.data[]))
+                    raise Error(
+                        "Control characters must be escaped: ",
+                        String(self.data[]),
+                    )
                 self.data += 1
         raise Error("Invalid String")
 
     @always_inline
-    fn skip_whitespace(mut self):
-        if not is_space(self.data[]):
+    fn skip_whitespace(mut self) raises:
+        if not self.has_more() or not is_space(self.data[]):
             return
         self.data += 1
 
@@ -277,7 +300,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
     #####################################################################################################################
 
     @always_inline
-    fn compute_float_fast(self, out d: Float64, power: Int64, i: UInt64, negative: Bool):
+    fn compute_float_fast(
+        self, out d: Float64, power: Int64, i: UInt64, negative: Bool
+    ):
         d = Float64(i)
         var pow: Float64
         var neg_power = power < 0
@@ -289,7 +314,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             d = -d
 
     @always_inline
-    fn compute_float64(self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool) raises:
+    fn compute_float64(
+        self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool
+    ) raises:
         alias min_fast_power = Int64(-22)
         alias max_fast_power = Int64(22)
 
@@ -304,10 +331,14 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
 
         var index = Int(2 * (power - smallest_power))
 
-        var first_product = full_multiplication(i, power_of_five_128.unsafe_get(index))
+        var first_product = full_multiplication(
+            i, power_of_five_128.unsafe_get(index)
+        )
 
         if unlikely(first_product[1] & 0x1FF == 0x1FF):
-            second_product = full_multiplication(i, power_of_five_128.unsafe_get(index + 1))
+            second_product = full_multiplication(
+                i, power_of_five_128.unsafe_get(index + 1)
+            )
             first_product[0] += second_product[1]
             if second_product[1] > first_product[0]:
                 first_product[1] += 1
@@ -322,7 +353,9 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         alias `152170 + 65536` = 152170 + 65536
         alias `1024 + 63` = 1024 + 63
 
-        var real_exponent: Int64 = (((`152170 + 65536`) * power) >> 16) + `1024 + 63` - lz.cast[DType.int64]()
+        var real_exponent: Int64 = (
+            ((`152170 + 65536`) * power) >> 16
+        ) + `1024 + 63` - lz.cast[DType.int64]()
 
         alias `1 << 52` = 1 << 52
 
@@ -333,9 +366,13 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
 
             real_exponent = select(mantissa < (`1 << 52`), Int64(0), Int64(1))
-            return to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
+            return to_double(
+                mantissa, real_exponent.cast[DType.uint64](), negative
+            )
 
-        if unlikely(lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)):
+        if unlikely(
+            lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)
+        ):
             alias `64 - 53 - 2` = 64 - 53 - 2
             if (mantissa << (upperbit + `64 - 53 - 2`)) == upper:
                 mantissa &= ~1
@@ -360,11 +397,14 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         out v: Value,
         negative: Bool,
         i: UInt64,
-        start_digits: BytePtr,
+        start_digits: CheckedPointer,
         digit_count: Int,
         exponent: Int64,
     ) raises:
-        if unlikely(digit_count > 19 and significant_digits(self.data, digit_count) > 19):
+        if unlikely(
+            digit_count > 19
+            and significant_digits(self.data.p, digit_count) > 19
+        ):
             return from_chars_slow(self.data)
 
         if unlikely(exponent < smallest_power or exponent > largest_power):
@@ -385,29 +425,35 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
         while parse_digit(p, i):
             p += 1
 
-        var digit_count = ptr_dist(start_digits, p)
+        var digit_count = ptr_dist(start_digits.p, p.p)
 
-        if unlikely(digit_count == 0 or (start_digits[] == ZERO_CHAR and digit_count > 1)):
+        if unlikely(
+            digit_count == 0
+            or (start_digits[] == ZERO_CHAR and digit_count > 1)
+        ):
             raise Error("Invalid number")
 
         var exponent: Int64 = 0
         var is_float = False
 
-        if p[] == DOT:
+        if p.dist() > 0 and p[] == DOT:
             is_float = True
             p += 1
 
             var first_after_period = p
-            if self.bytes_remaining() >= 8 and is_made_of_eight_digits_fast(p):
-                i = i * 100000000 + parse_eight_digits(p)
+            if p.dist() >= 8 and is_made_of_eight_digits_fast(
+                p.p
+            ):
+                i = i * 100000000 + parse_eight_digits(p.p)
                 p += 8
             while parse_digit(p, i):
                 p += 1
-            exponent = ptr_dist(p, first_after_period)
+            exponent = ptr_dist(p.p, first_after_period.p)
             if exponent == 0:
                 raise Error("Invalid number")
-            digit_count = ptr_dist(start_digits, p)
-        if is_exp_char(p[]):
+            digit_count = ptr_dist(start_digits.p, p.p)
+
+        if p.dist() > 0 and is_exp_char(p[]):
             is_float = True
             p += 1
 
@@ -426,7 +472,7 @@ struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
                 raise Error("Invalid number")
 
             if unlikely(p > start_exp + 18):
-                while start_exp[] == ZERO_CHAR:
+                while start_exp.dist() > 0 and start_exp[] == ZERO_CHAR:
                     start_exp += 1
                 if p > start_exp + 18:
                     exp_number = 999999999999999999
@@ -472,7 +518,9 @@ fn minify(s: String, out out_str: String) raises:
 
     @always_inline
     @parameter
-    fn _load_chunk(p: __type_of(ptr), cond: Bool) -> SIMD[DType.uint8, SIMD8_WIDTH]:
+    fn _load_chunk(
+        p: __type_of(ptr), cond: Bool
+    ) -> SIMD[DType.uint8, SIMD8_WIDTH]:
         if cond:
             return ptr.load[width=SIMD8_WIDTH]()
         else:
@@ -509,7 +557,9 @@ fn minify(s: String, out out_str: String) raises:
                     length += ind
                     p += ind
                 else:
-                    var ind = SIMD8_WIDTH if is_block_iter else (Int(end) - Int(ptr))
+                    var ind = SIMD8_WIDTH if is_block_iter else (
+                        Int(end) - Int(ptr)
+                    )
                     length += ind
                     p += ind
                 block = StringBlock.find(p)

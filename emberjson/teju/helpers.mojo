@@ -24,7 +24,9 @@ fn ror(m: UInt64) -> UInt64:
 
 @always_inline
 fn is_small_integer(m: UInt64, e: Int32) -> Bool:
-    return (Int32(0) <= -e < Int32(MANTISSA_SIZE)) and is_multiple_of_pow2(m, -e)
+    return (Int32(0) <= -e < Int32(MANTISSA_SIZE)) and is_multiple_of_pow2(
+        m, -e
+    )
 
 
 @always_inline

@@ -9,8 +9,7 @@ from .parser_helper import (
     is_exp_char,
     append_digit,
 )
-from .utils import select
-from .utils import StackArray
+from .utils import select, StackArray, CheckedPointer
 from memory.unsafe import bitcast
 from memory import UnsafePointer
 
@@ -48,7 +47,9 @@ struct Decimal:
             round_up = self.digits.unsafe_get(dp) >= 5
 
             if self.digits.unsafe_get(dp) == 5 and dp + 1 == self.num_digits:
-                round_up = self.truncated or ((dp > 0) and Bool(1 & self.digits.unsafe_get(dp - 1)))
+                round_up = self.truncated or (
+                    (dp > 0) and Bool(1 & self.digits.unsafe_get(dp - 1))
+                )
         if round_up:
             n += 1
         return n
@@ -105,7 +106,9 @@ struct Decimal:
         var n: UInt64 = 0
 
         while read_index >= 0:
-            n += self.digits.unsafe_get(read_index).cast[DType.uint64]() << shift
+            n += (
+                self.digits.unsafe_get(read_index).cast[DType.uint64]() << shift
+            )
             var quotient = n / 10
             var remainder = n - (10 * quotient)
             if write_index < MAX_DIGITS:
@@ -131,20 +134,29 @@ struct Decimal:
         self.trim()
 
     fn trim(mut self):
-        while self.num_digits > 0 and self.digits.unsafe_get(self.num_digits - 1) == 0:
+        while (
+            self.num_digits > 0
+            and self.digits.unsafe_get(self.num_digits - 1) == 0
+        ):
             self.num_digits -= 1
 
     fn number_of_digits_decimal_left_shift(self, owned shift: UInt64) -> UInt32:
         shift &= 63
 
-        var x_a = number_of_digits_decimal_left_shift_table.unsafe_get(shift).cast[DType.uint32]()
-        var x_b = number_of_digits_decimal_left_shift_table.unsafe_get(shift + 1).cast[DType.uint32]()
+        var x_a = number_of_digits_decimal_left_shift_table.unsafe_get(
+            shift
+        ).cast[DType.uint32]()
+        var x_b = number_of_digits_decimal_left_shift_table.unsafe_get(
+            shift + 1
+        ).cast[DType.uint32]()
         var num_new_digits: UInt32 = x_a >> 11
         var pow5_a = 0x7FF & x_a
         var pow5_b = 0x7FF & x_b
 
         # kinda cursed
-        var pow5 = number_of_digits_decimal_left_shift_table_powers_of_5.unsafe_ptr().offset(pow5_a)
+        var pow5 = number_of_digits_decimal_left_shift_table_powers_of_5.unsafe_ptr().offset(
+            pow5_a
+        )
         for i in range(pow5_b - pow5_a):
             if i >= self.num_digits:
                 return num_new_digits - 1
@@ -169,7 +181,7 @@ struct AdjustedMantissa:
         self.power2 = 0
 
 
-fn from_chars_slow(out value: Float64, owned first: BytePtr) raises:
+fn from_chars_slow(out value: Float64, owned first: CheckedPointer) raises:
     var negative = first[] == NEG
     first += Int(negative or first[] == PLUS)
     var am = compute_float(parse_decimal(first))
@@ -191,13 +203,17 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
     alias MAX_SHIFT = 60
     alias NUM_POWERS = 19
-    alias POWERS = StackArray[UInt8, NUM_POWERS](0, 3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46, 49, 53, 56, 59)
+    alias POWERS = StackArray[UInt8, NUM_POWERS](
+        0, 3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46, 49, 53, 56, 59
+    )
 
     var exp2: Int32 = 0
 
     while d.decimal_point > 0:
         var n = d.decimal_point.cast[DType.uint32]()
-        var shift: UInt64 = select(n < NUM_POWERS, POWERS.unsafe_get(n).cast[DType.uint64](), MAX_SHIFT)
+        var shift: UInt64 = select(
+            n < NUM_POWERS, POWERS.unsafe_get(n).cast[DType.uint64](), MAX_SHIFT
+        )
         d >>= shift
         if d.decimal_point < -DECIMAL_POINT_RANGE:
             return
@@ -255,13 +271,13 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
     answer.mantissa = mantissa & ((UInt64(1) << MANTISSA_EXPLICIT_BITS) - 1)
 
 
-fn parse_decimal(out answer: Decimal, mut p: BytePtr):
+fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
     answer = Decimal(0, 0, False, p[] == NEG, StackArray[Byte, MAX_DIGITS](0))
 
     @parameter
     @always_inline
-    fn consume_digits():
-        while isdigit(p[]):
+    fn consume_digits() raises:
+        while p.dist() > 0 and isdigit(p[]):
             if answer.num_digits < MAX_DIGITS:
                 answer.digits[answer.num_digits] = p[] - ZERO_CHAR
             answer.num_digits += 1
@@ -275,14 +291,14 @@ fn parse_decimal(out answer: Decimal, mut p: BytePtr):
 
     consume_digits()
 
-    if p[] == DOT:
+    if p.dist() > 0 and p[] == DOT:
         p += 1
         var first_after_period = p
         if answer.num_digits == 0:
             while p[] == ZERO_CHAR:
                 p += 1
         consume_digits()
-        answer.decimal_point = ptr_dist(p, first_after_period)
+        answer.decimal_point = ptr_dist(p.p, first_after_period.p)
 
     if answer.num_digits > 0:
         var preverse = p - 1
@@ -298,7 +314,7 @@ fn parse_decimal(out answer: Decimal, mut p: BytePtr):
         answer.num_digits = MAX_DIGITS
         answer.truncated = True
 
-    if is_exp_char(p[]):
+    if p.dist() > 0 and is_exp_char(p[]):
         p += 1
         var neg_exp = p[] == NEG
         if neg_exp or p[] == PLUS:
@@ -379,7 +395,9 @@ var number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x051C,
 )
 
-var number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[UInt8, 0x051C](
+var number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
+    UInt8, 0x051C
+](
     5,
     2,
     5,

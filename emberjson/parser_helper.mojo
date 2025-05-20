@@ -23,7 +23,9 @@ alias N = to_byte("n")
 alias R = to_byte("r")
 alias T = to_byte("t")
 alias U = to_byte("u")
-alias acceptable_escapes = ByteVec[16](`"`, `\\`, SOL, B, F, N, R, T, U, U, U, U, U, U, U, U)
+alias acceptable_escapes = ByteVec[16](
+    `"`, `\\`, SOL, B, F, N, R, T, U, U, U, U, U, U, U, U
+)
 alias DOT = to_byte(".")
 alias PLUS = to_byte("+")
 alias NEG = to_byte("-")
@@ -97,15 +99,23 @@ struct StringBlock:
 
     @always_inline
     fn has_quote_first(self) -> Bool:
-        return count_trailing_zeros(self.quote_bits) < count_trailing_zeros(self.bs_bits) and not self.has_unescaped()
+        return (
+            count_trailing_zeros(self.quote_bits)
+            < count_trailing_zeros(self.bs_bits)
+            and not self.has_unescaped()
+        )
 
     @always_inline
     fn has_backslash(self) -> Bool:
-        return count_trailing_zeros(self.bs_bits) < count_trailing_zeros(self.quote_bits)
+        return count_trailing_zeros(self.bs_bits) < count_trailing_zeros(
+            self.quote_bits
+        )
 
     @always_inline
     fn has_unescaped(self) -> Bool:
-        return count_trailing_zeros(self.unescaped_bits) < count_trailing_zeros(self.quote_bits)
+        return count_trailing_zeros(self.unescaped_bits) < count_trailing_zeros(
+            self.quote_bits
+        )
 
     @staticmethod
     @always_inline
@@ -164,7 +174,9 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: String) raises:
 @always_inline
 fn copy_to_string[
     ignore_unicode: Bool = False
-](out s: String, start: BytePtr, end: BytePtr, found_unicode: Bool = True) raises:
+](
+    out s: String, start: BytePtr, end: BytePtr, found_unicode: Bool = True
+) raises:
     var length = ptr_dist(start, end)
 
     @parameter
@@ -213,11 +225,16 @@ fn is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
     """Don't ask me how this works."""
     var val: UInt64 = 0
     unsafe_memcpy(val, src)
-    return ((val & 0xF0F0F0F0F0F0F0F0) | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)) == 0x3333333333333333
+    return (
+        (val & 0xF0F0F0F0F0F0F0F0)
+        | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)
+    ) == 0x3333333333333333
 
 
 @always_inline
-fn to_double(owned mantissa: UInt64, real_exponent: UInt64, negative: Bool) -> Float64:
+fn to_double(
+    owned mantissa: UInt64, real_exponent: UInt64, negative: Bool
+) -> Float64:
     alias `1 << 52` = 1 << 52
     mantissa &= ~(`1 << 52`)
     mantissa |= real_exponent << 52
@@ -236,7 +253,9 @@ fn parse_eight_digits(out val: UInt64, p: BytePtr):
 
 
 @always_inline
-fn parse_digit(out dig: Bool, p: BytePtr, mut i: Scalar):
+fn parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
+    if p.dist() <= 0:
+        return False
     dig = isdigit(p[])
     i = select(dig, i * 10 + (p[] - ZERO_CHAR).cast[i.dtype](), i)
 
