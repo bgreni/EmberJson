@@ -58,9 +58,7 @@ fn main() raises:
         @always_inline
         @parameter
         fn do() raises:
-            var p = Parser[__origin_of(s), ParseOptions(ignore_unicode=True)](
-                s.unsafe_ptr(), len(s)
-            )
+            p = Parser[options = ParseOptions(ignore_unicode=True)](s)
             _ = p.parse()
 
         b.iter[do]()

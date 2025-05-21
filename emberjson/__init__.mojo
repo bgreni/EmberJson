@@ -22,7 +22,7 @@ fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
     Raises:
         If an invalid JSON string is provided.
     """
-    var p = Parser[__origin_of(s), options](s)
+    var p = Parser[options=options](s)
     j = p.parse()
 
 

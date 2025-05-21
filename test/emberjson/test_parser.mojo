@@ -5,9 +5,8 @@ from testing import *
 
 def test_parse():
     var s: String = '{"key": 123}'
-    var p = Parser[__origin_of(s)](s.unsafe_ptr(), len(s))
+    var p = Parser(s)
     var json = p.parse()
-    _ = s
     assert_true(json.is_object())
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json.object()["key"].int(), 123)
