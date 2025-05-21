@@ -11,7 +11,7 @@ homepage = "https://github.com/bgreni/EmberJson"
 repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
-build = { cmd = "mmojo package emberjson -o emberjson.mojopkg" }
+build = { cmd = "mojo package emberjson -o emberjson.mojopkg" }
 format = { cmd = "mojo format -l 80 emberjson test bench.mojo fuzz.mojo" }
 test = { cmd = "mojo test -D ASSERT=all" }
 bench = { cmd = "mojo build bench.mojo && ./bench && rm bench" }
