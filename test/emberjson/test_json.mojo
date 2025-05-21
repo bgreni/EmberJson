@@ -180,6 +180,9 @@ def test_incomplete_data():
     with assert_raises():
         _ = parse('["asdce]')
 
+    with assert_raises():
+        _ = parse('["no close')
+
 
 var dir = String("./bench_data/data/jsonchecker/")
 

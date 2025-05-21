@@ -77,14 +77,14 @@ struct CheckedPointer(Copyable, Comparable):
     @always_inline("nodebug")
     fn __getitem__(
         ref self,
-    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+    ) -> ref [self.p.origin, self.p.address_space] Byte:
         self.expect_remaining(1)
         return self.p[]
 
     @always_inline("nodebug")
     fn __getitem__(
         ref self, i: Int
-    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+    ) -> ref [self.p.origin, self.p.address_space] Byte:
         self.expect_remaining(1 + i)
         return self.p[i]
 
@@ -94,6 +94,11 @@ struct CheckedPointer(Copyable, Comparable):
 
     @always_inline("nodebug")
     fn load_chunk(self) -> SIMD8xT:
+        if self.dist() < SIMD8_WIDTH:
+            v = SIMD8xT(0)
+            for i in range(self.dist()):
+                v[i] = self.p[i]
+            return v
         return self.p.load[width=SIMD8_WIDTH]()
 
     @always_inline("nodebug")
@@ -114,6 +119,7 @@ alias WRITER_DEFAULT_SIZE = 4096
 alias StackArray = InlineArray[_, _, run_destructors=False]
 
 
+@always_inline
 fn will_overflow(i: UInt64) -> Bool:
     return i > UInt64(Int64.MAX)
 

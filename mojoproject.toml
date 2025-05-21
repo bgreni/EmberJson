@@ -11,10 +11,10 @@ homepage = "https://github.com/bgreni/EmberJson"
 repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
-build = { cmd = "magic run mojo package emberjson -o emberjson.mojopkg" }
-format = { cmd = "magic run mojo format -l 80 emberjson test bench.mojo fuzz.mojo" }
-test = { cmd = "magic run mojo test" }
-bench = { cmd = "magic run mojo build bench.mojo && ./bench && rm bench" }
+build = { cmd = "mmojo package emberjson -o emberjson.mojopkg" }
+format = { cmd = "mojo format -l 80 emberjson test bench.mojo fuzz.mojo" }
+test = { cmd = "mojo test -D ASSERT=all" }
+bench = { cmd = "mojo build bench.mojo && ./bench && rm bench" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
 precommit = { depends-on = ["format", "test"] }
 update_and_test = "magic update && magic run test && magic run bench"

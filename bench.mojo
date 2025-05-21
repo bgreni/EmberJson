@@ -117,6 +117,7 @@ fn main() raises:
     run[benchmark_minify, "MinifyCitmCatalog"](m, catalog)
     run[benchmark_pretty_print, "WritePrettyCitmCatalog"](m, parse(catalog))
     run[benchmark_pretty_print, "WritePrettyTwitter"](m, parse(twitter))
+    run[benchmark_pretty_print, "WritePrettyCanada"](m, parse(canada))
 
     m.dump_report()
 

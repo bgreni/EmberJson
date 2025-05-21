@@ -110,9 +110,20 @@ def coin_flip() -> Bool:
 def main():
     seed()
     var start = monotonic()
+    var i = 0
     while monotonic() - start < 5000000000:
         var j = gen_json_string()
         try:
-            _ = parse(j)
+            if i % 5 == 0:
+                # Randomly slice the input to check for UB in the parser
+                j = j[:Int(random_ui64(0, len(j) - 1))]
+                try:
+                    _ = parse(j)
+                except e:
+                    if 'Expected at least' in String(e):
+                        raise e
+            else:        
+                _ = parse(j)
+            i += 1
         except:
             raise "CASE FAILED: " + j

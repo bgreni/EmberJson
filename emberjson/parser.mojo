@@ -235,12 +235,17 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
     fn find(
         mut self, start: CheckedPointer, found_unicode: Bool, out s: String
     ) raises:
-        var block = StringBlock.find(self.data.p)
+        var block = StringBlock.find(self.data)
         if block.has_quote_first():
             self.data += block.quote_index()
             return copy_to_string[options.ignore_unicode](
                 start.p, self.data.p, found_unicode
             )
+        elif unlikely(self.data.p > self.data.end):
+            # We got EOF before finding the end quote, so obviously this
+            # input is malformed
+            raise Error("Unexpected EOF")
+
         if unlikely(block.has_unescaped()):
             raise Error(
                 "Control characters must be escaped: ",

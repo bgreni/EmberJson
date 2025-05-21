@@ -118,9 +118,17 @@ struct StringBlock:
 
     @staticmethod
     @always_inline
-    fn find(src: BytePtr) -> StringBlock:
-        var v = src.load[width=SIMD8_WIDTH]()
+    fn find(src: CheckedPointer) -> StringBlock:
         alias LAST_ESCAPE_CHAR: UInt8 = 31
+        v = src.load_chunk()        
+        return StringBlock(v == `\\`, v == `"`, v <= LAST_ESCAPE_CHAR)
+
+    @staticmethod
+    @always_inline
+    fn find(src: BytePtr) -> StringBlock:
+        # FIXME: Port minify to use CheckedPointer
+        alias LAST_ESCAPE_CHAR: UInt8 = 31
+        v = src.load[width=SIMD8_WIDTH]()        
         return StringBlock(v == `\\`, v == `"`, v <= LAST_ESCAPE_CHAR)
 
 

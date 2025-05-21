@@ -198,7 +198,7 @@ struct Value(JsonValue):
             return self.array() == other.array()
         elif self.isa[Null]():
             return True
-        abort("Unreachable")
+        abort("Unreachable: __eq__")
         return False
 
     @always_inline
@@ -220,7 +220,10 @@ struct Value(JsonValue):
             return False
         elif self.isa[Object]():
             return Bool(self.object())
-        return Bool(self.array())
+        elif self.isa[Array]():
+            return Bool(self.array())
+        abort("Unreachable: __bool__")
+        return False
 
     @always_inline
     fn __as_bool__(self) -> Bool:
@@ -312,7 +315,6 @@ struct Value(JsonValue):
         elif self.isa[UInt64]():
             write_int(self.uint(), writer)
         elif self.isa[Float64]():
-            # writer.write(self.float())
             write_f64(self.float(), writer)
         elif self.isa[String]():
             writer.write('"')
@@ -326,6 +328,8 @@ struct Value(JsonValue):
             writer.write(self.object())
         elif self.isa[Array]():
             writer.write(self.array())
+        else:
+            abort("Unreachable: write_to")
 
     fn _pretty_to_as_element[
         W: Writer
