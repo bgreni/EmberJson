@@ -74,6 +74,11 @@ struct Array(Sized, JsonValue):
         self._data = Self.Type(elements=values^)
 
     @always_inline
+    fn __init__(out self: Array, *, parse_string: String) raises:
+        var p = Parser(parse_string)
+        self = p.parse_array()
+
+    @always_inline
     fn __copyinit__(out self, other: Self):
         self._data = other._data
 
@@ -170,12 +175,6 @@ struct Array(Sized, JsonValue):
     @always_inline
     fn append(mut self, owned item: Value):
         self._data.append(item^)
-
-    @staticmethod
-    @always_inline
-    fn from_string(out arr: Array, input: String) raises:
-        var p = Parser(input)
-        arr = p.parse_array()
 
     fn to_list(owned self, out l: List[Value]):
         l = self._data^

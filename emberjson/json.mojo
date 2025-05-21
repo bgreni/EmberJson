@@ -41,6 +41,31 @@ struct JSON(JsonValue, Sized):
         self._data = o^
 
     @always_inline
+    fn __init__(out self, *, parse_bytes: ByteView[mut=False]) raises:
+        """Parse JSON document from bytes.
+
+        Args:
+            parse_bytes: The bytes to parse.
+
+        Raises:
+            If the bytes represent an invalid JSON document.
+        """
+        var parser = Parser(parse_bytes)
+        self = parser.parse()
+
+    @always_inline
+    fn __init__(out self, *, parse_string: String) raises:
+        """Parse JSON document from a string.
+
+        Args:
+            parse_string: The string to parse.
+
+        Raises:
+            If the string represents an invalid JSON document.
+        """
+        self = Self(parse_bytes=parse_string.as_bytes())
+
+    @always_inline
     fn __copyinit__(out self, other: Self):
         self._data = other._data
 
@@ -208,35 +233,6 @@ struct JSON(JsonValue, Sized):
             True if the inner value is an array else False.
         """
         return self.isa[Array]()
-
-    @always_inline
-    @staticmethod
-    fn from_string(out json: JSON, input: String) raises:
-        """Parse JSON document from a string.
-
-        Raises:
-            If the string represent an invalid JSON document.
-
-        Returns:
-            A parsed JSON document.
-        """
-        json = Self.from_bytes(input.as_bytes())
-
-    @staticmethod
-    @always_inline
-    fn from_bytes[
-        origin: ImmutableOrigin, //
-    ](out data: JSON, input: ByteView[origin]) raises:
-        """Parse JSON document from bytes.
-
-        Raises:
-            If the bytes represent an invalid JSON document.
-
-        Returns:
-            A parsed JSON document.
-        """
-        var parser = Parser(input)
-        data = parser.parse()
 
     @staticmethod
     fn try_from_string(input: String) -> Optional[JSON]:
