@@ -366,5 +366,5 @@ struct Value(JsonValue):
     @staticmethod
     @always_inline
     fn from_string(out v: Value, input: String) raises:
-        var p = Parser[__origin_of(input)](input)
+        var p = Parser(input)
         v = p.parse_value()

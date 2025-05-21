@@ -33,16 +33,28 @@ struct ParseOptions:
         self.ignore_unicode = ignore_unicode
 
 
-struct Parser[origin: Origin[False], options: ParseOptions = ParseOptions()]:
+struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer
     var size: Int
 
-    fn __init__(out self, s: String):
-        self = Self(s.unsafe_ptr(), s.byte_length())
+    fn __init__(s: String, out self: Parser[__origin_of(s), options]):
+        self = __type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
 
-    fn __init__(out self, b: BytePtr, size: Int):
-        self.data = CheckedPointer(b, b + size)
-        self.size = size
+    fn __init__(out self, s: StringSlice[origin]):
+        self = Self(ptr=s.unsafe_ptr(), length=s.byte_length())
+
+    fn __init__(out self, s: ByteView[origin]):
+        self = Self(ptr=s.unsafe_ptr(), length=len(s))
+
+    fn __init__(
+        out self,
+        *,
+        ptr: UnsafePointer[Byte, mut=False, origin=origin],
+        length: UInt,
+    ):
+        var b = rebind[BytePtr](ptr)
+        self.data = CheckedPointer(b, b + length)
+        self.size = length
 
     @always_inline
     fn bytes_remaining(self) -> Int:

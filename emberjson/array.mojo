@@ -174,7 +174,7 @@ struct Array(Sized, JsonValue):
     @staticmethod
     @always_inline
     fn from_string(out arr: Array, input: String) raises:
-        var p = Parser[__origin_of(input)](input)
+        var p = Parser(input)
         arr = p.parse_array()
 
     fn to_list(owned self, out l: List[Value]):
