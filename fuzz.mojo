@@ -116,13 +116,13 @@ def main():
         try:
             if i % 5 == 0:
                 # Randomly slice the input to check for UB in the parser
-                j = j[:Int(random_ui64(0, len(j) - 1))]
+                j = j[: Int(random_ui64(0, len(j) - 1))]
                 try:
                     _ = parse(j)
                 except e:
-                    if 'Expected at least' in String(e):
+                    if "Expected at least" in String(e):
                         raise e
-            else:        
+            else:
                 _ = parse(j)
             i += 1
         except:

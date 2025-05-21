@@ -38,6 +38,11 @@ struct Object(Sized, JsonValue):
             self._data.insert(item[].key, item[].value)
 
     @always_inline
+    fn __init__(out self, *, parse_string: String) raises:
+        var p = Parser(parse_string)
+        self = p.parse_object()
+
+    @always_inline
     fn __copyinit__(out self, other: Self):
         self._data = other._data
 
@@ -138,12 +143,6 @@ struct Object(Sized, JsonValue):
     @always_inline
     fn __repr__(self) -> String:
         return self.__str__()
-
-    @staticmethod
-    @always_inline
-    fn from_string(out o: Object, s: String) raises:
-        var p = Parser(s)
-        o = p.parse_object()
 
     @always_inline
     fn to_dict(owned self, out d: Dict[String, Value]):

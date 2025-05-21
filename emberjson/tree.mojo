@@ -32,7 +32,7 @@ struct TreeNode(Writable, Stringable, Representable):
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        return String(self)
 
     fn __repr__(self) -> String:
         var out = String()
@@ -261,7 +261,7 @@ struct Tree(
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        return String(self)
 
 
 ########################################################################

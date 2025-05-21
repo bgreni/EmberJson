@@ -140,6 +140,11 @@ struct Value(JsonValue):
     fn __init__(out self, owned v: String):
         self._data = v^
 
+    @always_inline
+    fn __init__(out self: Value, *, parse_string: String) raises:
+        var p = Parser(parse_string)
+        self = p.parse_value()
+
     @implicit
     @always_inline
     fn __init__(out self, owned v: StringLiteral):
