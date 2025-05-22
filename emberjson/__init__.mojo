@@ -25,12 +25,14 @@ fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
     var p = Parser[options=options](s)
     j = p.parse()
 
+
 @always_inline
 fn try_parse(s: String) -> Optional[JSON]:
     try:
         return parse(s)
     except:
         return {}
+
 
 @always_inline
 fn to_string[*, pretty: Bool = False](out s: String, j: JSON):
