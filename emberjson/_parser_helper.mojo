@@ -2,7 +2,6 @@ from .utils import *
 from memory import UnsafePointer
 from .simd import *
 from .tables import *
-from memory import memcpy
 from memory.unsafe import bitcast, pack_bits, _uint
 from bit import count_trailing_zeros
 from sys.info import bitwidthof
@@ -228,10 +227,13 @@ fn is_sign_char(char: Byte) -> Bool:
 
 
 @always_inline
-fn is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
-    """Don't ask me how this works."""
-    var val: UInt64 = 0
-    unsafe_memcpy(val, src)
+fn unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
+    """Don't ask me how this works.
+
+    Safety:
+        This is only safe if there are at least 8 bytes remaining.
+    """
+    var val = src.bitcast[UInt64]()[0]
     return (
         (val & 0xF0F0F0F0F0F0F0F0)
         | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)
@@ -250,10 +252,13 @@ fn to_double(
 
 
 @always_inline
-fn parse_eight_digits(out val: UInt64, p: BytePtr):
-    """Don't ask me how this works."""
-    val = 0
-    unsafe_memcpy(val, p)
+fn unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
+    """Don't ask me how this works.
+
+    Safety:
+        This is only safe if there are at least 8 bytes remaining.
+    """
+    val = p.bitcast[UInt64]()[0]
     val = (val & 0x0F0F0F0F0F0F0F0F) * 2561 >> 8
     val = (val & 0x00FF00FF00FF00FF) * 6553601 >> 16
     val = (val & 0x0000FFFF0000FFFF) * 42949672960001 >> 32
