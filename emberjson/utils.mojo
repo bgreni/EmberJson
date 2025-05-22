@@ -78,15 +78,17 @@ struct CheckedPointer(Copyable, Comparable):
     @always_inline("nodebug")
     fn __getitem__(
         ref self,
-    ) -> ref [self.p.origin, self.p.address_space] Byte:
-        self.expect_remaining(1)
+    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+        if unlikely(self.dist() <= 0):
+            raise Error("Unexpected EOF")
         return self.p[]
 
     @always_inline("nodebug")
     fn __getitem__(
         ref self, i: Int
-    ) -> ref [self.p.origin, self.p.address_space] Byte:
-        self.expect_remaining(1 + i)
+    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+        if unlikely(self.dist() - i <= 0):
+            raise Error("Unexpected EOF")
         return self.p[i]
 
     @always_inline("nodebug")
