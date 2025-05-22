@@ -5,7 +5,7 @@ from utils import Variant
 from .constants import *
 from .traits import JsonValue, PrettyPrintable
 from collections import InlineArray
-from memory import UnsafePointer
+from memory import UnsafePointer, memcmp
 from .simd import *
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
@@ -377,3 +377,201 @@ struct Value(JsonValue):
     fn from_string(out v: Value, input: String) raises:
         var p = Parser(input)
         v = p.parse_value()
+
+
+struct JsonType:
+    alias OBJECT = JsonType.__init__[0]()
+    alias ARRAY = JsonType.__init__[1]()
+    alias INT = JsonType.__init__[2]()
+    alias FLOAT_DOT = JsonType.__init__[3]()
+    alias FLOAT_EXP = JsonType.__init__[4]()
+    alias STRING = JsonType.__init__[5]()
+    alias TRUE = JsonType.__init__[6]()
+    alias FALSE = JsonType.__init__[7]()
+    alias NULL = JsonType.__init__[8]()
+    var _type: UInt8
+
+    @always_inline
+    fn __init__[json_type: Int](out self):
+        constrained[0 <= json_type <= 8, "Invalid type"]()
+        self._type = json_type
+
+    @always_inline
+    fn __is__(self, other: Self) -> Bool:
+        return self._type == other._type
+
+    @always_inline
+    fn __is_not__(self, other: Self) -> Bool:
+        return self._type != other._type
+
+    @always_inline
+    fn __eq__(self, other: Self) -> Bool:
+        return self._type == other._type
+
+    @always_inline
+    fn __ne__(self, other: Self) -> Bool:
+        return self._type != other._type
+
+
+@value
+struct RawValue[origin: ImmutableOrigin](JsonValue, Copyable, Movable):
+    var _type: JsonType
+    var _data: Span[Byte, origin]
+
+    @always_inline
+    fn __init__(out self):
+        self._type = Self.NULL
+
+    @implicit
+    @always_inline
+    fn __init__(out self, n: NoneType._mlir_type):
+        self._type = Self.NULL
+
+    @always_inline
+    fn __init__(out self, json_type: JsonType, span: Span[Byte, origin]):
+        self._type = json_type
+
+    @always_inline
+    fn copy(self) -> Self:
+        return self
+
+    fn __eq__(self, other: RawValue) -> Bool:
+        if self._type != other._type:
+            return False
+        var s_ptr = self._data.unsafe_ptr()
+        var o_ptr = other._data.unsafe_ptr()
+        return memcmp(s_ptr, o_ptr, min(len(self._data), len(other._data))) == 0
+
+    @always_inline
+    fn __ne__(self, other: Self) -> Bool:
+        return not self == other
+
+    @always_inline
+    fn is_int(self) -> Bool:
+        return self._type is JsonType.INT
+
+    @always_inline
+    fn is_string(self) -> Bool:
+        return self._type is JsonType.STRING
+
+    @always_inline
+    fn is_true(self) -> Bool:
+        return self._type is JsonType.TRUE
+
+    @always_inline
+    fn is_false(self) -> Bool:
+        return self._type is JsonType.FALSE
+
+    @always_inline
+    fn is_bool(self) -> Bool:
+        return self._type is JsonType.TRUE or self._type is JsonType.FALSE
+
+    @always_inline
+    fn is_float(self) -> Bool:
+        return self._type is JsonType.FLOAT
+
+    @always_inline
+    fn is_object(self) -> Bool:
+        return self._type is JsonType.OBJECT
+
+    @always_inline
+    fn is_array(self) -> Bool:
+        return self._type is JsonType.ARRAY
+
+    @always_inline
+    fn is_null(self) -> Bool:
+        return self._type is JsonType.NULL
+
+    @always_inline
+    fn int(self) -> Int:
+        var p = Parser(self._data)
+        return p.parse_int()
+
+    @always_inline
+    fn string(ref self) -> String:
+        var ptr = self._data.unsafe_ptr()
+        return copy_to_string(ptr, ptr + len(self._data))
+
+    @always_inline
+    fn as_string_slice(ref self) -> StringSlice[origin]:
+        """Returns a stringslice with the unparsed unicode escape sequences and
+        potentially invalid UTF-16 surrogate pairs."""
+        return StringSlice(unsafe_from_utf8=self._data)
+
+    @always_inline
+    fn float(self) -> Float64:
+        var p = Parser(self._data)
+        return p.parse_float()
+
+    @always_inline
+    fn bool(self) -> Bool:
+        var p = Parser(self._data)
+        return p.parse_bool()
+
+    @always_inline
+    fn object(ref self) -> ref [origin] Object:
+        var p = Parser(self._data)
+        return p.parse_object()
+
+    @always_inline
+    fn array(ref self) -> ref [origin] Array:
+        var p = Parser(self._data)
+        return p.parse_object()
+
+    fn write_to[W: Writer](self, mut writer: W):
+        if self.is_int():
+            write_int(self.int(), writer)
+        elif self.is_float():
+            write_f64(self.float(), writer)
+        elif self.is_string():
+            writer.write('"')
+            writer.write(self.string())
+            writer.write('"')
+        elif self.is_true():
+            writer.write("true")
+        elif self.is_false():
+            writer.write("false")
+        elif self.is_null():
+            writer.write("null")
+        elif self.is_object():
+            writer.write(self.object())
+        elif self.is_array():
+            writer.write(self.array())
+        else:
+            abort("Unreachable: write_to")
+
+    fn _pretty_to_as_element[
+        W: Writer
+    ](self, mut writer: W, indent: String, curr_depth: UInt):
+        if self.is_object():
+            writer.write("{\n")
+            self.object()._pretty_write_items(writer, indent, curr_depth + 1)
+            for _ in range(curr_depth):
+                writer.write(indent)
+            writer.write("}")
+        elif self.is_array():
+            writer.write("[\n")
+            self.array()._pretty_write_items(writer, indent, curr_depth + 1)
+            for _ in range(curr_depth):
+                writer.write(indent)
+            writer.write("]")
+        else:
+            self.write_to(writer)
+
+    fn pretty_to[
+        W: Writer
+    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
+        if self.is_object():
+            self.object().pretty_to(writer, indent, curr_depth=curr_depth)
+        elif self.is_array():
+            self.array().pretty_to(writer, indent, curr_depth=curr_depth)
+        else:
+            self.write_to(writer)
+
+    @always_inline
+    fn __str__(self) -> String:
+        return write(self)
+
+    @always_inline
+    fn __repr__(self) -> String:
+        return self.__str__()
