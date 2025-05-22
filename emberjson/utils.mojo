@@ -1,7 +1,7 @@
 from .constants import *
 from utils import Variant
 from memory import Span
-from memory import memcmp, memcpy, UnsafePointer
+from memory import memcmp, UnsafePointer
 from utils.write import _WriteBufferStack, _TotalWritableBytes
 from .traits import JsonValue, PrettyPrintable
 from os import abort
@@ -9,7 +9,6 @@ from sys import sizeof
 from sys.intrinsics import unlikely
 from sys.intrinsics import _type_is_eq
 from utils._select import _select_register_value as select
-from .parser_helper import ptr_dist
 from .simd import SIMD8xT, SIMD8_WIDTH
 
 alias Bytes = List[Byte, True]
@@ -93,7 +92,7 @@ struct CheckedPointer(Copyable, Comparable):
 
     @always_inline("nodebug")
     fn dist(self) -> Int:
-        return ptr_dist(self.p, self.end)
+        return Int(self.end) - Int(self.p)
 
     @always_inline("nodebug")
     fn load_chunk(self) -> SIMD8xT:
@@ -113,7 +112,7 @@ struct CheckedPointer(Copyable, Comparable):
             " bytes remaining, received: ",
             self.dist() + 1,
             "\ninput:\n\n",
-            StringSlice(ptr=self.start, length=ptr_dist(self.start, self.end)),
+            StringSlice(ptr=self.start, length=Int(self.end) - Int(self.start)),
         )
 
 
@@ -182,16 +181,6 @@ fn to_string(b: Byte) -> String:
 fn to_string(owned i: UInt32) -> String:
     # This is meant to be a sequence of 4 characters
     return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
-
-
-@always_inline
-fn unsafe_memcpy[
-    T: AnyType, //, len: Int = sizeof[T]()
-](mut dest: T, src: UnsafePointer[Byte]):
-    """Copy bytes from a byte array directly into another value by doing a sketchy
-    bitcast to get around the type system restrictions on the mojo stdlib memcpy.
-    """
-    memcpy(UnsafePointer(to=dest).bitcast[Byte](), src, len)
 
 
 fn constrain_json_type[T: Movable & Copyable]():

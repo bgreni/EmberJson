@@ -1,4 +1,4 @@
-from .parser_helper import (
+from ._parser_helper import (
     BytePtr,
     NEG,
     PLUS,

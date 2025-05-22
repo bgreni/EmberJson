@@ -4,10 +4,11 @@ from .simd import *
 from .array import Array
 from .object import Object
 from .value import Value
-from memory import UnsafePointer, memset, memcpy
+from bit import count_trailing_zeros
+from memory import UnsafePointer, memset
 from sys.intrinsics import unlikely, likely
 from collections import InlineArray
-from .parser_helper import *
+from ._parser_helper import *
 from memory.unsafe import bitcast
 from bit import count_leading_zeros
 from .slow_float_parse import from_chars_slow
@@ -172,8 +173,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         elif b == `t`:
             if unlikely(self.bytes_remaining() < 3):
                 raise Error('Encountered EOF when expecting "true"')
-            var w: UInt32 = 0
-            unsafe_memcpy(w, self.data.p)
+            # Safety: Safe because we checked the amount of bytes remaining
+            var w = self.data.p.bitcast[UInt32]()[0]
             if w != TRUE:
                 raise Error("Expected 'true', received: ", to_string(w))
             v = True
@@ -184,8 +185,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
             self.data += 1
             if unlikely(self.bytes_remaining() < 3):
                 raise Error('Encountered EOF when expecting "false"')
-            var w: UInt32 = 0
-            unsafe_memcpy(w, self.data.p)
+            # Safety: Safe because we checked the amount of bytes remaining
+            var w = self.data.p.bitcast[UInt32]()[0]
             if w != ALSE:
                 raise Error("Expected 'false', received: f", to_string(w))
             v = False
@@ -195,8 +196,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         elif b == `n`:
             if unlikely(self.bytes_remaining() < 3):
                 raise Error('Encountered EOF when expecting "null"')
-            var w: UInt32 = 0
-            unsafe_memcpy(w, self.data.p)
+            # Safety: Safe because we checked the amount of bytes remaining
+            var w = self.data.p.bitcast[UInt32]()[0]
             if w != NULL:
                 raise Error("Expected 'null', received: ", to_string(w))
             v = Null()
@@ -461,8 +462,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-            if p.dist() >= 8 and is_made_of_eight_digits_fast(p.p):
-                i = i * 100000000 + parse_eight_digits(p.p)
+            if p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+                i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
                 p += 8
             while parse_digit(p, i):
                 p += 1
