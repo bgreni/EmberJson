@@ -165,7 +165,7 @@ fn to_string(b: ByteView[_]) -> StringSlice[b.origin]:
 
 
 @always_inline
-fn to_string(out s: String, v: ByteVec):
+fn to_string(v: ByteVec, out s: String):
     s = String(capacity=v.size)
 
     @parameter
