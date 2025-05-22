@@ -160,13 +160,13 @@ fn is_space(char: Byte) -> Bool:
 
 
 @always_inline
-fn to_string(b: ByteView[_]) -> String:
-    return String(StringSlice(unsafe_from_utf8=b))
+fn to_string(b: ByteView[_]) -> StringSlice[b.origin]:
+    return StringSlice(unsafe_from_utf8=b)
 
 
+@always_inline
 fn to_string(out s: String, v: ByteVec):
-    s = String()
-    s.reserve(v.size)
+    s = String(capacity=v.size)
 
     @parameter
     for i in range(v.size):
@@ -174,8 +174,10 @@ fn to_string(out s: String, v: ByteVec):
 
 
 @always_inline
-fn to_string(b: Byte) -> String:
-    return chr(Int(b))
+fn to_string(b: Byte, out s: String):
+    s = String(capacity=1)
+    s.append_byte(b)
+    return s^
 
 
 @always_inline
