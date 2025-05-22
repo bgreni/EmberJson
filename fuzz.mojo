@@ -116,12 +116,12 @@ def main():
         try:
             if i % 5 == 0:
                 # Randomly slice the input to check for UB in the parser
+                # since we have debug_assert enabled
                 j = j[: Int(random_ui64(0, len(j) - 1))]
                 try:
                     _ = parse(j)
                 except e:
-                    if "Expected at least" in String(e):
-                        raise e
+                    pass
             else:
                 _ = parse(j)
             i += 1

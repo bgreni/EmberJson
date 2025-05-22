@@ -22,11 +22,12 @@ alias BytePtr = UnsafePointer[Byte, mut=False]
 @register_passable("trivial")
 struct CheckedPointer(Copyable, Comparable):
     var p: BytePtr
+    var start: BytePtr
     var end: BytePtr
 
     @always_inline("nodebug")
     fn __add__(self, v: Int) -> Self:
-        return {self.p + v, self.end}
+        return {self.p + v, self.start, self.end}
 
     @always_inline("nodebug")
     fn __iadd__(mut self, v: Int):
@@ -59,7 +60,7 @@ struct CheckedPointer(Copyable, Comparable):
     @always_inline("nodebug")
     fn __add__(self, v: SIMD) -> Self:
         constrained[v.dtype.is_integral()]()
-        return {self.p + v, self.end}
+        return {self.p + v, self.start, self.end}
 
     @always_inline("nodebug")
     fn __iadd__(mut self, v: SIMD):
@@ -68,7 +69,7 @@ struct CheckedPointer(Copyable, Comparable):
 
     @always_inline("nodebug")
     fn __sub__(self, i: Int) -> Self:
-        return {self.p - i, self.end}
+        return {self.p - i, self.start, self.end}
 
     @always_inline("nodebug")
     fn __isub__(mut self, i: Int):
@@ -109,6 +110,8 @@ struct CheckedPointer(Copyable, Comparable):
             i,
             " bytes remaining, received: ",
             self.dist() + 1,
+            "\ninput:\n\n",
+            StringSlice(ptr=self.start, length=ptr_dist(self.start, self.end)),
         )
 
 

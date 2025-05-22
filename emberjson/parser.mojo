@@ -53,7 +53,7 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         length: UInt,
     ):
         var b = rebind[BytePtr](ptr)
-        self.data = CheckedPointer(b, b + length)
+        self.data = CheckedPointer(b, b, b + length)
         self.size = length
 
     @always_inline
@@ -170,7 +170,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
 
         # Handle "true" atom
         elif b == `t`:
-            self.data.expect_remaining(4)
+            if unlikely(self.bytes_remaining() < 3):
+                raise Error('Encountered EOF when expecting "true"')
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data.p)
             if w != TRUE:
@@ -181,7 +182,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         # handle "false" atom
         elif b == `f`:
             self.data += 1
-            self.data.expect_remaining(4)
+            if unlikely(self.bytes_remaining() < 3):
+                raise Error('Encountered EOF when expecting "false"')
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data.p)
             if w != ALSE:
@@ -191,7 +193,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
 
         # handle "null" atom
         elif b == `n`:
-            self.data.expect_remaining(4)
+            if unlikely(self.bytes_remaining() < 3):
+                raise Error('Encountered EOF when expecting "null"')
             var w: UInt32 = 0
             unsafe_memcpy(w, self.data.p)
             if w != NULL:
