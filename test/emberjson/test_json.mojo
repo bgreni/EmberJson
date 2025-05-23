@@ -1,4 +1,13 @@
-from emberjson import JSON, Null, Array, Object, parse, ParseOptions, minify
+from emberjson import (
+    JSON,
+    Null,
+    Array,
+    Object,
+    parse,
+    ParseOptions,
+    minify,
+    try_parse,
+)
 from emberjson import write_pretty
 from testing import *
 from sys.param_env import is_defined
@@ -182,6 +191,43 @@ def test_incomplete_data():
 
     with assert_raises():
         _ = parse('["no close')
+
+
+def test_compile_time():
+    alias data = r"""{
+    "key": [
+        1.234,
+        352.329384920,
+        123412512,
+        -12234,
+        true,
+        false,
+        null,
+        "shortstr",
+        "longer string that would trigger simd code usually but can't be invoked at ctime",
+        "string that has unicode in it: \u00FC"
+    ]
+}"""
+    alias j = try_parse(data)
+    assert_true(j)
+
+    var arr = j.value().object()["key"].array()
+    assert_equal(arr[0].float(), 1.234)
+    assert_equal(arr[1].float(), 352.329384920)
+    assert_equal(arr[2].uint(), 123412512)
+    assert_equal(arr[3].int(), -12234)
+    assert_equal(arr[4].bool(), True)
+    assert_equal(arr[5].bool(), False)
+    assert_true(arr[6].is_null())
+    assert_equal(arr[7].string(), "shortstr")
+    assert_equal(
+        arr[8].string(),
+        (
+            "longer string that would trigger simd code usually but can't be"
+            " invoked at ctime"
+        ),
+    )
+    assert_equal(arr[9].string(), "string that has unicode in it: ü")
 
 
 var dir = String("./bench_data/data/jsonchecker/")
