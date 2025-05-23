@@ -12,6 +12,7 @@ from ._parser_helper import *
 from memory.unsafe import bitcast
 from bit import count_leading_zeros
 from .slow_float_parse import from_chars_slow
+from sys.compile import is_compile_time
 
 #######################################################
 # Certain parts inspired/taken from SonicCPP and simdjon
@@ -268,7 +269,9 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         var start = self.data
         var found_unicode = False
         while likely(self.has_more()):
-            if self.can_load_chunk():
+            # compile time interpreter is incompatible with the SIMD accelerated
+            # path, so fallback to the serial implementation
+            if self.can_load_chunk() and not is_compile_time():
                 s = self.find(start, False)
                 self.data += 1
                 return
@@ -304,7 +307,9 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
             return
         self.data += 1
 
-        while self.can_load_chunk():
+        # compile time interpreter is incompatible with the SIMD accelerated
+        # path, so fallback to the serial implementation
+        while self.can_load_chunk() and not is_compile_time():
             var chunk = self.load_chunk()
             var nonspace = get_non_space_bits(chunk)
             if nonspace != 0:
@@ -328,7 +333,11 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         var pow: Float64
         var neg_power = power < 0
 
-        pow = power_of_ten.unsafe_get(Int(abs(power)))
+        # TODO: Remove this branch after `power_of_ten` is also ctime computed again
+        if is_compile_time():
+            pow = 10.0 ** Float64(abs(power))
+        else:
+            pow = power_of_ten.unsafe_get(Int(abs(power)))
 
         d = d / pow if neg_power else d * pow
         if negative:
