@@ -1,3 +1,4 @@
+from .constants import *
 from .utils import *
 from memory import UnsafePointer
 from .simd import *
@@ -10,24 +11,14 @@ from sys.intrinsics import _type_is_eq
 alias smallest_power: Int64 = -342
 alias largest_power: Int64 = 308
 
+alias TRUE: UInt32 = _to_uint32("true")
+alias ALSE: UInt32 = _to_uint32("alse")
+alias NULL: UInt32 = _to_uint32("null")
 
-alias TRUE: UInt32 = 0x65757274
-alias ALSE: UInt32 = 0x65736C61
-alias NULL: UInt32 = 0x6C6C756E
-alias SOL = to_byte("/")
-alias B = to_byte("b")
-alias F = to_byte("f")
-alias N = to_byte("n")
-alias R = to_byte("r")
-alias T = to_byte("t")
-alias U = to_byte("u")
-alias acceptable_escapes = ByteVec[16](
-    `"`, `\\`, SOL, B, F, N, R, T, U, U, U, U, U, U, U, U
-)
-alias DOT = to_byte(".")
-alias PLUS = to_byte("+")
-alias NEG = to_byte("-")
-alias ZERO_CHAR = to_byte("0")
+
+fn _to_uint32(s: StaticString) -> UInt32:
+    debug_assert(s.byte_length() > 3, "string is too small")
+    return s.unsafe_ptr().bitcast[UInt32]()[0]
 
 
 @always_inline
@@ -36,14 +27,12 @@ fn append_digit(v: Scalar, to_add: Scalar) -> __type_of(v):
 
 
 fn isdigit(char: Byte) -> Bool:
-    alias ord_0 = to_byte("0")
-    alias ord_9 = to_byte("9")
-    return ord_0 <= char <= ord_9
+    return `0` <= char <= `9`
 
 
 @always_inline
 fn is_numerical_component(char: Byte) -> Bool:
-    return isdigit(char) or char == PLUS or char == NEG
+    return isdigit(char) or char == `+` or char == `-`
 
 
 alias Bits_T = Scalar[_uint(SIMD8_WIDTH)]
@@ -118,17 +107,17 @@ struct StringBlock:
     @staticmethod
     @always_inline
     fn find(src: CheckedPointer) -> StringBlock:
-        alias LAST_ESCAPE_CHAR: UInt8 = 31
         v = src.load_chunk()
-        return StringBlock(v == `\\`, v == `"`, v <= LAST_ESCAPE_CHAR)
+        # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
+        return StringBlock(v == `\\`, v == `"`, v < ` `)
 
     @staticmethod
     @always_inline
     fn find(src: BytePtr) -> StringBlock:
         # FIXME: Port minify to use CheckedPointer
-        alias LAST_ESCAPE_CHAR: UInt8 = 31
         v = src.load[width=SIMD8_WIDTH]()
-        return StringBlock(v == `\\`, v == `"`, v <= LAST_ESCAPE_CHAR)
+        # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
+        return StringBlock(v == `\\`, v == `"`, v < ` `)
 
 
 @always_inline
@@ -144,7 +133,7 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: String) raises:
     var c1 = hex_to_u32(p)
     p += 4
     if c1 >= 0xD800 and c1 < 0xDC00:
-        if unlikely(p[] != `\\` and (p + 1)[] != U):
+        if unlikely(p[] != `\\` and (p + 1)[] != `u`):
             raise Error("Bad unicode codepoint")
 
         p += 2
@@ -193,7 +182,7 @@ fn copy_to_string[
         var p = start
 
         while p < end:
-            if p[] == `\\` and p + 1 != end and (p + 1)[] == U:
+            if p[] == `\\` and p + 1 != end and (p + 1)[] == `u`:
                 p += 2
                 handle_unicode_codepoint(p, l)
             else:
@@ -223,7 +212,7 @@ fn is_exp_char(char: Byte) -> Bool:
 
 @always_inline
 fn is_sign_char(char: Byte) -> Bool:
-    return char == PLUS or char == NEG
+    return char == `+` or char == `-`
 
 
 @always_inline
@@ -269,13 +258,13 @@ fn parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
     if p.dist() <= 0:
         return False
     dig = isdigit(p[])
-    i = select(dig, i * 10 + (p[] - ZERO_CHAR).cast[i.dtype](), i)
+    i = select(dig, i * 10 + (p[] - `0`).cast[i.dtype](), i)
 
 
 @always_inline
 fn significant_digits(p: BytePtr, digit_count: Int) -> Int:
     var start = p
-    while start[] == ZERO_CHAR or start[] == DOT:
+    while start[] == `0` or start[] == `.`:
         start += 1
 
     return digit_count - ptr_dist(p, start)

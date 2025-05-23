@@ -1,10 +1,10 @@
 from ._parser_helper import (
     BytePtr,
-    NEG,
-    PLUS,
-    ZERO_CHAR,
+    `-`,
+    `+`,
+    `0`,
     isdigit,
-    DOT,
+    `.`,
     ptr_dist,
     is_exp_char,
     append_digit,
@@ -182,8 +182,8 @@ struct AdjustedMantissa:
 
 
 fn from_chars_slow(out value: Float64, owned first: CheckedPointer) raises:
-    var negative = first[] == NEG
-    first += Int(negative or first[] == PLUS)
+    var negative = first[] == `-`
+    first += Int(negative or first[] == `+`)
     var am = compute_float(parse_decimal(first))
     var word = am.mantissa
     word |= UInt64(am.power2) << MANTISSA_EXPLICIT_BITS
@@ -272,30 +272,30 @@ fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
 
 
 fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
-    answer = Decimal(0, 0, False, p[] == NEG, StackArray[Byte, MAX_DIGITS](0))
+    answer = Decimal(0, 0, False, p[] == `-`, StackArray[Byte, MAX_DIGITS](0))
 
     @parameter
     @always_inline
     fn consume_digits() raises:
         while p.dist() > 0 and isdigit(p[]):
             if answer.num_digits < MAX_DIGITS:
-                answer.digits[answer.num_digits] = p[] - ZERO_CHAR
+                answer.digits[answer.num_digits] = p[] - `0`
             answer.num_digits += 1
             p += 1
 
-    if answer.negative or p[] == PLUS:
+    if answer.negative or p[] == `+`:
         p += 1
 
-    while p[] == ZERO_CHAR:
+    while p[] == `0`:
         p += 1
 
     consume_digits()
 
-    if p.dist() > 0 and p[] == DOT:
+    if p.dist() > 0 and p[] == `.`:
         p += 1
         var first_after_period = p
         if answer.num_digits == 0:
-            while p[] == ZERO_CHAR:
+            while p[] == `0`:
                 p += 1
         consume_digits()
         answer.decimal_point = ptr_dist(p.p, first_after_period.p)
@@ -303,8 +303,8 @@ fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
     if answer.num_digits > 0:
         var preverse = p - 1
         var trailing_zeros = Int32(0)
-        while preverse[] == ZERO_CHAR or preverse[] == DOT:
-            if preverse[] == ZERO_CHAR:
+        while preverse[] == `0` or preverse[] == `.`:
+            if preverse[] == `0`:
                 trailing_zeros += 1
             preverse -= 1
         answer.decimal_point += answer.num_digits.cast[DType.int32]()
@@ -316,13 +316,13 @@ fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
 
     if p.dist() > 0 and is_exp_char(p[]):
         p += 1
-        var neg_exp = p[] == NEG
-        if neg_exp or p[] == PLUS:
+        var neg_exp = p[] == `-`
+        if neg_exp or p[] == `+`:
             p += 1
         var exp_number: Int32 = 0
         while isdigit(p[]):
             if exp_number < 0x10000:
-                exp_number = append_digit(exp_number, p[] - ZERO_CHAR)
+                exp_number = append_digit(exp_number, p[] - `0`)
             p += 1
         answer.decimal_point += select(neg_exp, -exp_number, exp_number)
 

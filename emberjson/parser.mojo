@@ -221,7 +221,7 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         mut self, start: CheckedPointer, found_unicode: Bool, out s: String
     ) raises:
         self.data += 1
-        if self.data[] == U:
+        if self.data[] == `u`:
             self.data += 1
             return self.find(start, True)
         else:
@@ -287,7 +287,7 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
                             to_string(self.data[-1]),
                             to_string(self.data[]),
                         )
-                    if self.data[] == U:
+                    if self.data[] == `u`:
                         found_unicode = True
                 alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
                 if unlikely(self.data[] in control_chars):
@@ -437,8 +437,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn parse_number(mut self, out v: Value) raises:
-        var neg = self.data[] == NEG
-        var p = self.data + Int(neg or self.data[] == PLUS)
+        var neg = self.data[] == `-`
+        var p = self.data + Int(neg or self.data[] == `+`)
 
         var start_digits = p
         var i: UInt64 = 0
@@ -449,15 +449,14 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         var digit_count = ptr_dist(start_digits.p, p.p)
 
         if unlikely(
-            digit_count == 0
-            or (start_digits[] == ZERO_CHAR and digit_count > 1)
+            digit_count == 0 or (start_digits[] == `0` and digit_count > 1)
         ):
             raise Error("Invalid number")
 
         var exponent: Int64 = 0
         var is_float = False
 
-        if p.dist() > 0 and p[] == DOT:
+        if p.dist() > 0 and p[] == `.`:
             is_float = True
             p += 1
 
@@ -476,8 +475,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
             is_float = True
             p += 1
 
-            var neg_exp = p[] == NEG
-            p += Int(neg_exp or p[] == PLUS)
+            var neg_exp = p[] == `-`
+            p += Int(neg_exp or p[] == `+`)
 
             if unlikely(is_exp_char(p[])):
                 raise Error("Invalid float: Double sign for exponent")
@@ -491,7 +490,7 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
                 raise Error("Invalid number")
 
             if unlikely(p > start_exp + 18):
-                while start_exp.dist() > 0 and start_exp[] == ZERO_CHAR:
+                while start_exp.dist() > 0 and start_exp[] == `0`:
                     start_exp += 1
                 if p > start_exp + 18:
                     exp_number = 999999999999999999
@@ -505,7 +504,6 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
 
         var longest_digit_count = select(neg, 19, 20)
         alias SIGNED_OVERFLOW = UInt64(Int64.MAX)
-        alias `1` = to_byte("1")
         if digit_count > longest_digit_count:
             raise Error("integer overflow")
         if digit_count == longest_digit_count:
