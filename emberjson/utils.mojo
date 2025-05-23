@@ -149,11 +149,6 @@ fn write_pretty[
 
 
 @always_inline
-fn to_byte(s: StringSlice) -> Byte:
-    return Byte(ord(s))
-
-
-@always_inline
 fn is_space(char: Byte) -> Bool:
     return char == ` ` or char == `\n` or char == `\t` or char == `\r`
 
