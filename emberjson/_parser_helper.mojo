@@ -6,7 +6,7 @@ from .tables import *
 from memory.unsafe import bitcast, pack_bits, _uint
 from bit import count_trailing_zeros
 from sys.info import bitwidthof
-from sys.intrinsics import _type_is_eq
+from sys.intrinsics import _type_is_eq, likely, unlikely
 
 alias smallest_power: Int64 = -342
 alias largest_power: Int64 = 308
@@ -129,11 +129,31 @@ fn hex_to_u32(p: BytePtr) -> UInt32:
     return v.reduce_or()
 
 
-fn handle_unicode_codepoint(mut p: BytePtr, mut dest: String) raises:
+fn handle_unicode_codepoint(
+    mut p: BytePtr, mut dest: String, end: BytePtr
+) raises:
+    # TODO: is this check necessary or just being paranoid?
+    # because theoretically no string can be built with "\u" only
+    # But if this points to bytes received over the wire, it makes sense
+    # unless we use _is_valid_utf8 at the beginning of where this is called
+    if unlikely(p + 3 >= end):
+        raise Error("Bad unicode codepoint")
     var c1 = hex_to_u32(p)
     p += 4
+    # NOTE: incredibly, this is part of the JSON standard (thanks javascript...)
+    # ECMA-404 2nd Edition / December 2017. Section 9:
+    # To escape a code point that is not in the Basic Multilingual Plane, the
+    # character may be represented as a twelve-character sequence, encoding the
+    # UTF-16 surrogate pair corresponding to the code point. So for example, a
+    # string containing only the G clef character (U+1D11E) may be represented
+    # as "\uD834\uDD1E". However, whether a processor of JSON texts interprets
+    # such a surrogate pair as a single code point or as an explicit surrogate
+    # pair is a semantic decision that is determined by the specific processor.
     if c1 >= 0xD800 and c1 < 0xDC00:
-        if unlikely(p[] != `\\` and (p + 1)[] != `u`):
+        # TODO: same as the above TODO
+        if unlikely(p + 5 >= end):
+            raise Error("Bad unicode codepoint")
+        elif unlikely(not (p[0] == `\\` and p[1] == `u`)):
             raise Error("Bad unicode codepoint")
 
         p += 2
@@ -142,28 +162,25 @@ fn handle_unicode_codepoint(mut p: BytePtr, mut dest: String) raises:
         if unlikely(Bool((c1 | c2) >> 16)):
             raise Error("Bad unicode codepoint")
 
-        c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) + 0x10000
+        c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
         p += 4
-    if c1 <= 0x7F:
+
+    if likely(c1 <= 0x7F):
         dest.append_byte(c1.cast[DType.uint8]())
-        return
     elif c1 <= 0x7FF:
-        dest.append_byte(((c1 >> 6) + 192).cast[DType.uint8]())
-        dest.append_byte(((c1 & 63) + 128).cast[DType.uint8]())
-        return
+        dest.append_byte(((c1 >> 6) | 192).cast[DType.uint8]())
+        dest.append_byte(((c1 & 63) | 128).cast[DType.uint8]())
     elif c1 <= 0xFFFF:
-        dest.append_byte(((c1 >> 12) + 224).cast[DType.uint8]())
-        dest.append_byte((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
-        dest.append_byte(((c1 & 63) + 128).cast[DType.uint8]())
-        return
-    elif c1 <= 0x10FFFF:
-        dest.append_byte(((c1 >> 18) + 240).cast[DType.uint8]())
-        dest.append_byte((((c1 >> 12) & 63) + 128).cast[DType.uint8]())
-        dest.append_byte((((c1 >> 6) & 63) + 128).cast[DType.uint8]())
-        dest.append_byte(((c1 & 63) + 128).cast[DType.uint8]())
-        return
+        dest.append_byte(((c1 >> 12) | 224).cast[DType.uint8]())
+        dest.append_byte((((c1 >> 6) & 63) | 128).cast[DType.uint8]())
+        dest.append_byte(((c1 & 63) | 128).cast[DType.uint8]())
     else:
-        raise Error("Invalid unicode")
+        if unlikely(c1 > 0x10FFFF):
+            raise Error("Invalid unicode")
+        dest.append_byte(((c1 >> 18) | 240).cast[DType.uint8]())
+        dest.append_byte((((c1 >> 12) & 63) | 128).cast[DType.uint8]())
+        dest.append_byte((((c1 >> 6) & 63) | 128).cast[DType.uint8]())
+        dest.append_byte(((c1 & 63) | 128).cast[DType.uint8]())
 
 
 @always_inline
@@ -178,31 +195,26 @@ fn copy_to_string[
     fn decode_unicode(out res: String) raises:
         # This will usually slightly overallocate if the string contains
         # escaped unicode
-        var l = String(capacity=length + 1)
+        var l = String(capacity=length)
         var p = start
 
         while p < end:
-            if p[] == `\\` and p + 1 != end and (p + 1)[] == `u`:
+            if p[0] == `\\` and p[Int(p + 1 != end)] == `u`:
                 p += 2
-                handle_unicode_codepoint(p, l)
+                handle_unicode_codepoint(p, l, end)
             else:
-                l.append_byte(p[])
+                l.append_byte(p[0])
                 p += 1
         res = l^
-
-    @parameter
-    fn bulk_copy(out res: String):
-        var slice = StringSlice(ptr=start, length=length)
-        res = String(bytes=slice.as_bytes())
 
     @parameter
     if not ignore_unicode:
         if found_unicode:
             return decode_unicode()
         else:
-            return bulk_copy()
+            return String(StringSlice(ptr=start, length=length))
     else:
-        return bulk_copy()
+        return String(StringSlice(ptr=start, length=length))
 
 
 @always_inline
