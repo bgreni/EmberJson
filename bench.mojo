@@ -1,5 +1,22 @@
-from emberjson import *
-from benchmark import *
+from emberjson import (
+    parse,
+    to_string,
+    write_pretty,
+    JSON,
+    Value,
+    Parser,
+    minify,
+    ParseOptions,
+    Null,
+)
+from benchmark import (
+    Bench,
+    BenchId,
+    ThroughputMeasure,
+    Bencher,
+    BenchMetric,
+    BenchConfig,
+)
 
 
 fn get_data(file: String) -> String:

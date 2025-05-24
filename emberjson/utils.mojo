@@ -1,4 +1,4 @@
-from .constants import *
+from .constants import ` `, `\n`, `\t`, `\r`
 from utils import Variant
 from memory import Span
 from memory import memcmp, UnsafePointer

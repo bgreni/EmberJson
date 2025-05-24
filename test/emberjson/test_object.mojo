@@ -1,7 +1,7 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
-from testing import *
+from testing import assert_true, assert_equal, assert_raises, assert_not_equal
 from collections import Dict
 
 

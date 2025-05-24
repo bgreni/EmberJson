@@ -1,6 +1,16 @@
 from memory.unsafe import bitcast
-from .helpers import *
-from .tables import *
+from .helpers import (
+    is_small_integer,
+    remove_trailing_zeros,
+    log10_pow2,
+    log10_pow2_residual,
+    mshift,
+    div10,
+    wins_tiebreak,
+    is_tie,
+    is_tie_uncentered,
+)
+from .tables import MULTIPLIERS
 from ..utils import StackArray
 from emberjson.format_int import write_int
 

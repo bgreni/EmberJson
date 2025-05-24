@@ -1,6 +1,6 @@
 from python import Python
-from random.random import *
-from emberjson import *
+from random.random import random_ui64, random_si64, random_float64, seed
+from emberjson import parse, Array, Object, Value, Null, JSON
 from utils.numerics import isinf
 from time import monotonic
 from testing import assert_equal

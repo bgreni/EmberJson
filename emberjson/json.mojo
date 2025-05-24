@@ -2,7 +2,6 @@ from collections import Dict, Optional
 from utils import Variant
 from .object import Object
 from .array import Array
-from .constants import *
 from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
 from sys.intrinsics import unlikely

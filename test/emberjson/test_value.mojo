@@ -1,7 +1,13 @@
 from emberjson.value import Value, Null
-from emberjson import Object, Array, JSON
-from emberjson.utils import *
-from testing import *
+from emberjson import Object, Array, JSON, write_pretty
+from testing import (
+    assert_equal,
+    assert_true,
+    assert_raises,
+    assert_not_equal,
+    assert_almost_equal,
+    assert_false,
+)
 
 
 def test_bool():

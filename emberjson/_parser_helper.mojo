@@ -1,8 +1,22 @@
-from .constants import *
-from .utils import *
+from .utils import BytePtr, CheckedPointer, select
 from memory import UnsafePointer
-from .simd import *
-from .tables import *
+from .simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
+from .constants import (
+    `0`,
+    `9`,
+    ` `,
+    `\n`,
+    `+`,
+    `-`,
+    `\t`,
+    `\r`,
+    `\\`,
+    `"`,
+    `u`,
+    `e`,
+    `E`,
+    `.`,
+)
 from memory.unsafe import bitcast, pack_bits, _uint
 from bit import count_trailing_zeros
 from sys.info import bitwidthof

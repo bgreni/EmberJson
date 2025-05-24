@@ -1,7 +1,7 @@
 from emberjson.array import Array
 from emberjson import Object
 from emberjson.value import Null, Value
-from testing import *
+from testing import assert_equal, assert_true, assert_false, assert_not_equal
 
 
 def test_array():

@@ -1,4 +1,4 @@
-from .tables import *
+from .tables import MINIVERSE
 
 alias LOG10_POW2_MAX: Int32 = 112815
 alias LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX

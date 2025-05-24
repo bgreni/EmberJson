@@ -1,7 +1,5 @@
 from .object import Object
 from .value import Value
-from .utils import *
-from .constants import *
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
 
