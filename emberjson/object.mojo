@@ -4,6 +4,8 @@ from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
 from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
+from python import PythonObject, Python
+from os import abort
 
 
 struct Object(Sized, JsonValue):
@@ -147,3 +149,16 @@ struct Object(Sized, JsonValue):
         d = Dict[String, Value]()
         for item in self.items():
             d[item[].key] = item[].data
+
+    fn to_python_object(self) -> PythonObject:
+        
+        try:
+            var d = Python.dict()
+            for item in self.items():
+                d[item[].key] = item[].data.to_python_object()
+            return d
+        except:
+            abort("Unexpected error: Failed to convert object to python dict")
+        return None
+
+        

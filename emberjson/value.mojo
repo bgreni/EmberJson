@@ -11,6 +11,7 @@ from .format_int import write_int
 from sys.info import bitwidthof
 from .teju import write_f64
 from os import abort
+from python import PythonObject
 
 
 @fieldwise_init
@@ -53,6 +54,9 @@ struct Null(JsonValue):
         W: Writer
     ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         writer.write(self)
+    
+    fn to_python_object(self) -> PythonObject:
+        return None
 
 
 struct Value(JsonValue):
@@ -313,23 +317,23 @@ struct Value(JsonValue):
         return self.get[Array]()
 
     fn write_to[W: Writer](self, mut writer: W):
-        if self.isa[Int64]():
+        if self.is_int():
             write_int(self.int(), writer)
-        elif self.isa[UInt64]():
+        elif self.is_uint():
             write_int(self.uint(), writer)
-        elif self.isa[Float64]():
+        elif self.is_float():
             write_f64(self.float(), writer)
-        elif self.isa[String]():
+        elif self.is_string():
             writer.write('"')
             writer.write(self.string())
             writer.write('"')
-        elif self.isa[Bool]():
+        elif self.is_bool():
             writer.write("true") if self.bool() else writer.write("false")
-        elif self.isa[Null]():
+        elif self.is_null():
             writer.write("null")
-        elif self.isa[Object]():
+        elif self.is_object():
             writer.write(self.object())
-        elif self.isa[Array]():
+        elif self.is_array():
             writer.write(self.array())
         else:
             abort("Unreachable: write_to")
@@ -369,3 +373,24 @@ struct Value(JsonValue):
     @always_inline
     fn __repr__(self) -> String:
         return self.__str__()
+
+    fn to_python_object(self) -> PythonObject:
+        if self.is_int():
+            return self.int()
+        elif self.is_uint():
+            return self.uint()
+        elif self.is_float():
+            return self.float()
+        elif self.is_string():
+            return self.string()
+        elif self.is_bool():
+            return self.bool()
+        elif self.is_null():
+            return None
+        elif self.is_object():
+            return self.object().to_python_object()
+        elif self.is_array():
+            return self.array().to_python_object()
+        else:
+            abort("Unreachable: to_python_object")
+        return None

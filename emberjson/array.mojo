@@ -2,6 +2,7 @@ from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
+from python import PythonObject, Python
 
 
 @register_passable("trivial")
@@ -176,3 +177,6 @@ struct Array(Sized, JsonValue):
     fn to_list(owned self, out l: List[Value]):
         l = self._data^
         __disable_del self
+
+    fn to_python_object(self) -> PythonObject:
+        return Python.list(self._data)

@@ -18,6 +18,7 @@ bench = { cmd = "mojo build bench.mojo && ./bench && rm bench" }
 update_and_build = { cmd = "magic update && magic run test && magic run build" }
 precommit = { depends-on = ["format", "test"] }
 update_and_test = "magic update && magic run test && magic run bench"
+test_python_compat = "python python_compat.py"
 
 [dependencies]
 max = ">=25.4.0.dev2025050605,<26"

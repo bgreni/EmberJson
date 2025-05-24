@@ -7,6 +7,7 @@ from .utils import write, ByteView
 from sys.intrinsics import unlikely
 from .parser import Parser
 from os import abort
+from python import PythonObject
 
 
 struct JSON(JsonValue, Sized):
@@ -233,14 +234,5 @@ struct JSON(JsonValue, Sized):
         """
         return self.isa[Array]()
 
-    @staticmethod
-    fn try_from_string(input: String) -> Optional[JSON]:
-        """Parse JSON document from a string.
-
-        Returns:
-            An optional parsed JSON document, returns None if the input is invalid.
-        """
-        try:
-            return parse(input)
-        except:
-            return None
+    fn to_python_object(self) -> PythonObject:
+        return self.array().to_python_object() if self.is_array() else self.object().to_python_object()

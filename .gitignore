@@ -11,3 +11,4 @@ recipes/recipe.yaml
 playground.mojo
 .env
 emberjson.mojopkg
+__mojocache__
