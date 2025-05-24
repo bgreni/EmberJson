@@ -22,8 +22,8 @@ alias MAX_DIGITS = 768
 alias DECIMAL_POINT_RANGE = 2047
 
 
-@value
-struct Decimal:
+@fieldwise_init
+struct Decimal(Copyable, Movable):
     var num_digits: UInt32
     var decimal_point: Int32
     var truncated: Bool
@@ -170,9 +170,9 @@ struct Decimal:
         return num_new_digits
 
 
-@value
+@fieldwise_init
 @register_passable("trivial")
-struct AdjustedMantissa:
+struct AdjustedMantissa(Copyable):
     var mantissa: UInt64
     var power2: Int
 

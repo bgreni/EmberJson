@@ -13,7 +13,7 @@ from .teju import write_f64
 from os import abort
 
 
-@value
+@fieldwise_init
 @register_passable("trivial")
 struct Null(JsonValue):
     """Represents "null" json value.
@@ -55,7 +55,6 @@ struct Null(JsonValue):
         writer.write(self)
 
 
-@value
 struct Value(JsonValue):
     alias Type = Variant[
         Int64, UInt64, Float64, String, Bool, Object, Array, Null
