@@ -151,7 +151,6 @@ struct Object(Sized, JsonValue):
             d[item[].key] = item[].data
 
     fn to_python_object(self) -> PythonObject:
-        
         try:
             var d = Python.dict()
             for item in self.items():
@@ -160,5 +159,3 @@ struct Object(Sized, JsonValue):
         except:
             abort("Unexpected error: Failed to convert object to python dict")
         return None
-
-        
