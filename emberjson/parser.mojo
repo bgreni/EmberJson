@@ -72,7 +72,6 @@ from .constants import (
 #######################################################
 
 
-
 struct ParseOptions(Copyable, Movable):
     """JSON parsing options.
 

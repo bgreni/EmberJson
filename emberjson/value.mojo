@@ -54,7 +54,7 @@ struct Null(JsonValue):
         W: Writer
     ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         writer.write(self)
-    
+
     fn to_python_object(self) -> PythonObject:
         return None
 

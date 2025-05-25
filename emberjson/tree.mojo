@@ -3,7 +3,6 @@ from memory import UnsafePointer
 from os import abort
 
 
-
 struct TreeNode(Writable, Stringable, Representable, Copyable, Movable):
     var data: Value
     var key: String
