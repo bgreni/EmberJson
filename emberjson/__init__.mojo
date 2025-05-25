@@ -27,9 +27,9 @@ fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: String) raises:
 
 
 @always_inline
-fn try_parse(s: String) -> Optional[JSON]:
+fn try_parse[options: ParseOptions = ParseOptions()](s: String) -> Optional[JSON]:
     try:
-        return parse(s)
+        return parse[options](s)
     except:
         return {}
 

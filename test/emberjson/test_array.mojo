@@ -96,3 +96,7 @@ def test_iter():
     for el in arr.reversed():
         assert_equal(el[], arr[i])
         i -= 1
+
+def test_list_literal():
+    var a: Array = [123, 435, False, None, 12.32, "string"]
+    assert_equal(a, Array(123, 435, False, None, 12.32, "string"))

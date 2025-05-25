@@ -37,6 +37,12 @@ struct Object(Sized, JsonValue):
         for item in d.items():
             self._data.insert(item[].key, item[].value)
 
+    fn __init__(out self, owned keys: List[String], owned values: List[Value], __dict_literal__: ()):
+        debug_assert(len(keys) == len(values))
+        self._data = Self.Type()
+        for i in range(len(keys)):
+            self._data.insert(keys[i], values[i])
+
     @always_inline
     fn __init__(out self, *, parse_string: String) raises:
         var p = Parser(parse_string)

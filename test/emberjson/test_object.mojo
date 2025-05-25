@@ -128,3 +128,12 @@ def test_iter():
     for el in ob.values():
         assert_equal(el[], values[i])
         i += 1
+
+    def test_dict_literal():
+        var o: Object = {
+            "key": 1234,
+            "key2": False
+        }
+
+        assert_equal(o["key"], 1234)
+        assert_equal(o["key2"], False)
