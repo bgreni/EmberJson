@@ -1,5 +1,6 @@
 from python import PythonConvertible
 
+
 trait PrettyPrintable:
     fn pretty_to[
         W: Writer

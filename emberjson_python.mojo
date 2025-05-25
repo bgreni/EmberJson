@@ -12,7 +12,9 @@ fn PyInit_emberjson_python() -> PythonObject:
         m.def_function[parse]("parse")
         return m.finalize()
     except e:
-        return abort[PythonObject](String("error creating Python Mojo module:", e))
+        return abort[PythonObject](
+            String("error creating Python Mojo module:", e)
+        )
 
 
 fn parse(obj: PythonObject) raises -> PythonObject:
