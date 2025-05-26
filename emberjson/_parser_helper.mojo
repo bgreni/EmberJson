@@ -121,7 +121,7 @@ struct StringBlock:
     @staticmethod
     @always_inline
     fn find(src: CheckedPointer) -> StringBlock:
-        v = src.load_chunk()
+        var v = src.load_chunk()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
         return StringBlock(v == `\\`, v == `"`, v < ` `)
 
@@ -129,7 +129,7 @@ struct StringBlock:
     @always_inline
     fn find(src: BytePtr) -> StringBlock:
         # FIXME: Port minify to use CheckedPointer
-        v = src.load[width=SIMD8_WIDTH]()
+        var v = src.load[width=SIMD8_WIDTH]()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
         return StringBlock(v == `\\`, v == `"`, v < ` `)
 
