@@ -13,6 +13,6 @@ jobs:
               uses: actions/checkout@v4
             - name: Run the test suite  
               run: |
-                curl -ssL https://magic.modular.com | bash
-                source $HOME/.bash_profile
-                magic run test
+                curl -fsSL https://pixi.sh/install.sh | sh
+                export PATH="$HOME/.pixi/bin:$PATH"
+                pixi run test

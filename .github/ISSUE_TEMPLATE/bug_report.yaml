@@ -21,9 +21,9 @@ body:
     id: system-info
     attributes:
       label: System Info
-      description: Machine OS, magic, mojo, and ember versions
+      description: Machine OS, pixi, mojo, and ember versions
       placeholder: |
         Machine OS type and version.
-        Output of magic --version.
+        Output of pixi --version.
         Output of mojo --version.
         EmberJson version.

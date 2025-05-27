@@ -25,10 +25,10 @@ jobs:
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
         run: |
-          curl -ssL https://magic.modular.com | bash
-          source $HOME/.bash_profile
+          curl -fsSL https://pixi.sh/install.sh | sh
+          export PATH="$HOME/.pixi/bin:$PATH"
           
           echo "Running Tests"
-          magic run test || exit 1
+          pixi run test || exit 1
           echo "Running Build"
-          magic run build || exit 1
+          pixi run build || exit 1
