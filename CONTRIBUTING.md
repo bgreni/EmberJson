@@ -23,5 +23,5 @@ for future reference and understanding.
 
 ### Making a pull request
 
-Once your changes are ready. Be sure to run `magic run test`
-to run all the unit tests, run `magic run bench` before and after you changes to ensure you haven't introduced any major performance regressions, and `magic run format` to format your code before making a PR.
+Once your changes are ready. Be sure to run `pixi run test`
+to run all the unit tests, run `pixi run bench` before and after you changes to ensure you haven't introduced any major performance regressions, and `pixi run format` to format your code before making a PR.
