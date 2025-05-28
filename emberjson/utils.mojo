@@ -14,7 +14,6 @@ from sys.intrinsics import _type_is_eq
 from utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
 
-alias Bytes = List[Byte, True]
 alias ByteVec = SIMD[DType.uint8, _]
 alias ByteView = Span[Byte, _]
 alias BytePtr = UnsafePointer[Byte, mut=False]
