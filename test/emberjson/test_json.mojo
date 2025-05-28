@@ -88,7 +88,7 @@ def test_setter_object():
 def test_setter_array():
     var arr: JSON = Array(123, "foo")
     arr.array()[0] = Null()
-    assert_true(arr.array()[0].isa[Null]())
+    assert_true(arr.array()[0].is_null())
     assert_equal(arr.array()[1], "foo")
 
 

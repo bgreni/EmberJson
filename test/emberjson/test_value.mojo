@@ -13,31 +13,29 @@ from testing import (
 def test_bool():
     var s: String = "false"
     var v = Value(parse_string=s)
-    assert_true(v.isa[Bool]())
-    assert_equal(v.get[Bool](), False)
+    assert_true(v.is_bool())
+    assert_equal(v.bool(), False)
     assert_equal(String(v), s)
 
     s = "true"
     v = Value(parse_string=s)
-    assert_true(v.isa[Bool]())
-    assert_equal(v.get[Bool](), True)
-    assert_equal(String(v), s)
     assert_true(v.is_bool())
+    assert_equal(v.bool(), True)
+    assert_equal(String(v), s)
 
 
 def test_string():
     var s: String = '"Some String"'
     var v = Value(parse_string=s)
-    assert_true(v.isa[String]())
-    assert_equal(v.get[String](), "Some String")
+    assert_true(v.is_string())
+    assert_equal(v.string(), "Some String")
     assert_equal(String(v), s)
 
     s = '"Escaped"'
     v = Value(parse_string=s)
-    assert_true(v.isa[String]())
-    assert_equal(v.get[String](), "Escaped")
-    assert_equal(String(v), s)
     assert_true(v.is_string())
+    assert_equal(v.string(), "Escaped")
+    assert_equal(String(v), s)
 
     # check short string
     s = '"s"'
@@ -64,10 +62,9 @@ def test_string():
 def test_null():
     var s: String = "null"
     var v = Value(parse_string=s)
-    assert_true(v.isa[Null]())
-    assert_equal(v.get[Null](), Null())
-    assert_equal(String(v), s)
     assert_true(v.is_null())
+    assert_equal(v.null(), Null())
+    assert_equal(String(v), s)
 
     assert_true(Value(None).is_null())
 
@@ -109,44 +106,43 @@ def test_integer_negative():
 def test_signed_overflow_to_unsigned():
     var n = UInt64(Int64.MAX) + 100
     var v = Value(parse_string=String(n))
-    assert_true(v.isa[UInt64]())
+    assert_true(v.is_uint())
     assert_equal(v.uint(), n)
     assert_equal(String(v), String(n))
-    assert_true(v.is_uint())
 
 
 def test_float():
     var v = Value(parse_string="43.5")
-    assert_true(v.isa[Float64]())
-    assert_almost_equal(v.get[Float64](), 43.5)
+    assert_true(v.is_float())
+    assert_almost_equal(v.float(), 43.5)
     assert_equal(String(v), "43.5")
     assert_true(v.is_float())
 
 
 def test_eight_digits_after_dot():
     var v = Value(parse_string="342.12345678")
-    assert_true(v.isa[Float64]())
-    assert_almost_equal(v.get[Float64](), 342.12345678)
+    assert_true(v.is_float())
+    assert_almost_equal(v.float(), 342.12345678)
     assert_equal(String(v), "342.12345678")
 
 
 def test_special_case_floats():
     var v = Value(parse_string="2.2250738585072013e-308")
     assert_almost_equal(v.float(), 2.2250738585072013e-308)
-    assert_true(v.isa[Float64]())
+    assert_true(v.is_float())
 
     v = Value(parse_string="7.2057594037927933e+16")
-    assert_true(v.isa[Float64]())
+    assert_true(v.is_float())
     assert_almost_equal(v.float(), 7.2057594037927933e16)
 
     v = Value(parse_string="1e000000000000000000001")
-    assert_true(v.isa[Float64]())
+    assert_true(v.is_float())
     assert_almost_equal(v.float(), 1e000000000000000000001)
 
     v = Value(
         parse_string="3.1415926535897932384626433832795028841971693993751"
     )
-    assert_true(v.isa[Float64]())
+    assert_true(v.is_float())
     assert_almost_equal(
         v.float(), 3.1415926535897932384626433832795028841971693993751
     )
@@ -166,26 +162,26 @@ def test_special_case_floats():
 
 def test_float_leading_plus():
     var v = Value(parse_string="+43.5")
-    assert_true(v.isa[Float64]())
-    assert_almost_equal(v.get[Float64](), 43.5)
+    assert_true(v.is_float())
+    assert_almost_equal(v.float(), 43.5)
 
 
 def test_float_negative():
     var v = Value(parse_string="-43.5")
-    assert_true(v.isa[Float64]())
-    assert_almost_equal(v.get[Float64](), -43.5)
+    assert_true(v.is_float())
+    assert_almost_equal(v.float(), -43.5)
 
 
 def test_float_exponent():
     var v = Value(parse_string="43.5e10")
-    assert_true(v.isa[Float64]())
-    assert_almost_equal(v.get[Float64](), 43.5e10)
+    assert_true(v.is_float())
+    assert_almost_equal(v.float(), 43.5e10)
 
 
 def test_float_exponent_negative():
     var v = Value(parse_string="-43.5e10")
-    assert_true(v.isa[Float64]())
-    assert_almost_equal(v.get[Float64](), -43.5e10)
+    assert_true(v.is_float())
+    assert_almost_equal(v.float(), -43.5e10)
 
 
 def test_equality():

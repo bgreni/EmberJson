@@ -81,8 +81,7 @@ def test_single_quote_value():
 
 
 def test_equality():
-    var ob1 = Object()
-    ob1["key"] = 123
+    var ob1: Object = {"key": 123}
     var ob2 = ob1
     var ob3 = ob1
     ob3["key"] = Null()
@@ -104,10 +103,11 @@ def test_write():
 
 
 def test_iter():
-    var ob = Object()
-    ob["a"] = "stuff"
-    ob["b"] = 123
-    ob["c"] = 3.423
+    var ob: Object = {
+        "a": "stuff",
+        "b": 123,
+        "c": 3.423
+    }
 
     var keys = List[String]("a", "b", "c")
 
@@ -122,7 +122,7 @@ def test_iter():
         assert_equal(el[], keys[i])
         i += 1
 
-    var values = List[Value]("stuff", 123, 3.423)
+    var values = Array("stuff", 123, 3.423)
 
     i = 0
     for el in ob.values():
