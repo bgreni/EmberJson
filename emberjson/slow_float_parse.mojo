@@ -327,7 +327,7 @@ fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
         answer.decimal_point += select(neg_exp, -exp_number, exp_number)
 
 
-var number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
+alias number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x0000,
     0x0800,
     0x0801,
@@ -395,7 +395,7 @@ var number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x051C,
 )
 
-var number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
+alias number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
     UInt8, 0x051C
 ](
     5,

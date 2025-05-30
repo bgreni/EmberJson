@@ -103,11 +103,7 @@ def test_write():
 
 
 def test_iter():
-    var ob: Object = {
-        "a": "stuff",
-        "b": 123,
-        "c": 3.423
-    }
+    var ob: Object = {"a": "stuff", "b": 123, "c": 3.423}
 
     var keys = List[String]("a", "b", "c")
 

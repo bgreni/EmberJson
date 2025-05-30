@@ -13,7 +13,7 @@ repository = "https://github.com/bgreni/EmberJson"
 [tasks]
 build = { cmd = "mojo package emberjson -o emberjson.mojopkg" }
 format = { cmd = "mojo format -l 80 ." }
-test = { cmd = "mojo test -D ASSERT=all -I . test" }
+test = { cmd = "mojo test -D ASSERT=all" }
 bench = { cmd = "mojo build bench.mojo && ./bench && rm bench" }
 update_and_build = { cmd = "pixi update && pixi run test && pixi run build" }
 precommit = { depends-on = ["format", "test"] }
