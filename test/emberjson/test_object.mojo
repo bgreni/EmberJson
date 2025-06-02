@@ -108,21 +108,21 @@ def test_iter():
     var keys = List[String]("a", "b", "c")
 
     var i = 0
-    for el in ob.keys():
-        assert_equal(el[], keys[i])
+    for ref el in ob.keys():
+        assert_equal(el, keys[i])
         i += 1
 
     i = 0
     # check that the default is to iterate over keys
-    for el in ob:
-        assert_equal(el[], keys[i])
+    for ref el in ob:
+        assert_equal(el, keys[i])
         i += 1
 
     var values = Array("stuff", 123, 3.423)
 
     i = 0
-    for el in ob.values():
-        assert_equal(el[], values[i])
+    for ref el in ob.values():
+        assert_equal(el, values[i])
         i += 1
 
     def test_dict_literal():

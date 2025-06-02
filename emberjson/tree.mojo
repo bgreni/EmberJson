@@ -62,10 +62,11 @@ struct _TreeIter(Sized, Copyable, Movable):
         return self
 
     @always_inline
-    fn __next__(mut self, out p: UnsafePointer[TreeNode, mut=False]):
+    fn __next__(mut self) -> ref [self.curr[]] TreeNode:
         self.seen += 1
-        p = self.curr
+        ref p = self.curr[]
         self.curr = _get_next(self.curr)
+        return p
 
     @always_inline
     fn __has_next__(self) -> Bool:
@@ -88,10 +89,11 @@ struct _TreeKeyIter(Sized, Copyable, Movable):
         return self
 
     @always_inline
-    fn __next__(mut self, out p: UnsafePointer[String, mut=False]):
+    fn __next__(mut self) -> ref [self.curr[].key] String:
         self.seen += 1
-        p = UnsafePointer(to=self.curr[].key)
+        ref p = self.curr[].key
         self.curr = _get_next(self.curr)
+        return p
 
     @always_inline
     fn __has_next__(self) -> Bool:
@@ -114,10 +116,11 @@ struct _TreeValueIter(Sized, Copyable, Movable):
         return self
 
     @always_inline
-    fn __next__(mut self, out p: UnsafePointer[Value, mut=False]):
+    fn __next__(mut self) -> ref [self.curr[].data] Value:
         self.seen += 1
-        p = UnsafePointer(to=self.curr[].data)
+        ref p = self.curr[].data
         self.curr = _get_next(self.curr)
+        return p
 
     @always_inline
     fn __has_next__(self) -> Bool:
@@ -141,8 +144,8 @@ struct Tree(
 
     fn __copyinit__(out self, other: Self):
         self = self.__init__()
-        for node in other:
-            self.insert(TreeNode.make_ptr(node[].key, node[].data))
+        for ref node in other:
+            self.insert(TreeNode.make_ptr(node.key, node.data))
 
     fn copy(self) -> Self:
         return self

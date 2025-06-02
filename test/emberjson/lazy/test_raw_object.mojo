@@ -110,13 +110,15 @@ def test_iter():
     var keys = List[String]("a", "b", "c")
 
     var i = 0
-    for el in ob.keys():
+
+    # using `var` stops them from being function scoped for some reason
+    for var el in ob.keys():
         assert_equal(el[], keys[i])
         i += 1
 
     i = 0
     # check that the default is to iterate over keys
-    for el in ob:
+    for var el in ob:
         assert_equal(el[], keys[i])
         i += 1
 
@@ -125,7 +127,7 @@ def test_iter():
     )
 
     i = 0
-    for el in ob.values():
+    for var el in ob.values():
         assert_equal(el[], values[i])
         i += 1
 

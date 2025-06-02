@@ -24,14 +24,14 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
     fn __iter__(self) -> Self:
         return self
 
-    fn __next__(mut self, out p: Pointer[Value, __origin_of(self.src[]._data)]):
+    fn __next__(mut self) -> ref [self.src[]._data] Value:
         @parameter
         if forward:
-            p = Pointer(to=self.src[].__getitem__(self.index))
             self.index += 1
+            return self.src[].__getitem__(self.index - 1)
         else:
             self.index -= 1
-            p = Pointer(to=self.src[].__getitem__(self.index))
+            return self.src[].__getitem__(self.index)
 
     fn __has_next__(self) -> Bool:
         return len(self) > 0

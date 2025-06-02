@@ -274,7 +274,7 @@ fn _estimate_bytes_to_write_float(value: Scalar) -> UInt:
     else:  # normal exponentiation
         var e: Int = exp - FP.exponent_bias()
         # +2 is for `e+/-` or +1 for `.` when abs(e) <= 4
-        var est_exp = (Int(log10(Float64(abs(e)) * `log10(2)`) + 1) + 1)
+        var est_exp = Int(log10(Float64(abs(e)) * `log10(2)`) + 1) + 1
         amnt_exp = UInt((est_exp & -Int(abs(e) > 4)) + 1)
 
     # +2 is to ensure up to 17 characters (53 * log10(2) ~ 15.95458977)

@@ -34,8 +34,8 @@ struct Object(Sized, JsonValue):
     @implicit
     fn __init__(out self, d: Dict[String, Value]):
         self._data = Self.Type()
-        for item in d.items():
-            self._data.insert(item[].key, item[].value)
+        for ref item in d.items():
+            self._data.insert(item.key, item.value)
 
     fn __init__(
         out self,
@@ -85,11 +85,11 @@ struct Object(Sized, JsonValue):
         if len(self) != len(other):
             return False
 
-        for k in self._data.keys():
-            if k[] not in other:
+        for ref k in self._data.keys():
+            if k not in other:
                 return False
             try:
-                if self[k[]] != other[k[]]:
+                if self[k] != other[k]:
                     return False
             except:
                 return False
@@ -137,11 +137,11 @@ struct Object(Sized, JsonValue):
         W: Writer
     ](self, mut writer: W, indent: String, curr_depth: UInt):
         var done = 0
-        for item in self._data:
+        for ref item in self._data:
             for _ in range(curr_depth):
                 writer.write(indent)
-            writer.write('"', item[].key, '"', ": ")
-            item[].data._pretty_to_as_element(writer, indent, curr_depth)
+            writer.write('"', item.key, '"', ": ")
+            item.data._pretty_to_as_element(writer, indent, curr_depth)
             if done < len(self._data) - 1:
                 writer.write(",")
             writer.write("\n")
@@ -158,14 +158,14 @@ struct Object(Sized, JsonValue):
     @always_inline
     fn to_dict(owned self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
-        for item in self.items():
-            d[item[].key] = item[].data
+        for ref item in self.items():
+            d[item.key] = item.data
 
     fn to_python_object(self) -> PythonObject:
         try:
             var d = Python.dict()
-            for item in self.items():
-                d[item[].key] = item[].data.to_python_object()
+            for ref item in self.items():
+                d[item.key] = item.data.to_python_object()
             return d
         except:
             abort("Unexpected error: Failed to convert object to python dict")

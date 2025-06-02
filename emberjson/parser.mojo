@@ -434,8 +434,10 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         alias `1024 + 63` = 1024 + 63
 
         var real_exponent: Int64 = (
-            ((`152170 + 65536`) * power) >> 16
-        ) + `1024 + 63` - lz.cast[DType.int64]()
+            (((`152170 + 65536`) * power) >> 16)
+            + `1024 + 63`
+            - lz.cast[DType.int64]()
+        )
 
         alias `1 << 52` = 1 << 52
 

@@ -56,8 +56,8 @@ fn log10_pow2_residual(e: Int32) -> UInt32:
 @always_inline
 fn mshift(m: UInt64, u: UInt64, l: UInt64) -> UInt64:
     var m_long = UInt128(m)
-    var s0 = (UInt128(l) * m_long)
-    var s1 = (UInt128(u) * m_long)
+    var s0 = UInt128(l) * m_long
+    var s1 = UInt128(u) * m_long
     return UInt64((s1 + (s0 >> 64)) >> 64)
 
 
