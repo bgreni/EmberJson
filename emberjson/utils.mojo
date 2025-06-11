@@ -5,7 +5,7 @@ from utils.numerics import FPUtils
 from math import log10, log2
 from memory import Span
 from memory import memcmp, UnsafePointer
-from utils.write import _WriteBufferStack, _TotalWritableBytes
+from utils.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from os import abort
 from sys import sizeof
@@ -120,8 +120,6 @@ struct CheckedPointer(Copyable, Comparable):
 
 alias DefaultPrettyIndent = 4
 
-alias WRITER_DEFAULT_SIZE = 4096
-
 alias StackArray = InlineArray[_, _, run_destructors=False]
 
 
@@ -132,20 +130,18 @@ fn will_overflow(i: UInt64) -> Bool:
 
 fn write[T: JsonValue, //](out s: String, v: T):
     s = String()  # FIXME(modular/#4573): once it is optimized, return String(v)
-    var writer = _WriteBufferStack[WRITER_DEFAULT_SIZE](s)
+    var writer = _WriteBufferStack(s)
     v.write_to(writer)
     writer.flush()
 
 
 @no_inline
 fn write_pretty[
-    P: PrettyPrintable, //, *, buffer_size: Int = WRITER_DEFAULT_SIZE
+    P: PrettyPrintable, //
 ](value: P, indent: Variant[Int, String] = DefaultPrettyIndent, out s: String):
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
-    var arg_bytes = _TotalWritableBytes()
-    value.pretty_to(arg_bytes, ind)
-    s = String(capacity=arg_bytes.size)
-    var writer = _WriteBufferStack[buffer_size](s)
+    s = String()
+    var writer = _WriteBufferStack(s)
     value.pretty_to(writer, ind)
     writer.flush()
 
