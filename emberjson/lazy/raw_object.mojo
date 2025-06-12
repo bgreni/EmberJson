@@ -162,12 +162,8 @@ struct RawObject[origin: ImmutableOrigin](Sized, JsonValue):
         for item in self.items():
             d[item[].key] = item[].data
 
-    fn to_python_object(self) -> PythonObject:
-        try:
-            var d = Python.dict()
-            for item in self.items():
-                d[item[].key] = item[].data.to_python_object()
-            return d
-        except:
-            abort("Unexpected error: Failed to convert object to python dict")
-        return None
+    fn to_python_object(self) raises -> PythonObject:
+        var d = Python.dict()
+        for item in self.items():
+            d[item[].key] = item[].data.to_python_object()
+        return d

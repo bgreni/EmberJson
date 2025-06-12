@@ -234,7 +234,7 @@ struct JSON(JsonValue, Sized):
         """
         return self.isa[Array]()
 
-    fn to_python_object(self) -> PythonObject:
+    fn to_python_object(self) raises -> PythonObject:
         return (
             self.array()
             .to_python_object() if self.is_array() else self.object()

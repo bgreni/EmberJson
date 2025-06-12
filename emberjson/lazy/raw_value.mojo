@@ -399,23 +399,20 @@ struct RawValue[origin: ImmutableOrigin](JsonValue):
     fn __repr__(self) -> String:
         return self.__str__()
 
-    fn to_python_object(self) -> PythonObject:
-        try:
-            if self.is_int():
-                return self.int()
-            elif self.is_float():
-                return self.float()
-            elif self.is_string():
-                return self.string()
-            elif self.is_bool():
-                return self.bool()
-            elif self.is_null():
-                return None
-            elif self.is_object():
-                return self.object().to_python_object()
-            elif self.is_array():
-                return self.array().to_python_object()
-            else:
-                return abort[NoneType]("Unreachable: to_python_object")
-        except:
+    fn to_python_object(self) raises -> PythonObject:
+        if self.is_int():
+            return self.int()
+        elif self.is_float():
+            return self.float()
+        elif self.is_string():
+            return self.string()
+        elif self.is_bool():
+            return self.bool()
+        elif self.is_null():
             return None
+        elif self.is_object():
+            return self.object().to_python_object()
+        elif self.is_array():
+            return self.array().to_python_object()
+        else:
+            return abort[NoneType]("Unreachable: to_python_object")

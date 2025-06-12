@@ -55,7 +55,7 @@ struct Null(JsonValue):
     ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         writer.write(self)
 
-    fn to_python_object(self) -> PythonObject:
+    fn to_python_object(self) raises -> PythonObject:
         return None
 
 
@@ -374,7 +374,7 @@ struct Value(JsonValue):
     fn __repr__(self) -> String:
         return self.__str__()
 
-    fn to_python_object(self) -> PythonObject:
+    fn to_python_object(self) raises -> PythonObject:
         if self.is_int():
             return self.int()
         elif self.is_uint():

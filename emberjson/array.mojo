@@ -178,5 +178,5 @@ struct Array(Sized, JsonValue):
         l = self._data^
         __disable_del self
 
-    fn to_python_object(self) -> PythonObject:
+    fn to_python_object(self) raises -> PythonObject:
         return Python.list(self._data)
