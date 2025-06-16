@@ -49,7 +49,7 @@ struct RawJsonType(Copyable, Movable):
         return self._type != other._type
 
 
-@value
+@fieldwise_init
 struct RawValue[origin: ImmutableOrigin](JsonValue):
     var _type: RawJsonType
     var _data: Variant[Span[Byte, origin], RawObject[origin], RawArray[origin]]

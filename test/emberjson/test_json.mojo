@@ -230,7 +230,7 @@ def test_compile_time():
     assert_equal(arr[9].string(), "string that has unicode in it: ü")
 
 
-var dir = String("./bench_data/data/jsonchecker/")
+alias dir = String("./bench_data/data/jsonchecker/")
 
 
 def expect_fail(datafile: String):
