@@ -244,9 +244,9 @@ def test_booling():
         raise Error("Implicit bool failed")
 
     var trues = Array("some string", 123, 3.43)
-    for ref t in trues:
+    for t in trues:
         assert_true(t)
 
     var falsies = Array("", 0, 0.0, False, Null(), None)
-    for ref f in falsies:
+    for f in falsies:
         assert_false(f)

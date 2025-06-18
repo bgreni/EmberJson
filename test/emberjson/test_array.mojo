@@ -88,12 +88,12 @@ def test_iter():
     var arr = Array(False, 123, None)
 
     var i = 0
-    for ref el in arr:
+    for el in arr:
         assert_equal(el, arr[i])
         i += 1
 
     i = 2
-    for ref el in arr.reversed():
+    for el in arr.reversed():
         assert_equal(el, arr[i])
         i -= 1
 

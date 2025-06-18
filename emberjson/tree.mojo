@@ -144,7 +144,7 @@ struct Tree(
 
     fn __copyinit__(out self, other: Self):
         self = self.__init__()
-        for ref node in other:
+        for node in other:
             self.insert(TreeNode.make_ptr(node.key, node.data))
 
     fn copy(self) -> Self:

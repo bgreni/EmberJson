@@ -32,9 +32,9 @@ struct Object(Sized, JsonValue):
 
     @always_inline
     @implicit
-    fn __init__(out self, d: Dict[String, Value]):
+    fn __init__(out self, owned d: Dict[String, Value]):
         self._data = Self.Type()
-        for ref item in d.items():
+        for item in d.items():
             self._data.insert(item.key, item.value)
 
     fn __init__(
@@ -85,7 +85,7 @@ struct Object(Sized, JsonValue):
         if len(self) != len(other):
             return False
 
-        for ref k in self._data.keys():
+        for k in self._data.keys():
             if k not in other:
                 return False
             try:
@@ -137,7 +137,7 @@ struct Object(Sized, JsonValue):
         W: Writer
     ](self, mut writer: W, indent: String, curr_depth: UInt):
         var done = 0
-        for ref item in self._data:
+        for item in self._data:
             for _ in range(curr_depth):
                 writer.write(indent)
             writer.write('"', item.key, '"', ": ")
@@ -158,11 +158,11 @@ struct Object(Sized, JsonValue):
     @always_inline
     fn to_dict(owned self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
-        for ref item in self.items():
+        for item in self.items():
             d[item.key] = item.data
 
     fn to_python_object(self) raises -> PythonObject:
         var d = Python.dict()
-        for ref item in self.items():
+        for item in self.items():
             d[item.key] = item.data.to_python_object()
         return d
