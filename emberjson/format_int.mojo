@@ -3,7 +3,7 @@ from .utils import select
 
 fn do_write_int[W: Writer](v: Scalar, mut writer: W, neg: Bool):
     @parameter
-    if v.element_type.is_unsigned():
+    if v.dtype.is_unsigned():
         if v >= 10:
             do_write_int(v / 10, writer, neg)
     else:
@@ -26,14 +26,14 @@ fn write_int[W: Writer](v: Scalar, mut writer: W):
     """
     # TODO: Investigate if this is actually better than just writing to a
     # stack array and writing that to a string backwards
-    constrained[v.element_type.is_integral(), "Expected integral value"]()
+    constrained[v.dtype.is_integral(), "Expected integral value"]()
     if v == 0:
         writer.write(0)
     else:
         var neg: Bool
 
         @parameter
-        if v.element_type.is_unsigned():
+        if v.dtype.is_unsigned():
             neg = False
         else:
             neg = v < 0
