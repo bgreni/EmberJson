@@ -7,7 +7,7 @@ from python import PythonObject, Python
 
 @register_passable("trivial")
 struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
-    Sized, Copyable, Movable
+    Copyable, Movable, Sized
 ):
     var index: Int
     var src: Pointer[Array, origin]
@@ -44,7 +44,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
             return self.index
 
 
-struct Array(Sized, JsonValue):
+struct Array(JsonValue, Sized):
     """Represents a heterogeneous array of json types.
 
     This is accomplished by using `Value` for the collection type, which

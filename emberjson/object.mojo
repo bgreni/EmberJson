@@ -8,7 +8,7 @@ from python import PythonObject, Python
 from os import abort
 
 
-struct Object(Sized, JsonValue):
+struct Object(JsonValue, Sized):
     """Represents a key-value pair object.
     All keys are String and all values are of type `Value` which is
     a variant type of any valid JSON type.

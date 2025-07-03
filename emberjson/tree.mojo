@@ -3,7 +3,7 @@ from memory import UnsafePointer
 from os import abort
 
 
-struct TreeNode(Writable, Stringable, Representable, Copyable, Movable):
+struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
     var data: Value
     var key: String
     var left: UnsafePointer[Self]
@@ -52,7 +52,7 @@ struct TreeNode(Writable, Stringable, Representable, Copyable, Movable):
 
 @fieldwise_init
 @register_passable("trivial")
-struct _TreeIter(Sized, Copyable, Movable):
+struct _TreeIter(Copyable, Movable, Sized):
     var curr: UnsafePointer[TreeNode]
     var seen: Int
     var total: Int
@@ -79,7 +79,7 @@ struct _TreeIter(Sized, Copyable, Movable):
 
 @fieldwise_init
 @register_passable("trivial")
-struct _TreeKeyIter(Sized, Copyable, Movable):
+struct _TreeKeyIter(Copyable, Movable, Sized):
     var curr: UnsafePointer[TreeNode]
     var seen: Int
     var total: Int
@@ -106,7 +106,7 @@ struct _TreeKeyIter(Sized, Copyable, Movable):
 
 @fieldwise_init
 @register_passable("trivial")
-struct _TreeValueIter(Sized, Copyable, Movable):
+struct _TreeValueIter(Copyable, Movable, Sized):
     var curr: UnsafePointer[TreeNode]
     var seen: Int
     var total: Int
@@ -132,7 +132,7 @@ struct _TreeValueIter(Sized, Copyable, Movable):
 
 
 struct Tree(
-    Movable & Copyable, Sized, ExplicitlyCopyable, Writable, Stringable
+    ExplicitlyCopyable, Movable & Copyable, Sized, Stringable, Writable
 ):
     alias NodePtr = UnsafePointer[TreeNode]
     var root: Self.NodePtr

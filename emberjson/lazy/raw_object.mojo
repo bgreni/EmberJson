@@ -9,7 +9,7 @@ from .raw_parser import RawParser
 from emberjson.traits import JsonValue
 
 
-struct RawObject[origin: ImmutableOrigin](Sized, JsonValue):
+struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
     """Represents a key-value pair object.
     All keys are String and all values are of type `RawValue` which is
     a variant type of any valid JSON type.

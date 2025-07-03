@@ -12,7 +12,7 @@ struct _RawArrayIter[
     values_origin: ImmutableOrigin,
     array_origin: Origin[mut],
     forward: Bool = True,
-](Sized, Copyable, Movable):
+](Copyable, Movable, Sized):
     var index: Int
     var src: Pointer[RawArray[values_origin], array_origin]
 
@@ -52,7 +52,7 @@ struct _RawArrayIter[
             return self.index
 
 
-struct RawArray[origin: ImmutableOrigin](Sized, JsonValue):
+struct RawArray[origin: ImmutableOrigin](JsonValue, Sized):
     """Represents a heterogeneous array of json types.
 
     This is accomplished by using `RawValue` for the collection type, which
