@@ -44,12 +44,13 @@ The JSON struct also conforms to the `Stringable`, `Representable` and `Writable
 traits.
 
 ```mojo
-from emberjson import to_string
+from emberjson import parse, to_string
 
-var json = parse('{"key": 123}')
-
-print(to_string(json)) # prints {"key":123}
-print(to_string[pretty=True](json))
+fn main() raises:
+    var json = parse('{"key": 123}')
+    
+    print(to_string(json)) # prints {"key":123}
+    print(to_string[pretty=True](json))
 # prints:
 #{
 #   "key": 123
