@@ -108,6 +108,7 @@ def coin_flip() -> Bool:
 
 
 def main():
+    print('Running fuzzy tests...')
     seed()
     var start = monotonic()
     var i = 0

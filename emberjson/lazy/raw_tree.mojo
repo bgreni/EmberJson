@@ -157,7 +157,7 @@ struct RawTree[origin: ImmutableOrigin](
         self.root = other.root
         self.size = other.size
         other.root = Self.NodePtr()
-        other.size = 0
+        _ = other.root
 
     @always_inline
     fn __iter__(self) -> _RawTreeIter[origin]:
