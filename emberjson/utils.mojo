@@ -5,7 +5,7 @@ from utils.numerics import FPUtils
 from math import log10, log2
 from memory import Span
 from memory import memcmp, UnsafePointer
-from utils.write import _WriteBufferStack
+from io.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from os import abort
 from sys import sizeof

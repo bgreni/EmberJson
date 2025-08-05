@@ -1,4 +1,4 @@
-from python import PythonConvertible
+from python import ConvertibleToPython
 
 
 trait PrettyPrintable:
@@ -20,6 +20,6 @@ trait JsonValue(
     ImplicitlyBoolable,
     ExplicitlyCopyable,
     PrettyPrintable,
-    PythonConvertible,
+    ConvertibleToPython,
 ):
     pass

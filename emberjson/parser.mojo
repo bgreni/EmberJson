@@ -380,18 +380,13 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         self, out d: Float64, power: Int64, i: UInt64, negative: Bool
     ):
         d = Float64(i)
-        var pow: Float64
         var neg_power = power < 0
 
-        # TODO: Remove this branch after `power_of_ten` is also ctime computed again
-        if is_compile_time():
-            pow = 10.0 ** Float64(abs(power))
-        else:
-            pow = power_of_ten.unsafe_get(Int(abs(power)))
+        var pow = power_of_ten.unsafe_get(Int(abs(power)))
 
-        d = d / pow if neg_power else d * pow
-        if negative:
-            d = -d
+        d = select(neg_power, d / pow, d * pow)
+
+        d = select(negative, -d, d)
 
     @always_inline
     fn compute_float64(
