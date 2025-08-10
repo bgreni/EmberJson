@@ -140,7 +140,7 @@ struct Decimal(Copyable, Movable):
         ):
             self.num_digits -= 1
 
-    fn number_of_digits_decimal_left_shift(self, owned shift: UInt64) -> UInt32:
+    fn number_of_digits_decimal_left_shift(self, var shift: UInt64) -> UInt32:
         shift &= 63
 
         var x_a = number_of_digits_decimal_left_shift_table.unsafe_get(
@@ -181,7 +181,7 @@ struct AdjustedMantissa(Copyable):
         self.power2 = 0
 
 
-fn from_chars_slow(out value: Float64, owned first: CheckedPointer) raises:
+fn from_chars_slow(out value: Float64, var first: CheckedPointer) raises:
     var negative = first[] == `-`
     first += Int(negative or first[] == `+`)
     var am = compute_float(parse_decimal(first))
@@ -192,7 +192,7 @@ fn from_chars_slow(out value: Float64, owned first: CheckedPointer) raises:
     value = bitcast[DType.float64](word)
 
 
-fn compute_float(out answer: AdjustedMantissa, owned d: Decimal) raises:
+fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
     answer = AdjustedMantissa()
 
     if d.num_digits == 0 or d.decimal_point < -324:

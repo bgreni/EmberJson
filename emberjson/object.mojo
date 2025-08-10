@@ -27,20 +27,20 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     @implicit
-    fn __init__(out self, owned d: Self.Type):
+    fn __init__(out self, var d: Self.Type):
         self._data = d^
 
     @always_inline
     @implicit
-    fn __init__(out self, owned d: Dict[String, Value]):
+    fn __init__(out self, var d: Dict[String, Value]):
         self._data = Self.Type()
         for item in d.items():
             self._data.insert(item.key, item.value)
 
     fn __init__(
         out self,
-        owned keys: List[String],
-        owned values: List[Value],
+        var keys: List[String],
+        var values: List[Value],
         __dict_literal__: (),
     ):
         debug_assert(len(keys) == len(values))
@@ -58,7 +58,7 @@ struct Object(JsonValue, Sized):
         self._data = other._data
 
     @always_inline
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self._data = other._data^
 
     @always_inline
@@ -66,7 +66,7 @@ struct Object(JsonValue, Sized):
         return self
 
     @always_inline
-    fn __setitem__(mut self, owned key: String, owned item: Value):
+    fn __setitem__(mut self, var  key: String, var item: Value):
         self._data[key^] = item^
 
     @always_inline
@@ -156,7 +156,7 @@ struct Object(JsonValue, Sized):
         return self.__str__()
 
     @always_inline
-    fn to_dict(owned self, out d: Dict[String, Value]):
+    fn to_dict(var self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
         for item in self.items():
             d[item.key] = item.data

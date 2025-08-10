@@ -96,13 +96,13 @@ struct RawValue[origin: ImmutableOrigin](JsonValue):
 
     @implicit
     @always_inline
-    fn __init__(out self, owned val: RawObject[origin]):
+    fn __init__(out self, var val: RawObject[origin]):
         self._type = RawJsonType.OBJECT
         self._data = val^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned val: RawArray[origin]):
+    fn __init__(out self, var val: RawArray[origin]):
         self._type = RawJsonType.ARRAY
         self._data = val^
 

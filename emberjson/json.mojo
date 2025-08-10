@@ -22,22 +22,22 @@ struct JSON(JsonValue, Sized):
 
     @implicit
     @always_inline
-    fn __init__(out self, owned ob: Object):
+    fn __init__(out self, var ob: Object):
         self._data = ob^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned arr: Array):
+    fn __init__(out self, var arr: Array):
         self._data = arr^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned l: Array.Type):
+    fn __init__(out self, var l: Array.Type):
         self._data = l^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned o: Object.Type):
+    fn __init__(out self, var o: Object.Type):
         self._data = o^
 
     @always_inline
@@ -70,7 +70,7 @@ struct JSON(JsonValue, Sized):
         self._data = other._data
 
     @always_inline
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self._data = other._data^
 
     @always_inline

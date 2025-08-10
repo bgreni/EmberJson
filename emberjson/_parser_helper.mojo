@@ -257,7 +257,7 @@ fn unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
 
 @always_inline
 fn to_double(
-    owned mantissa: UInt64, real_exponent: UInt64, negative: Bool
+    var mantissa: UInt64, real_exponent: UInt64, negative: Bool
 ) -> Float64:
     alias `1 << 52` = 1 << 52
     mantissa &= ~(`1 << 52`)

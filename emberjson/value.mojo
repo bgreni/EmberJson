@@ -76,11 +76,11 @@ struct Value(JsonValue):
 
     @implicit
     @always_inline
-    fn __init__(out self, owned v: Self.Type):
+    fn __init__(out self, var v: Self.Type):
         self._data = v^
 
     @implicit
-    fn __init__(out self, owned j: JSON):
+    fn __init__(out self, var j: JSON):
         if j.is_object():
             self._data = j.object()
         else:
@@ -129,17 +129,17 @@ struct Value(JsonValue):
 
     @implicit
     @always_inline
-    fn __init__(out self, owned v: Object):
+    fn __init__(out self, var v: Object):
         self._data = v^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned v: Array):
+    fn __init__(out self, var v: Array):
         self._data = v^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned v: String):
+    fn __init__(out self, var v: String):
         self._data = v^
 
     @always_inline
@@ -149,7 +149,7 @@ struct Value(JsonValue):
 
     @implicit
     @always_inline
-    fn __init__(out self, owned v: StringLiteral):
+    fn __init__(out self, var v: StringLiteral):
         self._data = String(v)
 
     @implicit
@@ -171,7 +171,7 @@ struct Value(JsonValue):
         return self
 
     @always_inline
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self._data = other._data^
 
     @always_inline

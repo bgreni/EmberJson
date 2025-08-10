@@ -395,7 +395,7 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn compute_float64(
-        self, out d: Float64, power: Int64, owned i: UInt64, negative: Bool
+        self, out d: Float64, power: Int64, var i: UInt64, negative: Bool
     ) raises:
         alias min_fast_power = Int64(-22)
         alias max_fast_power = Int64(22)
