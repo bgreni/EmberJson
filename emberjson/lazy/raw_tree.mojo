@@ -14,7 +14,7 @@ struct RawTreeNode[origin: ImmutableOrigin](
     var right: UnsafePointer[Self]
     var parent: UnsafePointer[Self]
 
-    fn __init__(out self, owned key: String, owned data: RawValue[origin]):
+    fn __init__(out self, var key: String, var data: RawValue[origin]):
         self.data = data^
         self.key = key^
         self.left = UnsafePointer[Self]()
@@ -48,8 +48,8 @@ struct RawTreeNode[origin: ImmutableOrigin](
 
     @staticmethod
     fn make_ptr(
-        owned key: String,
-        owned data: RawValue[origin],
+        var key: String,
+        var data: RawValue[origin],
         out p: UnsafePointer[Self],
     ):
         p = UnsafePointer[Self].alloc(1)
@@ -153,7 +153,7 @@ struct RawTree[origin: ImmutableOrigin](
     fn copy(self) -> Self:
         return self
 
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self.root = other.root
         self.size = other.size
         other.root = Self.NodePtr()
@@ -179,7 +179,7 @@ struct RawTree[origin: ImmutableOrigin](
     fn __len__(self) -> Int:
         return self.size
 
-    fn __del__(owned self):
+    fn __del__(deinit self):
         fn do_del(node: Self.NodePtr):
             if node:
                 node.destroy_pointee()
@@ -222,7 +222,7 @@ struct RawTree[origin: ImmutableOrigin](
             parent[].right = node
 
     @always_inline
-    fn insert(mut self, owned key: String, owned data: RawValue[origin]):
+    fn insert(mut self, var  key: String, var data: RawValue[origin]):
         self.insert(RawTreeNode[origin].make_ptr(key^, data^))
 
     fn write_to[W: Writer](self, mut writer: W):
@@ -242,7 +242,7 @@ struct RawTree[origin: ImmutableOrigin](
         return node[].data
 
     @always_inline
-    fn __setitem__(mut self, owned key: String, owned data: RawValue[origin]):
+    fn __setitem__(mut self, var  key: String, var data: RawValue[origin]):
         self.insert(key^, data^)
 
     @always_inline
@@ -297,7 +297,7 @@ fn _find[
 
 fn _get_left_most[
     origin: ImmutableOrigin, //
-](owned node: UnsafePointer[RawTreeNode[origin]]) -> __type_of(node):
+](var node: UnsafePointer[RawTreeNode[origin]]) -> __type_of(node):
     while node[].left:
         node = node[].left
     return node
@@ -305,7 +305,7 @@ fn _get_left_most[
 
 fn _get_next[
     origin: ImmutableOrigin, //
-](owned node: UnsafePointer[RawTreeNode[origin]]) -> __type_of(node):
+](var node: UnsafePointer[RawTreeNode[origin]]) -> __type_of(node):
     if node[].right:
         return _get_left_most(node[].right)
     while node[].parent and node == node[].parent[].right:

@@ -10,7 +10,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
     var right: UnsafePointer[Self]
     var parent: UnsafePointer[Self]
 
-    fn __init__(out self, owned key: String, owned data: Value):
+    fn __init__(out self, var key: String, var data: Value):
         self.data = data^
         self.key = key^
         self.left = UnsafePointer[Self]()
@@ -44,7 +44,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
 
     @staticmethod
     fn make_ptr(
-        owned key: String, owned data: Value, out p: UnsafePointer[Self]
+        var key: String, var data: Value, out p: UnsafePointer[Self]
     ):
         p = UnsafePointer[Self].alloc(1)
         p.init_pointee_move(TreeNode(key^, data^))
@@ -150,7 +150,7 @@ struct Tree(
     fn copy(self) -> Self:
         return self
 
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self.root = other.root
         self.size = other.size
         other.root = Self.NodePtr()
@@ -176,7 +176,7 @@ struct Tree(
     fn __len__(self) -> Int:
         return self.size
 
-    fn __del__(owned self):
+    fn __del__(deinit self):
         fn do_del(node: Self.NodePtr):
             if node:
                 node.destroy_pointee()
@@ -219,7 +219,7 @@ struct Tree(
             parent[].right = node
 
     @always_inline
-    fn insert(mut self, owned key: String, owned data: Value):
+    fn insert(mut self, var  key: String, var data: Value):
         self.insert(TreeNode.make_ptr(key^, data^))
 
     fn write_to[W: Writer](self, mut writer: W):
@@ -239,7 +239,7 @@ struct Tree(
         return node[].data
 
     @always_inline
-    fn __setitem__(mut self, owned key: String, owned data: Value):
+    fn __setitem__(mut self, var  key: String, var data: Value):
         self.insert(key^, data^)
 
     @always_inline
@@ -288,13 +288,13 @@ fn _find(node: UnsafePointer[TreeNode], key: String) -> __type_of(node):
     return _find(node[].left, key)
 
 
-fn _get_left_most(owned node: UnsafePointer[TreeNode]) -> __type_of(node):
+fn _get_left_most(var node: UnsafePointer[TreeNode]) -> __type_of(node):
     while node[].left:
         node = node[].left
     return node
 
 
-fn _get_next(owned node: UnsafePointer[TreeNode]) -> __type_of(node):
+fn _get_next(var node: UnsafePointer[TreeNode]) -> __type_of(node):
     if node[].right:
         return _get_left_most(node[].right)
     while node[].parent and node == node[].parent[].right:

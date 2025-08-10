@@ -28,7 +28,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
 
     @always_inline
     @implicit
-    fn __init__(out self, owned d: Self.Type):
+    fn __init__(out self, var d: Self.Type):
         self._data = d^
 
     @always_inline
@@ -40,8 +40,8 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
 
     fn __init__(
         out self,
-        owned keys: List[String],
-        owned values: List[RawValue[origin]],
+        var keys: List[String],
+        var values: List[RawValue[origin]],
         __dict_literal__: (),
     ):
         debug_assert(len(keys) == len(values))
@@ -59,7 +59,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
         self._data = other._data
 
     @always_inline
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self._data = other._data^
 
     @always_inline
@@ -67,7 +67,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
         return self
 
     @always_inline
-    fn __setitem__(mut self, owned key: String, owned item: RawValue[origin]):
+    fn __setitem__(mut self, var  key: String, var item: RawValue[origin]):
         self._data[key^] = item^
 
     @always_inline
@@ -157,7 +157,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
         return self.__str__()
 
     @always_inline
-    fn to_dict(owned self, out d: Dict[String, RawValue[origin]]):
+    fn to_dict(var self, out d: Dict[String, RawValue[origin]]):
         d = Dict[String, RawValue[origin]]()
         for item in self.items():
             d[item[].key] = item[].data

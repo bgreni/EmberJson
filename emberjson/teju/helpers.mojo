@@ -5,7 +5,7 @@ alias LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
 
 
 @always_inline
-fn remove_trailing_zeros(owned m: UInt64, owned e: Int32) -> Fields:
+fn remove_trailing_zeros(var m: UInt64, var e: Int32) -> Fields:
     alias minv5: UInt64 = -(UInt64.MAX // 5)
     alias bound: UInt64 = (UInt64.MAX // 10 + 1)
 

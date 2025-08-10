@@ -23,22 +23,22 @@ struct RawJSON[origin: ImmutableOrigin](JsonValue, Sized):
 
     @implicit
     @always_inline
-    fn __init__(out self, owned ob: RawObject[origin]):
+    fn __init__(out self, var ob: RawObject[origin]):
         self._data = ob^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned arr: RawArray[origin]):
+    fn __init__(out self, var arr: RawArray[origin]):
         self._data = arr^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned l: RawArray[origin].Type):
+    fn __init__(out self, var l: RawArray[origin].Type):
         self._data = l^
 
     @implicit
     @always_inline
-    fn __init__(out self, owned o: RawObject[origin].Type):
+    fn __init__(out self, var o: RawObject[origin].Type):
         self._data = o^
 
     @always_inline
@@ -71,7 +71,7 @@ struct RawJSON[origin: ImmutableOrigin](JsonValue, Sized):
         self._data = other._data
 
     @always_inline
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self._data = other._data^
 
     @always_inline

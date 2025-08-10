@@ -64,11 +64,11 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     @implicit
-    fn __init__(out self, owned d: Self.Type):
+    fn __init__(out self, var d: Self.Type):
         self._data = d^
 
     @always_inline
-    fn __init__(out self, owned *values: Value, __list_literal__: () = ()):
+    fn __init__(out self, var *values: Value, __list_literal__: () = ()):
         self._data = Self.Type(elements=values^)
 
     @always_inline
@@ -85,7 +85,7 @@ struct Array(JsonValue, Sized):
         return self
 
     @always_inline
-    fn __moveinit__(out self, owned other: Self):
+    fn __moveinit__(out self, deinit  other: Self):
         self._data = other._data^
 
     @always_inline
@@ -93,7 +93,7 @@ struct Array(JsonValue, Sized):
         return self._data[ind]
 
     @always_inline
-    fn __setitem__[T: Indexer](mut self, ind: T, owned item: Value):
+    fn __setitem__[T: Indexer](mut self, ind: T, var item: Value):
         self._data[ind] = item^
 
     @always_inline
@@ -171,11 +171,13 @@ struct Array(JsonValue, Sized):
         return self.__str__()
 
     @always_inline
-    fn append(mut self, owned item: Value):
+    fn append(mut self, var  item: Value):
         self._data.append(item^)
 
-    fn to_list(owned self, out l: List[Value]):
+    fn to_list(var self, out l: List[Value]):
         l = self._data^
+        # TODO(josiahls): Now that we are using deinit for the __del__ and __moveinit__
+        # methods, we could change var self to deinit self and remove __disable_del self.
         __disable_del self
 
     fn to_python_object(self) raises -> PythonObject:

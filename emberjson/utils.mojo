@@ -173,7 +173,7 @@ fn to_string(b: Byte, out s: String):
 
 
 @always_inline
-fn to_string(owned i: UInt32) -> String:
+fn to_string(var i: UInt32) -> String:
     # This is meant to be a sequence of 4 characters
     return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
 
