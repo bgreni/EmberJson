@@ -58,6 +58,7 @@ fn get_non_space_bits(s: SIMD8xT) -> Bits_T:
     return ~pack_into_integer[SIMD8xT.size](vec)
 
 
+# FIXME: Remove the explicit size parameter once https://github.com/modular/modular/issues/5164 is fixed
 @always_inline
 fn pack_into_integer[size: Int](simd: SIMDBool[size]) -> Bits_T:
     return Bits_T(pack_bits(simd))
