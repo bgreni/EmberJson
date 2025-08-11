@@ -59,7 +59,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
         self._data = other._data
 
     @always_inline
-    fn __moveinit__(out self, deinit  other: Self):
+    fn __moveinit__(out self, deinit other: Self):
         self._data = other._data^
 
     @always_inline
@@ -67,7 +67,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
         return self
 
     @always_inline
-    fn __setitem__(mut self, var  key: String, var item: RawValue[origin]):
+    fn __setitem__(mut self, var key: String, var item: RawValue[origin]):
         self._data[key^] = item^
 
     @always_inline

@@ -43,9 +43,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
         writer.write('"', self.key, '"', ":", self.data)
 
     @staticmethod
-    fn make_ptr(
-        var key: String, var data: Value, out p: UnsafePointer[Self]
-    ):
+    fn make_ptr(var key: String, var data: Value, out p: UnsafePointer[Self]):
         p = UnsafePointer[Self].alloc(1)
         p.init_pointee_move(TreeNode(key^, data^))
 
@@ -150,7 +148,7 @@ struct Tree(
     fn copy(self) -> Self:
         return self
 
-    fn __moveinit__(out self, deinit  other: Self):
+    fn __moveinit__(out self, deinit other: Self):
         self.root = other.root
         self.size = other.size
         other.root = Self.NodePtr()
@@ -219,7 +217,7 @@ struct Tree(
             parent[].right = node
 
     @always_inline
-    fn insert(mut self, var  key: String, var data: Value):
+    fn insert(mut self, var key: String, var data: Value):
         self.insert(TreeNode.make_ptr(key^, data^))
 
     fn write_to[W: Writer](self, mut writer: W):
@@ -239,7 +237,7 @@ struct Tree(
         return node[].data
 
     @always_inline
-    fn __setitem__(mut self, var  key: String, var data: Value):
+    fn __setitem__(mut self, var key: String, var data: Value):
         self.insert(key^, data^)
 
     @always_inline

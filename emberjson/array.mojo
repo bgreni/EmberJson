@@ -85,7 +85,7 @@ struct Array(JsonValue, Sized):
         return self
 
     @always_inline
-    fn __moveinit__(out self, deinit  other: Self):
+    fn __moveinit__(out self, deinit other: Self):
         self._data = other._data^
 
     @always_inline
@@ -171,7 +171,7 @@ struct Array(JsonValue, Sized):
         return self.__str__()
 
     @always_inline
-    fn append(mut self, var  item: Value):
+    fn append(mut self, var item: Value):
         self._data.append(item^)
 
     fn to_list(deinit self, out l: List[Value]):

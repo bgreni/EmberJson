@@ -6,7 +6,7 @@ from .raw_value import RawValue
 
 
 struct RawTreeNode[origin: ImmutableOrigin](
-    Writable, Stringable, Representable, Copyable, Movable
+    Copyable, Movable, Representable, Stringable, Writable
 ):
     var data: RawValue[origin]
     var key: String
@@ -58,7 +58,7 @@ struct RawTreeNode[origin: ImmutableOrigin](
 
 @fieldwise_init
 @register_passable("trivial")
-struct _RawTreeIter[origin: ImmutableOrigin](Sized, Copyable, Movable):
+struct _RawTreeIter[origin: ImmutableOrigin](Copyable, Movable, Sized):
     var curr: UnsafePointer[RawTreeNode[origin]]
     var seen: Int
     var total: Int
@@ -84,7 +84,7 @@ struct _RawTreeIter[origin: ImmutableOrigin](Sized, Copyable, Movable):
 
 @fieldwise_init
 @register_passable("trivial")
-struct _RawTreeKeyIter[origin: ImmutableOrigin](Sized, Copyable, Movable):
+struct _RawTreeKeyIter[origin: ImmutableOrigin](Copyable, Movable, Sized):
     var curr: UnsafePointer[RawTreeNode[origin]]
     var seen: Int
     var total: Int
@@ -110,7 +110,7 @@ struct _RawTreeKeyIter[origin: ImmutableOrigin](Sized, Copyable, Movable):
 
 @fieldwise_init
 @register_passable("trivial")
-struct _RawTreeValueIter[origin: ImmutableOrigin](Sized, Copyable, Movable):
+struct _RawTreeValueIter[origin: ImmutableOrigin](Copyable, Movable, Sized):
     var curr: UnsafePointer[RawTreeNode[origin]]
     var seen: Int
     var total: Int
@@ -135,7 +135,7 @@ struct _RawTreeValueIter[origin: ImmutableOrigin](Sized, Copyable, Movable):
 
 
 struct RawTree[origin: ImmutableOrigin](
-    Movable, Copyable, Sized, ExplicitlyCopyable, Writable, Stringable
+    Copyable, ExplicitlyCopyable, Movable, Sized, Stringable, Writable
 ):
     alias NodePtr = UnsafePointer[RawTreeNode[origin]]
     var root: Self.NodePtr
@@ -153,7 +153,7 @@ struct RawTree[origin: ImmutableOrigin](
     fn copy(self) -> Self:
         return self
 
-    fn __moveinit__(out self, deinit  other: Self):
+    fn __moveinit__(out self, deinit other: Self):
         self.root = other.root
         self.size = other.size
         other.root = Self.NodePtr()
@@ -222,7 +222,7 @@ struct RawTree[origin: ImmutableOrigin](
             parent[].right = node
 
     @always_inline
-    fn insert(mut self, var  key: String, var data: RawValue[origin]):
+    fn insert(mut self, var key: String, var data: RawValue[origin]):
         self.insert(RawTreeNode[origin].make_ptr(key^, data^))
 
     fn write_to[W: Writer](self, mut writer: W):
@@ -242,7 +242,7 @@ struct RawTree[origin: ImmutableOrigin](
         return node[].data
 
     @always_inline
-    fn __setitem__(mut self, var  key: String, var data: RawValue[origin]):
+    fn __setitem__(mut self, var key: String, var data: RawValue[origin]):
         self.insert(key^, data^)
 
     @always_inline
