@@ -174,11 +174,8 @@ struct Array(JsonValue, Sized):
     fn append(mut self, var  item: Value):
         self._data.append(item^)
 
-    fn to_list(var self, out l: List[Value]):
+    fn to_list(deinit self, out l: List[Value]):
         l = self._data^
-        # TODO(josiahls): Now that we are using deinit for the __del__ and __moveinit__
-        # methods, we could change var self to deinit self and remove __disable_del self.
-        __disable_del self
 
     fn to_python_object(self) raises -> PythonObject:
         return Python.list(self._data)
