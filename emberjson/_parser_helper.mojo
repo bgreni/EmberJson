@@ -54,7 +54,7 @@ alias Bits_T = Scalar[_uint(SIMD8_WIDTH)]
 
 @always_inline
 fn get_non_space_bits(s: SIMD8xT) -> Bits_T:
-    var vec = (s == ` `) | (s == `\n`) | (s == `\t`) | (s == `\r`)
+    var vec = s.eq(` `) | s.eq(`\n`) | s.eq(`\t`) | s.eq(`\r`)
     return ~pack_into_integer[SIMD8xT.size](vec)
 
 
@@ -124,7 +124,7 @@ struct StringBlock:
     fn find(src: CheckedPointer) -> StringBlock:
         var v = src.load_chunk()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
-        return StringBlock(v == `\\`, v == `"`, v.lt(` `))
+        return StringBlock(v.eq(`\\`), v.eq(`"`), v.lt(` `))
 
     @staticmethod
     @always_inline
@@ -132,7 +132,7 @@ struct StringBlock:
         # FIXME: Port minify to use CheckedPointer
         var v = src.load[width=SIMD8_WIDTH]()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
-        return StringBlock(v == `\\`, v == `"`, v.lt(` `))
+        return StringBlock(v.eq(`\\`), v.eq(`"`), v.lt(` `))
 
 
 @always_inline

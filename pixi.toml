@@ -17,7 +17,7 @@ test = { cmd = "mojo test -D ASSERT=all -I . test" }
 bench = { cmd = "mojo build bench.mojo && ./bench && rm bench" }
 update_and_build = { cmd = "pixi update && pixi run test && pixi run build" }
 precommit = { depends-on = ["format", "test"] }
-update_and_test = "pixi update && pixi run test && pixi run fuzz && pixi run bench"
+update_and_test = "pixi update && pixi run test && pixi run bench"
 test_python_compat = "python python_compat.py"
 
 [dependencies]
@@ -27,7 +27,7 @@ mojo = ">=25.6.0.dev2025080305,<26"
 
 
 [feature.fuzz.tasks]
-fuzz = "pixi run mojo -D ASSERT=all fuzz.mojo"
+fuzz = "mojo -D ASSERT=all fuzz.mojo"
 
 [feature.fuzz.dependencies]
 faker = ">=36.1.1,<37"
