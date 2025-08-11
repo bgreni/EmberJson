@@ -171,7 +171,7 @@ struct Value(JsonValue):
         return self
 
     @always_inline
-    fn __moveinit__(out self, deinit  other: Self):
+    fn __moveinit__(out self, deinit other: Self):
         self._data = other._data^
 
     @always_inline

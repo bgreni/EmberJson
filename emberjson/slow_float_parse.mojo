@@ -272,7 +272,9 @@ fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
 
 
 fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
-    answer = Decimal(0, 0, False, p[] == `-`, StackArray[Byte, MAX_DIGITS](fill=0))
+    answer = Decimal(
+        0, 0, False, p[] == `-`, StackArray[Byte, MAX_DIGITS](fill=0)
+    )
 
     @parameter
     @always_inline

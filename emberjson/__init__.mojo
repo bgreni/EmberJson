@@ -18,7 +18,9 @@ from .lazy import (
 
 
 @always_inline
-fn parse[options: ParseOptions = ParseOptions()](out j: JSON, s: StringSlice) raises:
+fn parse[
+    options: ParseOptions = ParseOptions()
+](out j: JSON, s: StringSlice) raises:
     """Parses a JSON object from a String.
 
     Parameters:

@@ -9,17 +9,17 @@ trait PrettyPrintable:
 
 
 trait JsonValue(
-    EqualityComparable,
-    Copyable,
-    Movable,
-    Writable,
-    Stringable,
-    Representable,
-    Defaultable,
     Boolable,
-    ImplicitlyBoolable,
-    ExplicitlyCopyable,
-    PrettyPrintable,
     ConvertibleToPython,
+    Copyable,
+    Defaultable,
+    EqualityComparable,
+    ExplicitlyCopyable,
+    ImplicitlyBoolable,
+    Movable,
+    PrettyPrintable,
+    Representable,
+    Stringable,
+    Writable,
 ):
     pass

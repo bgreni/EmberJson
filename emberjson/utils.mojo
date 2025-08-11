@@ -21,7 +21,7 @@ alias BytePtr = UnsafePointer[Byte, mut=False]
 
 @fieldwise_init
 @register_passable("trivial")
-struct CheckedPointer(Copyable, Comparable):
+struct CheckedPointer(Comparable, Copyable):
     var p: BytePtr
     var start: BytePtr
     var end: BytePtr
