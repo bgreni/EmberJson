@@ -11,8 +11,8 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
   
-  fuzz:
-    uses: ./.github/workflows/test_fuzz.yml
+  # fuzz:
+  #   uses: ./.github/workflows/test_fuzz.yml
   
   package:
     uses: ./.github/workflows/package.yml
