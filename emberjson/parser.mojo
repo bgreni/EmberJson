@@ -649,7 +649,7 @@ fn minify(s: String, out out_str: String) raises:
         else:
             var chunk = _load_chunk(ptr, is_block_iter)
 
-            var quotes = pack_into_integer[chunk.size](chunk == `"`)
+            var quotes = pack_into_integer(chunk.eq(`"`))
             var valid_bits = count_trailing_zeros(~get_non_space_bits(chunk))
             if quotes != 0:
                 valid_bits = min(valid_bits, count_trailing_zeros(quotes))
