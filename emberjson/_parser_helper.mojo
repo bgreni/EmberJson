@@ -55,12 +55,11 @@ alias Bits_T = Scalar[_uint(SIMD8_WIDTH)]
 @always_inline
 fn get_non_space_bits(s: SIMD8xT) -> Bits_T:
     var vec = s.eq(` `) | s.eq(`\n`) | s.eq(`\t`) | s.eq(`\r`)
-    return ~pack_into_integer[SIMD8xT.size](vec)
+    return ~pack_into_integer(vec)
 
 
-# FIXME: Remove the explicit size parameter once https://github.com/modular/modular/issues/5164 is fixed
 @always_inline
-fn pack_into_integer[size: Int](simd: SIMDBool[size]) -> Bits_T:
+fn pack_into_integer(simd: SIMDBool) -> Bits_T:
     return Bits_T(pack_bits(simd))
 
 
