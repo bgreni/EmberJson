@@ -23,7 +23,7 @@ alias STORAGE_INDEX_OFFSET = -324
 
 
 @always_inline
-fn write_f64[W: Writer](d: Float64, mut writer: W):
+fn write_f64(d: Float64, mut writer: Some[Writer]):
     alias TOP_BIT = 1 << 63
     if bitcast[DType.uint64](d) & TOP_BIT != 0:
         writer.write("-")

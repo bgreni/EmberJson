@@ -2,9 +2,7 @@ from python import ConvertibleToPython
 
 
 trait PrettyPrintable:
-    fn pretty_to[
-        W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
+    fn pretty_to(self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0):
         ...
 
 

@@ -89,11 +89,11 @@ struct Array(JsonValue, Sized):
         self._data = other._data^
 
     @always_inline
-    fn __getitem__[T: Indexer](ref self, ind: T) -> ref [self._data] Value:
+    fn __getitem__(ref self, ind: Some[Indexer]) -> ref [self._data] Value:
         return self._data[ind]
 
     @always_inline
-    fn __setitem__[T: Indexer](mut self, ind: T, var item: Value):
+    fn __setitem__(mut self, ind: Some[Indexer], var item: Value):
         self._data[ind] = item^
 
     @always_inline
@@ -136,7 +136,7 @@ struct Array(JsonValue, Sized):
     fn reserve(mut self, n: Int):
         self._data.reserve(n)
 
-    fn write_to[W: Writer](self, mut writer: W):
+    fn write_to(self, mut writer: Some[Writer]):
         writer.write("[")
         for i in range(len(self._data)):
             writer.write(self._data[i])
@@ -144,16 +144,12 @@ struct Array(JsonValue, Sized):
                 writer.write(",")
         writer.write("]")
 
-    fn pretty_to[
-        W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
+    fn pretty_to(self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0):
         writer.write("[\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("]")
 
-    fn _pretty_write_items[
-        W: Writer
-    ](self, mut writer: W, indent: String, curr_depth: UInt):
+    fn _pretty_write_items(self, mut writer: Some[Writer], indent: String, curr_depth: UInt):
         for i in range(len(self._data)):
             for _ in range(curr_depth):
                 writer.write(indent)

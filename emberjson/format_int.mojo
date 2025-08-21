@@ -1,7 +1,7 @@
 from .utils import select
 
 
-fn do_write_int[W: Writer](v: Scalar, mut writer: W, neg: Bool):
+fn do_write_int(v: Scalar, mut writer: Some[Writer], neg: Bool):
     @parameter
     if v.dtype.is_unsigned():
         if v >= 10:
@@ -13,7 +13,7 @@ fn do_write_int[W: Writer](v: Scalar, mut writer: W, neg: Bool):
 
 
 @always_inline
-fn write_int[W: Writer](v: Scalar, mut writer: W):
+fn write_int(v: Scalar, mut writer: Some[Writer]):
     """A trivial int formatter than prints digits in order without additional
     intermediate copies.
 

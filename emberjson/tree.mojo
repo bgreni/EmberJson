@@ -39,7 +39,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
         return out
 
     @always_inline
-    fn write_to[W: Writer](self, mut writer: W):
+    fn write_to(self, mut writer: Some[Writer]):
         writer.write('"', self.key, '"', ":", self.data)
 
     @staticmethod
@@ -244,9 +244,7 @@ struct Tree(
     fn __contains__(self, key: String) -> Bool:
         return Bool(self.find(key))
 
-    fn write_nodes[
-        W: Writer
-    ](self, mut writer: W, node: Self.NodePtr, mut written: Int):
+    fn write_nodes(self, mut writer: Some[Writer], node: Self.NodePtr, mut written: Int):
         if not node:
             return
 

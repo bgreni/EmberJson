@@ -46,13 +46,11 @@ struct Null(JsonValue):
         return False
 
     @always_inline
-    fn write_to[W: Writer](self, mut writer: W):
+    fn write_to(self, mut writer: Some[Writer]):
         writer.write(self.__str__())
 
     @always_inline
-    fn pretty_to[
-        W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
+    fn pretty_to(self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0):
         writer.write(self)
 
     fn to_python_object(self) raises -> PythonObject:
@@ -316,7 +314,7 @@ struct Value(JsonValue):
     fn array(ref self) -> ref [self._data] Array:
         return self.get[Array]()
 
-    fn write_to[W: Writer](self, mut writer: W):
+    fn write_to(self, mut writer: Some[Writer]):
         if self.is_int():
             write_int(self.int(), writer)
         elif self.is_uint():
@@ -338,9 +336,7 @@ struct Value(JsonValue):
         else:
             abort("Unreachable: write_to")
 
-    fn _pretty_to_as_element[
-        W: Writer
-    ](self, mut writer: W, indent: String, curr_depth: UInt):
+    fn _pretty_to_as_element(self, mut writer: Some[Writer], indent: String, curr_depth: UInt):
         if self.isa[Object]():
             writer.write("{\n")
             self.object()._pretty_write_items(writer, indent, curr_depth + 1)
@@ -356,9 +352,7 @@ struct Value(JsonValue):
         else:
             self.write_to(writer)
 
-    fn pretty_to[
-        W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
+    fn pretty_to(self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0):
         if self.isa[Object]():
             self.object().pretty_to(writer, indent, curr_depth=curr_depth)
         elif self.isa[Array]():

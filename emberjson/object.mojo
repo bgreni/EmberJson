@@ -123,19 +123,15 @@ struct Object(JsonValue, Sized):
     fn items(ref self) -> Self.ObjectIter:
         return self._data.items()
 
-    fn write_to[W: Writer](self, mut writer: W):
+    fn write_to(self, mut writer: Some[Writer]):
         writer.write(self._data)
 
-    fn pretty_to[
-        W: Writer
-    ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
+    fn pretty_to(self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0):
         writer.write("{\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("}")
 
-    fn _pretty_write_items[
-        W: Writer
-    ](self, mut writer: W, indent: String, curr_depth: UInt):
+    fn _pretty_write_items(self, mut writer: Some[Writer], indent: String, curr_depth: UInt):
         var done = 0
         for item in self._data:
             for _ in range(curr_depth):

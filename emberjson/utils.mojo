@@ -128,7 +128,7 @@ fn will_overflow(i: UInt64) -> Bool:
     return i > UInt64(Int64.MAX)
 
 
-fn write[T: JsonValue, //](out s: String, v: T):
+fn write(out s: String, v: Some[JsonValue]):
     s = String()  # FIXME(modular/#4573): once it is optimized, return String(v)
     var writer = _WriteBufferStack(s)
     v.write_to(writer)
@@ -136,9 +136,7 @@ fn write[T: JsonValue, //](out s: String, v: T):
 
 
 @no_inline
-fn write_pretty[
-    P: PrettyPrintable, //
-](value: P, indent: Variant[Int, String] = DefaultPrettyIndent, out s: String):
+fn write_pretty(value: Some[PrettyPrintable], indent: Variant[Int, String] = DefaultPrettyIndent, out s: String):
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
     s = String()
     var writer = _WriteBufferStack(s)
