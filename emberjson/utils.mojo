@@ -120,7 +120,7 @@ struct CheckedPointer(Comparable, Copyable):
 
 alias DefaultPrettyIndent = 4
 
-alias StackArray = InlineArray[_, _, run_destructors=False]
+alias StackArray = InlineArray[_, _]
 
 
 @always_inline
