@@ -42,13 +42,13 @@ fn _truncate[
 @always_inline
 fn full_multiplication(out answer: _U128, x: UInt64, y: UInt64):
     answer = SIMD[DType.uint64, 2](
-        __mlir_op.`pop.bitcast`[_type = __mlir_type.`!pop.simd<2, ui64>`](
+        mlir_value = __mlir_op.`pop.bitcast`[_type = __mlir_type.`!pop.simd<2, ui64>`](
             __mlir_op.`pop.mul`(
                 __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](
-                    x.value
+                    x._mlir_value
                 ),
                 __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](
-                    y.value
+                    y._mlir_value
                 ),
             )
         )
