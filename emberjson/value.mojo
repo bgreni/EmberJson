@@ -8,7 +8,7 @@ from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
 from .parser import Parser
 from .format_int import write_int
-from sys.info import bitwidthof
+from sys.info import bit_width_of
 from .teju import write_f64
 from os import abort
 from python import PythonObject
@@ -106,7 +106,7 @@ struct Value(JsonValue):
     @always_inline
     fn __init__(out self, v: Int):
         constrained[
-            bitwidthof[DType.index]() <= bitwidthof[DType.int64](),
+            bit_width_of[DType.index]() <= bit_width_of[DType.int64](),
             "Cannot fit index width into 64 bits for signed integer",
         ]()
         self._data = Int64(v)
@@ -115,7 +115,7 @@ struct Value(JsonValue):
     @always_inline
     fn __init__(out self, v: UInt):
         constrained[
-            bitwidthof[DType.index]() <= bitwidthof[DType.uint64](),
+            bit_width_of[DType.index]() <= bit_width_of[DType.uint64](),
             "Cannot fit index width into 64 bits for unsigned integer",
         ]()
         self._data = UInt64(v)

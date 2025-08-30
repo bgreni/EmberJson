@@ -8,7 +8,7 @@ from memory import memcmp, UnsafePointer
 from io.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from os import abort
-from sys import sizeof
+from sys import size_of
 from sys.intrinsics import unlikely
 from sys.intrinsics import _type_is_eq
 from utils._select import _select_register_value as select

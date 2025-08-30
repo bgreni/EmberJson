@@ -19,7 +19,7 @@ from .constants import (
 )
 from memory.unsafe import bitcast, pack_bits, _uint
 from bit import count_trailing_zeros
-from sys.info import bitwidthof
+from sys.info import bit_width_of
 from sys.intrinsics import _type_is_eq, likely, unlikely
 
 alias smallest_power: Int64 = -342
