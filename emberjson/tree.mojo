@@ -244,7 +244,9 @@ struct Tree(
     fn __contains__(self, key: String) -> Bool:
         return Bool(self.find(key))
 
-    fn write_nodes(self, mut writer: Some[Writer], node: Self.NodePtr, mut written: Int):
+    fn write_nodes(
+        self, mut writer: Some[Writer], node: Self.NodePtr, mut written: Int
+    ):
         if not node:
             return
 

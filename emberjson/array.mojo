@@ -144,12 +144,16 @@ struct Array(JsonValue, Sized):
                 writer.write(",")
         writer.write("]")
 
-    fn pretty_to(self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0):
+    fn pretty_to(
+        self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
+    ):
         writer.write("[\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("]")
 
-    fn _pretty_write_items(self, mut writer: Some[Writer], indent: String, curr_depth: UInt):
+    fn _pretty_write_items(
+        self, mut writer: Some[Writer], indent: String, curr_depth: UInt
+    ):
         for i in range(len(self._data)):
             for _ in range(curr_depth):
                 writer.write(indent)

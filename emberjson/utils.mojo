@@ -120,7 +120,9 @@ struct CheckedPointer(Comparable, Copyable):
 
 alias DefaultPrettyIndent = 4
 
-alias StackArray[T: ExplicitlyCopyable & Movable, size: Int] = InlineArray[T, size]
+alias StackArray[T: ExplicitlyCopyable & Movable, size: Int] = InlineArray[
+    T, size
+]
 
 
 @always_inline
@@ -136,7 +138,11 @@ fn write(out s: String, v: Some[JsonValue]):
 
 
 @no_inline
-fn write_pretty(value: Some[PrettyPrintable], indent: Variant[Int, String] = DefaultPrettyIndent, out s: String):
+fn write_pretty(
+    value: Some[PrettyPrintable],
+    indent: Variant[Int, String] = DefaultPrettyIndent,
+    out s: String,
+):
     var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
     s = String()
     var writer = _WriteBufferStack(s)
