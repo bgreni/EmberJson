@@ -74,10 +74,6 @@ struct JSON(JsonValue, Sized):
         self._data = other._data^
 
     @always_inline
-    fn copy(self) -> Self:
-        return self
-
-    @always_inline
     fn object(ref self) -> ref [self._data] Object:
         """Fetch the inner object of this json document.
 

@@ -116,10 +116,6 @@ struct RawValue[origin: ImmutableOrigin](JsonValue):
         var p = RawParser(parse_string)
         self = p.parse_value()
 
-    @always_inline
-    fn copy(self) -> Self:
-        return self
-
     fn __eq__(self, other: Self) -> Bool:
         if self._type != other._type:
             return False

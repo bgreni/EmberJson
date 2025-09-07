@@ -91,10 +91,6 @@ struct RawArray[origin: ImmutableOrigin](JsonValue, Sized):
         self._data = other._data
 
     @always_inline
-    fn copy(self) -> Self:
-        return self
-
-    @always_inline
     fn __moveinit__(out self, deinit other: Self):
         self._data = other._data^
 

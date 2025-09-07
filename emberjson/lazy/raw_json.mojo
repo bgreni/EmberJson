@@ -75,10 +75,6 @@ struct RawJSON[origin: ImmutableOrigin](JsonValue, Sized):
         self._data = other._data^
 
     @always_inline
-    fn copy(self) -> Self:
-        return self
-
-    @always_inline
     fn object(ref self) -> RawObject[origin]:
         """Fetch the inner object of this json document.
 
