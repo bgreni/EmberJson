@@ -46,7 +46,9 @@ struct Object(JsonValue, Sized):
         debug_assert(len(keys) == len(values))
         self._data = Self.Type()
         for i in range(len(keys)):
-            self._data.insert(keys[i], values[i])
+            # NOTE: Call `pop` to move the value out of the list instead of copying it.
+            # We keep index 0, since each pop moves the remaining values to the left.
+            self._data.insert(keys.pop(0), values.pop(0))
 
     @always_inline
     fn __init__(out self, *, parse_string: String) raises:
