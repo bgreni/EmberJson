@@ -13,7 +13,7 @@ from emberjson._parser_helper import copy_to_string, TRUE
 from emberjson.traits import JsonValue
 
 
-struct RawJsonType(Copyable, Movable):
+struct RawJsonType(ImplicitlyCopyable, Movable):
     alias OBJECT = RawJsonType.__init__[0]()
     alias ARRAY = RawJsonType.__init__[1]()
     alias INT = RawJsonType.__init__[2]()

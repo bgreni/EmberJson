@@ -130,7 +130,7 @@ struct _TreeValueIter(Copyable, Movable, Sized):
 
 
 struct Tree(
-    ExplicitlyCopyable, Movable & Copyable, Sized, Stringable, Writable
+    ImplicitlyCopyable, Movable & Copyable, Sized, Stringable, Writable
 ):
     alias NodePtr = UnsafePointer[TreeNode]
     var root: Self.NodePtr
