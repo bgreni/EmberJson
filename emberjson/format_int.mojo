@@ -17,9 +17,6 @@ fn write_int(v: Scalar, mut writer: Some[Writer]):
     """A trivial int formatter than prints digits in order without additional
     intermediate copies.
 
-    Parameters:
-        W: The type of the output writer.
-
     Args:
         v: The integer to format.
         writer: The output writer.
