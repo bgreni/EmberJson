@@ -143,10 +143,7 @@ struct Tree(
     fn __copyinit__(out self, other: Self):
         self = self.__init__()
         for node in other:
-            self.insert(TreeNode.make_ptr(node.key, node.data))
-
-    fn copy(self) -> Self:
-        return self
+            self.insert(TreeNode.make_ptr(node.key, node.data.copy()))
 
     fn __moveinit__(out self, deinit other: Self):
         self.root = other.root
