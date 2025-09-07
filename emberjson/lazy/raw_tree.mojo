@@ -135,7 +135,7 @@ struct _RawTreeValueIter[origin: ImmutableOrigin](Copyable, Movable, Sized):
 
 
 struct RawTree[origin: ImmutableOrigin](
-    Copyable, ExplicitlyCopyable, Movable, Sized, Stringable, Writable
+    Copyable, ImplicitlyCopyable, Movable, Sized, Stringable, Writable
 ):
     alias NodePtr = UnsafePointer[RawTreeNode[origin]]
     var root: Self.NodePtr
