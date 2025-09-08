@@ -34,3 +34,6 @@ faker = ">=36.1.1,<37"
 
 [environments]
 fuzz = { features = ["fuzz"], solve-group = "default" }
+
+[activation.env]
+MODULAR_MOJO_MAX_IMPORT_PATH="$PIXI_PROJECT_ROOT/../modular/bazel-bin"

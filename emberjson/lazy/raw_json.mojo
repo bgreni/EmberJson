@@ -75,7 +75,7 @@ struct RawJSON[origin: ImmutableOrigin](JsonValue, Sized):
         self._data = other._data^
 
     @always_inline
-    fn object(ref self) -> RawObject[origin]:
+    fn object(ref self) -> ref [self._data] RawObject[origin]:
         """Fetch the inner object of this json document.
 
         Returns:
@@ -84,7 +84,7 @@ struct RawJSON[origin: ImmutableOrigin](JsonValue, Sized):
         return self._data[RawObject[origin]]
 
     @always_inline
-    fn array(ref self) -> RawArray[origin]:
+    fn array(ref self) -> ref [self._data] RawArray[origin]:
         """Fetch the inner array of this json document.
 
         Returns:

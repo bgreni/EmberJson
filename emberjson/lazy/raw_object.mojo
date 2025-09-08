@@ -158,7 +158,9 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
     fn to_dict(var self, out d: Dict[String, RawValue[origin]]):
         d = Dict[String, RawValue[origin]]()
         for item in self.items():
-            d[item[].key] = item[].data
+            # NOTE: We can't use a move here since we are using `var self`, however
+            # we can't do an identical take_item strategy as `Tree` for some reason.
+            d[item[].key] = item[].data.copy()
 
     fn to_python_object(self) raises -> PythonObject:
         var d = Python.dict()

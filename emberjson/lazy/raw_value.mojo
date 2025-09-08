@@ -301,13 +301,13 @@ struct RawValue[origin: ImmutableOrigin](JsonValue):
         )
 
     @always_inline
-    fn object(ref self) raises -> RawObject[origin]:
+    fn object(ref self) raises -> ref [self._data] RawObject[origin]:
         if not self.is_object():
             raise Error("RawValue should be an object")
         return self._data[RawObject[origin]]
 
     @always_inline
-    fn array(ref self) raises -> RawArray[origin]:
+    fn array(ref self) raises -> ref [self._data] RawArray[origin]:
         if not self.is_array():
             raise Error("RawValue should be an array")
         return self._data[RawArray[origin]]
@@ -369,20 +369,22 @@ struct RawValue[origin: ImmutableOrigin](JsonValue):
         W: Writer
     ](self, mut writer: W, indent: String, *, curr_depth: UInt = 0):
         if self.is_object():
-            var obj: RawObject[origin]
+            # ref obj: RawObject[origin]
             try:
-                obj = self.object()
+                ref obj = self.object()
+                obj.pretty_to(writer, indent, curr_depth=curr_depth)
             except:
                 obj = RawObject[origin]()
-            obj.pretty_to(writer, indent, curr_depth=curr_depth)
+                obj.pretty_to(writer, indent, curr_depth=curr_depth)
 
         elif self.is_array():
-            var arr: RawArray[origin]
+            # ref arr: RawArray[origin]
             try:
-                arr = self.array()
+                ref arr = self.array()
+                arr.pretty_to(writer, indent, curr_depth=curr_depth)
             except:
                 arr = RawArray[origin]()
-            arr.pretty_to(writer, indent, curr_depth=curr_depth)
+                arr.pretty_to(writer, indent, curr_depth=curr_depth)
 
         else:
             self.write_to(writer)
