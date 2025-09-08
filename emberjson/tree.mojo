@@ -74,6 +74,32 @@ struct _TreeIter(Copyable, Movable, Sized):
     fn __len__(self) -> Int:
         return self.total
 
+@fieldwise_init
+@register_passable("trivial")
+struct _TreeTakeIter(Copyable, Movable, Sized):
+    var curr: UnsafePointer[TreeNode]
+    var seen: Int
+    var total: Int
+
+    @always_inline
+    fn __iter__(self) -> Self:
+        return self
+
+    @always_inline
+    fn __next__(mut self) -> TreeNode:
+        self.seen += 1
+        var p = self.curr.take_pointee()
+        self.curr = _get_next(self.curr)
+        return p^
+
+    @always_inline
+    fn __has_next__(self) -> Bool:
+        return self.seen < self.total
+
+    @always_inline
+    fn __len__(self) -> Int:
+        return self.total
+
 
 @fieldwise_init
 @register_passable("trivial")
@@ -164,6 +190,10 @@ struct Tree(
         return _TreeIter(self.get_first(), 0, self.size)
 
     @always_inline
+    fn take_items(self) -> _TreeTakeIter:
+        return _TreeTakeIter(self.get_first(), 0, self.size)
+
+    @always_inline
     fn values(self) -> _TreeValueIter:
         return _TreeValueIter(self.get_first(), 0, self.size)
 
@@ -183,6 +213,7 @@ struct Tree(
         if not self.root:
             return self.root
 
+        # NOTE: How does this work? _get_left_most uses `var`, so it takes ownership of root, but `self` is read only.
         return _get_left_most(self.root)
 
     fn insert(mut self, node: Self.NodePtr):
@@ -203,7 +234,9 @@ struct Tree(
             else:
                 # we didn't actually insert a new element
                 self.size -= 1
-                curr[].data = node[].data
+                # NOTE: Should this actually be a copy or can this be a move?
+                # Since node is readonly, the assumption is that this is intended to be a copy.
+                curr[].data = node[].data.copy()
                 return
 
         if parent[] > node[]:

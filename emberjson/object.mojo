@@ -3,7 +3,7 @@ from collections import Dict
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
-from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
+from .tree import _TreeKeyIter, _TreeIter, _TreeTakeIter, _TreeValueIter, Tree
 from python import PythonObject, Python
 from os import abort
 
@@ -18,6 +18,7 @@ struct Object(JsonValue, Sized):
     var _data: Self.Type
 
     alias ObjectIter = _TreeIter
+    alias ObjectTakeIter = _TreeTakeIter
     alias ObjectKeyIter = _TreeKeyIter
     alias ObjectValueIter = _TreeValueIter
 
@@ -121,6 +122,10 @@ struct Object(JsonValue, Sized):
     fn items(ref self) -> Self.ObjectIter:
         return self._data.items()
 
+    @always_inline
+    fn take_items(ref self) -> Self.ObjectTakeIter:
+        return self._data.take_items()
+
     fn write_to(self, mut writer: Some[Writer]):
         writer.write(self._data)
 
@@ -156,8 +161,8 @@ struct Object(JsonValue, Sized):
     @always_inline
     fn to_dict(var self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
-        for item in self.items():
-            d[item.key] = item.data
+        for item in self.take_items():
+            d[item.key] = item.data^
 
     fn to_python_object(self) raises -> PythonObject:
         var d = Python.dict()
