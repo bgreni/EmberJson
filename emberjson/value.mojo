@@ -82,9 +82,9 @@ struct Value(JsonValue):
     @implicit
     fn __init__(out self, var j: JSON):
         if j.is_object():
-            self._data = j.object()
+            self._data = j.take_object()
         else:
-            self._data = j.array()
+            self._data = j.take_array()
 
     @implicit
     @always_inline
