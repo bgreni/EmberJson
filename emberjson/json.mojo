@@ -83,6 +83,10 @@ struct JSON(JsonValue, Sized):
         return self._data[Object]
 
     @always_inline
+    fn take_object(mut self) -> Self.Type:
+        return self._data.take[Object]()
+
+    @always_inline
     fn array(ref self) -> ref [self._data] Array:
         """Fetch the inner array of this json document.
 
@@ -90,6 +94,10 @@ struct JSON(JsonValue, Sized):
             A reference to a JSON array.
         """
         return self._data[Array]
+    
+    @always_inline
+    fn take_array(mut self) -> Self.Type:
+        return self._data.take[Array]()
 
     fn __contains__(self, v: Value) raises -> Bool:
         """Check if the given value exists in the document.
