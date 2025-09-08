@@ -20,7 +20,7 @@ def test_to_from_dict():
     var o = Object(d^)
     assert_equal(o["key"].bool(), False)
 
-    d = o.to_dict()
+    d = o^.to_dict()
     assert_equal(d["key"].bool(), False)
 
 
@@ -39,7 +39,7 @@ def test_nested_object():
     assert_true(ob["nested"].object()["foo"].isa[Null]())
 
     with assert_raises():
-        _ = ob["DOES NOT EXIST"]
+        _ = ob["DOES NOT EXIST"].copy()
 
 
 def test_arr_in_object():
@@ -82,8 +82,8 @@ def test_single_quote_value():
 
 def test_equality():
     var ob1: Object = {"key": 123}
-    var ob2 = ob1
-    var ob3 = ob1
+    var ob2 = ob1.copy()
+    var ob3 = ob1.copy()
     ob3["key"] = Null()
 
     assert_equal(ob1, ob2)
