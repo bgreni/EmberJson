@@ -81,7 +81,7 @@ struct _RawTreeIter[origin: ImmutableOrigin](Copyable, Movable, Sized):
     fn __len__(self) -> Int:
         return self.total
 
-
+    
 @fieldwise_init
 @register_passable("trivial")
 struct _RawTreeKeyIter[origin: ImmutableOrigin](Copyable, Movable, Sized):
@@ -148,7 +148,7 @@ struct RawTree[origin: ImmutableOrigin](
     fn __copyinit__(out self, other: Self):
         self = self.__init__()
         for node in other:
-            self.insert(RawTreeNode[origin].make_ptr(node[].key, node[].data))
+            self.insert(RawTreeNode[origin].make_ptr(node[].key, node[].data.copy()))
 
     fn copy(self) -> Self:
         return self
@@ -211,7 +211,9 @@ struct RawTree[origin: ImmutableOrigin](
             else:
                 # we didn't actually insert a new element
                 self.size -= 1
-                curr[].data = node[].data
+                # NOTE: Should this actually be a copy or can this be a move?
+                # Since node is readonly, the assumption is that this is intended to be a copy.
+                curr[].data = node[].data.copy()
                 return
 
         if parent[] > node[]:
@@ -239,7 +241,8 @@ struct RawTree[origin: ImmutableOrigin](
         var node = self.find(key)
         if not node:
             raise Error("Key error")
-        return node[].data
+        # NOTE: Should this be a reference or a move?
+        return node[].data.copy()
 
     @always_inline
     fn __setitem__(mut self, var key: String, var data: RawValue[origin]):

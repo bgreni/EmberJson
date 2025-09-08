@@ -36,7 +36,7 @@ struct RawObject[origin: ImmutableOrigin](JsonValue, Sized):
     fn __init__(out self, d: Dict[String, RawValue[origin]]):
         self._data = Self.Type()
         for item in d.items():
-            self._data.insert(item.key, item.value)
+            self._data.insert(item.key, item.value.copy())
 
     fn __init__(
         out self,
