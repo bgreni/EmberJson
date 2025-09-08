@@ -88,7 +88,7 @@ struct RawArray[origin: ImmutableOrigin](JsonValue, Sized):
 
     @always_inline
     fn __copyinit__(out self, other: Self):
-        self._data = other._data
+        self._data = other._data.copy()
 
     @always_inline
     fn __moveinit__(out self, deinit other: Self):
