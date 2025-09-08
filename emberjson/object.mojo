@@ -34,8 +34,16 @@ struct Object(JsonValue, Sized):
     @implicit
     fn __init__(out self, var d: Dict[String, Value]):
         self._data = Self.Type()
-        for item in d.items():
-            self._data.insert(item.key, item.value)
+        # TODO: This is ugly. Is there a way to take an owned dict, break it apart
+        # without any copies?
+        var default = Value()
+        # Copy the keys since we are popping inside the loop. Our assumption is that
+        # value copies are the expensive ones.
+        keys: List[String] = [k for k in d.keys()]
+        for key in keys:
+            # NOTE: `pop` without a default raises.
+            var value = d.pop(key, default.copy())
+            self._data.insert(key.copy(), value^)
 
     fn __init__(
         out self,
