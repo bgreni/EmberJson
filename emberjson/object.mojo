@@ -34,8 +34,8 @@ struct Object(JsonValue, Sized):
     @implicit
     fn __init__(out self, var d: Dict[String, Value]):
         self._data = Self.Type()
-        for item in d.items():
-            self._data.insert(item.key, item.value)
+        for item in d.take_items():
+            self._data.insert(item.key^, item.value^)
 
     fn __init__(
         out self,
