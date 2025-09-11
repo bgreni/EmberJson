@@ -211,7 +211,7 @@ def test_compile_time():
     alias j = try_parse(data)
     assert_true(j)
 
-    var arr = j.value().object()["key"].array()
+    ref arr = j.value().object()["key"].array()
     assert_equal(arr[0].float(), 1.234)
     assert_equal(arr[1].float(), 352.329384920)
     assert_equal(arr[2].uint(), 123412512)

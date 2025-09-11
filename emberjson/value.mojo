@@ -81,10 +81,11 @@ struct Value(JsonValue):
 
     @implicit
     fn __init__(out self, var j: JSON):
+        # TODO: Avoid copies
         if j.is_object():
-            self._data = j.object()
+            self._data = j.object().copy()
         else:
-            self._data = j.array()
+            self._data = j.array().copy()
 
     @implicit
     @always_inline
@@ -161,18 +162,6 @@ struct Value(JsonValue):
     @always_inline
     fn __init__(out self, v: Bool):
         self._data = v
-
-    @always_inline
-    fn __copyinit__(out self, other: Self):
-        self._data = other._data
-
-    @always_inline
-    fn copy(self) -> Self:
-        return self
-
-    @always_inline
-    fn __moveinit__(out self, deinit other: Self):
-        self._data = other._data^
 
     @always_inline
     fn _type_equal(self, other: Self) -> Bool:

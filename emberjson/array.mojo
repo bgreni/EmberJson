@@ -77,18 +77,6 @@ struct Array(JsonValue, Sized):
         self = p.parse_array()
 
     @always_inline
-    fn __copyinit__(out self, other: Self):
-        self._data = other._data
-
-    @always_inline
-    fn copy(self) -> Self:
-        return self
-
-    @always_inline
-    fn __moveinit__(out self, deinit other: Self):
-        self._data = other._data^
-
-    @always_inline
     fn __getitem__(ref self, ind: Some[Indexer]) -> ref [self._data] Value:
         return self._data[ind]
 
@@ -174,8 +162,8 @@ struct Array(JsonValue, Sized):
     fn append(mut self, var item: Value):
         self._data.append(item^)
 
-    fn to_list(deinit self, out l: List[Value]):
-        l = self._data^
+    fn to_list(self, out l: List[Value]):
+        l = self._data.copy()
 
     fn to_python_object(self) raises -> PythonObject:
         return Python.list(self._data)

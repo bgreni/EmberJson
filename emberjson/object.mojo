@@ -35,7 +35,8 @@ struct Object(JsonValue, Sized):
     fn __init__(out self, var d: Dict[String, Value]):
         self._data = Self.Type()
         for item in d.items():
-            self._data.insert(item.key, item.value)
+            # TODO: Avoid copies
+            self._data.insert(item.key, item.value.copy())
 
     fn __init__(
         out self,
@@ -46,24 +47,13 @@ struct Object(JsonValue, Sized):
         debug_assert(len(keys) == len(values))
         self._data = Self.Type()
         for i in range(len(keys)):
-            self._data.insert(keys[i], values[i])
+            # TODO: Avoid copies
+            self._data.insert(keys[i], values[i].copy())
 
     @always_inline
     fn __init__(out self, *, parse_string: String) raises:
         var p = Parser(parse_string)
         self = p.parse_object()
-
-    @always_inline
-    fn __copyinit__(out self, other: Self):
-        self._data = other._data
-
-    @always_inline
-    fn __moveinit__(out self, deinit other: Self):
-        self._data = other._data^
-
-    @always_inline
-    fn copy(self) -> Self:
-        return self
 
     @always_inline
     fn __setitem__(mut self, var key: String, var item: Value):
@@ -156,10 +146,11 @@ struct Object(JsonValue, Sized):
         return self.__str__()
 
     @always_inline
-    fn to_dict(var self, out d: Dict[String, Value]):
+    fn to_dict(self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
         for item in self.items():
-            d[item.key] = item.data
+            # TODO: avoid copies
+            d[item.key] = item.data.copy()
 
     fn to_python_object(self) raises -> PythonObject:
         var d = Python.dict()
