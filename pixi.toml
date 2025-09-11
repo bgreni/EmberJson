@@ -21,7 +21,7 @@ update_and_test = "pixi update && pixi run test && pixi run bench"
 test_python_compat = "python python_compat.py"
 
 [dependencies]
-mojo = ">=0.25.6.0.dev2025083005,<0.26.0.0"
+mojo = ">=0.25.6.0.dev2025091105,<0.26.0.0"
 
 
 
