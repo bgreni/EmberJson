@@ -129,9 +129,7 @@ struct _TreeValueIter(Copyable, Movable, Sized):
         return self.total
 
 
-struct Tree(
-    ImplicitlyCopyable, Movable & Copyable, Sized, Stringable, Writable
-):
+struct Tree(Copyable, Movable, Sized, Stringable, Writable):
     alias NodePtr = UnsafePointer[TreeNode]
     var root: Self.NodePtr
     var size: UInt
@@ -141,12 +139,9 @@ struct Tree(
         self.size = 0
 
     fn __copyinit__(out self, other: Self):
-        self = self.__init__()
+        self = Self()
         for node in other:
-            self.insert(TreeNode.make_ptr(node.key, node.data))
-
-    fn copy(self) -> Self:
-        return self
+            self.insert(TreeNode.make_ptr(node.key, node.data.copy()))
 
     fn __moveinit__(out self, deinit other: Self):
         self.root = other.root
@@ -206,7 +201,7 @@ struct Tree(
             else:
                 # we didn't actually insert a new element
                 self.size -= 1
-                curr[].data = node[].data
+                curr[].data = node[].data.copy()
                 return
 
         if parent[] > node[]:

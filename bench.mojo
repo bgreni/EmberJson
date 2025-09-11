@@ -60,7 +60,7 @@ fn main() raises:
     config.verbose_timing = True
     config.flush_denormals = True
     config.show_progress = True
-    var m = Bench(config)
+    var m = Bench(config^)
 
     var canada = get_data("canada.json")
     var catalog = get_data("citm_catalog.json")

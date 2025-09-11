@@ -31,10 +31,10 @@ def test_nested_object():
     assert_equal(len(arr), 4)
     assert_equal(arr[0].bool(), False)
     assert_equal(arr[1].null(), Null())
-    var nested_arr = arr[2].array()
+    ref nested_arr = arr[2].array()
     assert_equal(len(nested_arr), 1)
     assert_equal(nested_arr[0].float(), 4.0)
-    var ob = arr[3].object()
+    ref ob = arr[3].object()
     assert_true("key" in ob)
     assert_equal(ob["key"].string(), "bar")
 
@@ -54,7 +54,7 @@ def test_variadic_init():
     var ob = Object()
     ob["key"] = "value"
 
-    var arr2 = Array(45, 45.5, Float64(45.5), arr, ob)
+    var arr2 = Array(45, 45.5, Float64(45.5), arr.copy(), ob.copy())
     assert_equal(arr[0].int(), 123)
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())

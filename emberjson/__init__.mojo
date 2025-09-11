@@ -6,17 +6,6 @@ from .utils import write, write_pretty
 from .parser import Parser, ParseOptions, minify
 
 
-from .lazy import (
-    RawJSON,
-    RawArray,
-    RawObject,
-    RawValue,
-    RawJsonType,
-    RawParser,
-    RawParseOptions,
-)
-
-
 @always_inline
 fn parse[
     options: ParseOptions = ParseOptions()
