@@ -12,6 +12,10 @@ def test_object():
     assert_equal(ob["thing"].int(), 123)
     assert_equal(String(ob), s)
 
+    ob["thing"] = "hello"
+    assert_true("thing" in ob)
+    assert_equal(ob["thing"].string(), "hello")
+
 
 def test_to_from_dict():
     var d = Dict[String, Value]()

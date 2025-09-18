@@ -54,7 +54,7 @@ def test_variadic_init():
     var ob = Object()
     ob["key"] = "value"
 
-    var arr2 = Array(45, 45.5, Float64(45.5), arr.copy(), ob.copy())
+    var arr2 = Array(45, 45.5, Float64(45.5), arr.copy(), ob^)
     assert_equal(arr[0].int(), 123)
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())

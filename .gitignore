@@ -12,3 +12,4 @@ playground.mojo
 .env
 emberjson.mojopkg
 __mojocache__
+kgen.trace.json**
