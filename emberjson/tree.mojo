@@ -228,7 +228,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
     fn __getitem__(ref self, key: String) raises -> ref [self] Value:
         var node = self.find(key)
         if not node:
-            raise Error("Key error")
+            raise Error("Missing key error: ", key)
         return node[].data
 
     @always_inline
