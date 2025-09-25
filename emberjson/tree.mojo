@@ -201,7 +201,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
             else:
                 # we didn't actually insert a new element
                 self.size -= 1
-                curr[] = node.take_pointee()
+                curr[].data = node[].data.copy()
                 return
 
         if parent[] > node[]:
