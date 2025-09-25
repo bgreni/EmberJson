@@ -47,6 +47,10 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
         p = UnsafePointer[Self].alloc(1)
         p.init_pointee_move(TreeNode(key^, data^))
 
+    fn steal_data(mut self, mut other: Self):
+        self.data = other.data^
+        other.data = Value()
+
 
 @fieldwise_init
 @register_passable("trivial")
@@ -183,7 +187,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
 
         return _get_left_most(self.root)
 
-    fn insert(mut self, node: Self.NodePtr):
+    fn insert(mut self, var node: Self.NodePtr):
         self.size += 1
         if not self.root:
             self.root = node
@@ -201,7 +205,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
             else:
                 # we didn't actually insert a new element
                 self.size -= 1
-                curr[].data = node[].data.copy()
+                curr[].steal_data(node[])
                 return
 
         if parent[] > node[]:
