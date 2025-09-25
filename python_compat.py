@@ -26,7 +26,7 @@ s: str
 # }"""
 
 
-with open('./bench_data/data/canada.json') as f:
+with open("./bench_data/data/canada.json") as f:
     s = f.read()
 
 # start = perf_counter()
@@ -37,4 +37,4 @@ with open('./bench_data/data/canada.json') as f:
 start = perf_counter()
 res = json.loads(s)
 
-print((perf_counter() - start) * 1000, '\n\n')
+print((perf_counter() - start) * 1000, "\n\n")
