@@ -219,7 +219,7 @@ fn _uint_type_of_width[width: Int]() -> DType:
 
 
 fn estimate_bytes_to_write(value: Int) -> UInt:
-    return estimate_bytes_to_write(Scalar[DType.index](value))
+    return estimate_bytes_to_write(Scalar[DType.int](value))
 
 
 fn estimate_bytes_to_write(value: UInt) -> UInt:
