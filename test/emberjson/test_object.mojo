@@ -106,6 +106,16 @@ def test_write():
     assert_equal(String(ob), '{"bar":123,"foo":"stuff"}')
 
 
+def test_nested_object_copy():
+    # NOTE: Catches: https://github.com/bgreni/EmberJson/pull/62
+    var obj = Object()
+    obj["type"] = Object()
+    obj["id"] = "original_id"
+    var copy = obj.copy()
+    copy["id"] = "new_id"
+    assert_equal(String(copy.copy()), '{"id":"new_id","type":{}}')
+
+
 def test_iter():
     var ob: Object = {"a": "stuff", "b": 123, "c": 3.423}
 
