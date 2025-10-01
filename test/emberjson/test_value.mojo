@@ -10,6 +10,12 @@ from testing import (
 )
 
 
+def test_nested_access():
+    var nested: Value = {"key": [True, None, {"inner2": False}]}
+
+    assert_equal(nested["key"][2]["inner2"].bool(), False)
+
+
 def test_bool():
     var s: String = "false"
     var v = Value(parse_string=s)

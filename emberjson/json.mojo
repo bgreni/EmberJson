@@ -40,6 +40,22 @@ struct JSON(JsonValue, Sized):
     fn __init__(out self, var o: Object.Type):
         self._data = o^
 
+    fn __init__(
+        out self,
+        var keys: List[String],
+        var values: List[Value],
+        __dict_literal__: (),
+    ):
+        debug_assert(len(keys) == len(values))
+        self = Object()
+        for i in range(len(keys)):
+            self.object()[keys[i]] = values[i].copy()
+
+    fn __init__(out self, var *values: Value, __list_literal__: ()):
+        self = Array()
+        for val in values:
+            self.array().append(val.copy())
+
     @always_inline
     fn __init__(out self, *, parse_bytes: ByteView[mut=False]) raises:
         """Parse JSON document from bytes.
@@ -82,6 +98,36 @@ struct JSON(JsonValue, Sized):
             A reference to a JSON array.
         """
         return self._data[Array]
+
+    fn __getitem__(
+        self, ind: Some[Indexer]
+    ) raises -> ref [__origin_of(self.array()._data)] Value:
+        """Fetch value inside inner array by index.
+
+        Raises:
+            If the inner type is not array.
+
+        Returns:
+            A reference to a Value.
+        """
+        if not self.is_array():
+            raise Error("Expected numerical index for array")
+        return self.array()[ind]
+
+    fn __getitem__(
+        self, key: String
+    ) raises -> ref [__origin_of(self.object()._data)] Value:
+        """Fetch value inside inner object by string key.
+
+        Raises:
+            If the inner type is not object.
+
+        Returns:
+            A reference to a Value.
+        """
+        if not self.is_object():
+            raise Error("Expected string key for object")
+        return self.object()[key]
 
     fn __contains__(self, v: Value) raises -> Bool:
         """Check if the given value exists in the document.

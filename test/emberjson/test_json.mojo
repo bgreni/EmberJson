@@ -25,6 +25,12 @@ def test_minify():
     )
 
 
+def test_nested_access():
+    var nested: JSON = {"key": [True, None, {"inner2": False}]}
+
+    assert_equal(nested["key"][2]["inner2"].bool(), False)
+
+
 def test_reject_comment():
     var s = """
     {
