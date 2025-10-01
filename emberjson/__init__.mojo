@@ -4,6 +4,7 @@ from .object import Object
 from .value import Value, Null
 from .utils import write, write_pretty
 from .parser import Parser, ParseOptions, minify
+from .jsonl import read_lines, write_lines
 
 
 @always_inline
