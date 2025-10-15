@@ -114,7 +114,9 @@ struct CheckedPointer(Comparable, Copyable):
             " bytes remaining, received: ",
             self.dist() + 1,
             "\ninput:\n\n",
-            StringSlice(ptr=self.start, length=Int(self.end) - Int(self.start)),
+            StringSlice(
+                ptr=self.start, length=UInt(Int(self.end) - Int(self.start))
+            ),
         )
 
 

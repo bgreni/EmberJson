@@ -90,13 +90,13 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
     var size: Int
 
     fn __init__(s: String, out self: Parser[__origin_of(s), options]):
-        self = __type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
+        self = __type_of(self)(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
 
     fn __init__(out self, s: StringSlice[origin]):
-        self = Self(ptr=s.unsafe_ptr(), length=s.byte_length())
+        self = Self(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
 
     fn __init__(out self, s: ByteView[origin]):
-        self = Self(ptr=s.unsafe_ptr(), length=len(s))
+        self = Self(ptr=s.unsafe_ptr(), length=UInt(len(s)))
 
     fn __init__(
         out self,
@@ -632,13 +632,13 @@ fn minify(s: String, out out_str: String) raises:
                     raise "Invalid JSON, unescaped control character"
                 elif block.has_backslash():
                     var ind = Int(block.bs_index()) + 2
-                    length += ind
+                    length += UInt(ind)
                     p += ind
                 else:
                     var ind = SIMD8_WIDTH if is_block_iter else (
                         Int(end) - Int(ptr)
                     )
-                    length += ind
+                    length += UInt(ind)
                     p += ind
                 block = StringBlock.find(p)
 
