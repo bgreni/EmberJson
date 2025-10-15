@@ -226,9 +226,9 @@ fn copy_to_string[
         if found_unicode:
             return decode_unicode()
         else:
-            return String(StringSlice(ptr=start, length=length))
+            return String(StringSlice(ptr=start, length=UInt(length)))
     else:
-        return String(StringSlice(ptr=start, length=length))
+        return String(StringSlice(ptr=start, length=UInt(length)))
 
 
 @always_inline
