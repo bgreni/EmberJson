@@ -24,3 +24,6 @@ def test_read_lines_big():
     for line in read_lines("./bench_data/big_lines.jsonl"):
         assert_equal(line.object(), Object({"key": i}))
         i += 1
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

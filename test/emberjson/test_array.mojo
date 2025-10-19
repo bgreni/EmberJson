@@ -1,7 +1,7 @@
 from emberjson.array import Array
 from emberjson import Object
 from emberjson.value import Null, Value
-from testing import assert_equal, assert_true, assert_false, assert_not_equal
+from testing import assert_equal, assert_true, assert_false, assert_not_equal, TestSuite
 
 
 def test_array():
@@ -101,3 +101,7 @@ def test_iter():
 def test_list_literal():
     var a: Array = [123, 435, False, None, 12.32, "string"]
     assert_equal(a, Array(123, 435, False, None, 12.32, "string"))
+
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

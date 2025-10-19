@@ -109,15 +109,15 @@ struct Array(JsonValue, Sized):
         return self._data != other._data
 
     @always_inline
-    fn __iter__(ref self) -> _ArrayIter[__origin_of(self)]:
+    fn __iter__(ref self) -> _ArrayIter[origin_of(self)]:
         return _ArrayIter(Pointer(to=self))
 
     @always_inline
-    fn reversed(ref self) -> _ArrayIter[__origin_of(self), False]:
+    fn reversed(ref self) -> _ArrayIter[origin_of(self), False]:
         return _ArrayIter[forward=False](Pointer(to=self))
 
     @always_inline
-    fn iter(ref self) -> _ArrayIter[__origin_of(self)]:
+    fn iter(ref self) -> _ArrayIter[origin_of(self)]:
         return self.__iter__()
 
     @always_inline

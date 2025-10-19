@@ -215,14 +215,14 @@ struct Value(JsonValue):
 
     fn __getitem__(
         self, ind: Some[Indexer]
-    ) raises -> ref [__origin_of(self.array()._data)] Value:
+    ) raises -> ref [origin_of(self.array()._data)] Value:
         if not self.is_array():
             raise Error("Expected numerical index for array")
         return self.array()[ind]
 
     fn __getitem__(
         self, key: String
-    ) raises -> ref [__origin_of(self.object()._data)] Value:
+    ) raises -> ref [origin_of(self.object()._data)] Value:
         if not self.is_object():
             raise Error("Expected string key for object")
         return self.object()[key]

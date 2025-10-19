@@ -276,7 +276,7 @@ fn for_each[visit: fn (UnsafePointer[TreeNode])](node: UnsafePointer[TreeNode]):
     for_each[visit](node[].right)
 
 
-fn _find(node: UnsafePointer[TreeNode], key: String) -> __type_of(node):
+fn _find(node: UnsafePointer[TreeNode], key: String) -> type_of(node):
     if not node or node[].key == key:
         return node
 
@@ -285,13 +285,13 @@ fn _find(node: UnsafePointer[TreeNode], key: String) -> __type_of(node):
     return _find(node[].left, key)
 
 
-fn _get_left_most(var node: UnsafePointer[TreeNode]) -> __type_of(node):
+fn _get_left_most(var node: UnsafePointer[TreeNode]) -> type_of(node):
     while node[].left:
         node = node[].left
     return node
 
 
-fn _get_next(var node: UnsafePointer[TreeNode]) -> __type_of(node):
+fn _get_next(var node: UnsafePointer[TreeNode]) -> type_of(node):
     if node[].right:
         return _get_left_most(node[].right)
     while node[].parent and node == node[].parent[].right:

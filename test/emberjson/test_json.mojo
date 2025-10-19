@@ -9,7 +9,7 @@ from emberjson import (
     try_parse,
 )
 from emberjson import write_pretty
-from testing import assert_equal, assert_true, assert_raises, assert_not_equal
+from testing import assert_equal, assert_true, assert_raises, assert_not_equal, TestSuite
 from sys.param_env import is_defined
 
 
@@ -664,3 +664,7 @@ def test_unicode_parsing():
 """
     _ = parse(s)
     _ = parse[ParseOptions(ignore_unicode=True)](s)
+
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

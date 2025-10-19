@@ -1,6 +1,6 @@
 from emberjson.utils import write, estimate_bytes_to_write
 from emberjson import Value
-from testing import assert_equal, assert_true
+from testing import assert_equal, assert_true, TestSuite
 
 
 def test_string_builder_string():
@@ -29,3 +29,7 @@ def estimate_bytes_to_write_float():
     assert_true(estimate_bytes_to_write(Float64(-1.23e-123)) >= 10)
     assert_true(estimate_bytes_to_write(Float64(0.3)) >= 3)
     assert_true(estimate_bytes_to_write(Float64(-0.3)) >= 4)
+
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

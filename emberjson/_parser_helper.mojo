@@ -36,7 +36,7 @@ fn _to_uint32(s: StaticString) -> UInt32:
 
 
 @always_inline
-fn append_digit(v: Scalar, to_add: Scalar) -> __type_of(v):
+fn append_digit(v: Scalar, to_add: Scalar) -> type_of(v):
     return (10 * v) + to_add.cast[v.dtype]()
 
 

@@ -1,7 +1,7 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
-from testing import assert_true, assert_equal, assert_raises, assert_not_equal
+from testing import assert_true, assert_equal, assert_raises, assert_not_equal, TestSuite
 from collections import Dict
 
 
@@ -144,3 +144,6 @@ def test_iter():
 
         assert_equal(o["key"], 1234)
         assert_equal(o["key2"], False)
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

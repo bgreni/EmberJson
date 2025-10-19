@@ -1,6 +1,6 @@
 from emberjson.parser import Parser
 from emberjson import JSON, Null, Array, Object, parse
-from testing import assert_true, assert_equal, assert_raises
+from testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
 def test_parse():
@@ -78,3 +78,7 @@ def test_parse_wrong_backslash():
     var p2 = Parser(Span(data2))
     with assert_raises():
         _ = p2.parse()
+
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

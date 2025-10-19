@@ -89,8 +89,8 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer
     var size: Int
 
-    fn __init__(s: String, out self: Parser[__origin_of(s), options]):
-        self = __type_of(self)(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
+    fn __init__(s: String, out self: Parser[origin_of(s), options]):
+        self = type_of(self)(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
 
     fn __init__(out self, s: StringSlice[origin]):
         self = Self(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
@@ -597,7 +597,7 @@ fn minify(s: String, out out_str: String) raises:
     @always_inline
     @parameter
     fn _load_chunk(
-        p: __type_of(ptr), cond: Bool
+        p: type_of(ptr), cond: Bool
     ) -> SIMD[DType.uint8, SIMD8_WIDTH]:
         if cond:
             return ptr.load[width=SIMD8_WIDTH]()

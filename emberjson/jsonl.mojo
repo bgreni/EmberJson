@@ -13,7 +13,7 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
         self.buf = InlineArray[Byte, Self.BUFFER_SIZE](fill=0)
         self.length = 0
 
-    fn ptr(mut self) -> UnsafePointer[Byte, origin = __origin_of(self.buf)]:
+    fn ptr(mut self) -> UnsafePointer[Byte, origin = origin_of(self.buf)]:
         return self.buf.unsafe_ptr()
 
     fn index(self, b: Byte) -> Int:

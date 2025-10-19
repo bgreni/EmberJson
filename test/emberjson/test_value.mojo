@@ -7,6 +7,7 @@ from testing import (
     assert_not_equal,
     assert_almost_equal,
     assert_false,
+    TestSuite
 )
 
 
@@ -256,3 +257,6 @@ def test_booling():
     var falsies = Array("", 0, 0.0, False, Null(), None)
     for f in falsies:
         assert_false(f)
+
+def main():
+    TestSuite.discover_tests[__functions_in_module()]().run()

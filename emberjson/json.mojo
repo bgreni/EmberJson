@@ -101,7 +101,7 @@ struct JSON(JsonValue, Sized):
 
     fn __getitem__(
         self, ind: Some[Indexer]
-    ) raises -> ref [__origin_of(self.array()._data)] Value:
+    ) raises -> ref [origin_of(self.array()._data)] Value:
         """Fetch value inside inner array by index.
 
         Raises:
@@ -116,7 +116,7 @@ struct JSON(JsonValue, Sized):
 
     fn __getitem__(
         self, key: String
-    ) raises -> ref [__origin_of(self.object()._data)] Value:
+    ) raises -> ref [origin_of(self.object()._data)] Value:
         """Fetch value inside inner object by string key.
 
         Raises:
