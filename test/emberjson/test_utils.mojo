@@ -32,4 +32,5 @@ def estimate_bytes_to_write_float():
 
 
 def main():
-    TestSuite.discover_tests[__functions_in_module()]().run()
+    var s = TestSuite.discover_tests[__functions_in_module()]()
+    print(s.generate_report())

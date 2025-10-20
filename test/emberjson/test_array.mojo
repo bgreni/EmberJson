@@ -104,4 +104,5 @@ def test_list_literal():
 
 
 def main():
-    TestSuite.discover_tests[__functions_in_module()]().run()
+    var s = TestSuite.discover_tests[__functions_in_module()]()
+    print(s.generate_report())
