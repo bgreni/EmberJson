@@ -7,7 +7,7 @@ from .constants import `\n`, `\r`
 struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
     alias BUFFER_SIZE = 4096
     var buf: InlineArray[Byte, Self.BUFFER_SIZE]
-    var length: UInt
+    var length: Int
 
     fn __init__(out self):
         self.buf = InlineArray[Byte, Self.BUFFER_SIZE](fill=0)
@@ -23,7 +23,7 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
 
         return -1
 
-    fn clear(mut self, n: UInt):
+    fn clear(mut self, n: Int):
         self.length -= n
 
         for i in range(0, self.length):
@@ -83,7 +83,7 @@ struct JSONLinesIter(Movable):
         @parameter
         fn consume_line(ind: Int) raises -> String:
             line += StringSlice(from_utf8=self.read_buf.buf)[0:ind]
-            self.read_buf.clear(UInt(ind + 1))
+            self.read_buf.clear(ind + 1)
 
             return line
 
@@ -94,10 +94,10 @@ struct JSONLinesIter(Movable):
         while True:
             buf_span = Span(
                 ptr=self.read_buf.ptr() + self.read_buf.length,
-                length=UInt(self.read_buf.BUFFER_SIZE - self.read_buf.length),
+                length=self.read_buf.BUFFER_SIZE - self.read_buf.length,
             )
             var read = file.read(buf_span)
-            self.read_buf.length += UInt(read)
+            self.read_buf.length += read
 
             if read <= 0:
                 if len(self.read_buf) != 0:

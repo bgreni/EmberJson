@@ -11,12 +11,20 @@ from os import abort
 from sys import size_of
 from sys.intrinsics import unlikely
 from sys.intrinsics import _type_is_eq
+from sys.compile import is_compile_time
 from utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
+from builtin.globals import global_constant
 
 alias ByteVec = SIMD[DType.uint8, _]
 alias ByteView = Span[Byte, _]
 alias BytePtr = UnsafePointer[Byte, mut=False]
+
+fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
+    if is_compile_time():
+        return A.unsafe_get(i).copy()
+    else:
+        return global_constant[A]().unsafe_get(i).copy()
 
 
 @fieldwise_init
@@ -115,7 +123,7 @@ struct CheckedPointer(Comparable, Copyable):
             self.dist() + 1,
             "\ninput:\n\n",
             StringSlice(
-                ptr=self.start, length=UInt(Int(self.end) - Int(self.start))
+                ptr=self.start, length=Int(self.end) - Int(self.start)
             ),
         )
 
@@ -224,9 +232,9 @@ fn estimate_bytes_to_write(value: Int) -> UInt:
     return estimate_bytes_to_write(Scalar[DType.int](value))
 
 
-fn estimate_bytes_to_write(value: UInt) -> UInt:
-    alias uint_dtype = _uint_type_of_width[UInt.BITWIDTH]()
-    return estimate_bytes_to_write(Scalar[uint_dtype](value))
+# fn estimate_bytes_to_write(value: UInt) -> UInt:
+#     alias uint_dtype = _uint_type_of_width[UInt.BITWIDTH]()
+#     return estimate_bytes_to_write(Scalar[uint_dtype](value))
 
 
 fn estimate_bytes_to_write(value: Scalar) -> UInt:

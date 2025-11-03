@@ -6,6 +6,7 @@ from .utils import (
     ByteVec,
     is_space,
     select,
+    lut,
 )
 from .json import JSON
 from .simd import SIMD8_WIDTH, SIMD8xT
@@ -39,7 +40,7 @@ from memory.unsafe import bitcast
 from bit import count_leading_zeros
 from .slow_float_parse import from_chars_slow
 from sys.compile import is_compile_time
-from .tables import power_of_ten, full_multiplication, power_of_five_128
+from .tables import POWER_OF_TEN, full_multiplication, POWER_OF_FIVE_128
 from .constants import (
     `[`,
     `]`,
@@ -85,24 +86,24 @@ struct ParseOptions(Copyable, Movable):
         self.ignore_unicode = ignore_unicode
 
 
-struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
+struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer
     var size: Int
 
     fn __init__(s: String, out self: Parser[origin_of(s), options]):
-        self = type_of(self)(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
+        self = type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
 
     fn __init__(out self, s: StringSlice[origin]):
-        self = Self(ptr=s.unsafe_ptr(), length=UInt(s.byte_length()))
+        self = Self(ptr=s.unsafe_ptr(), length=s.byte_length())
 
     fn __init__(out self, s: ByteView[origin]):
-        self = Self(ptr=s.unsafe_ptr(), length=UInt(len(s)))
+        self = Self(ptr=s.unsafe_ptr(), length=len(s))
 
     fn __init__(
         out self,
         *,
         ptr: UnsafePointer[Byte, mut=False, origin=origin],
-        length: UInt,
+        length: Int,
     ):
         var b = rebind[BytePtr](ptr)
         self.data = CheckedPointer(b, b, b + length)
@@ -383,11 +384,7 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         var pow: Float64
         var neg_power = power < 0
 
-        # TODO: Remove this branch after `power_of_ten` is also ctime computed again
-        if is_compile_time():
-            pow = 10.0 ** Float64(abs(power))
-        else:
-            pow = power_of_ten.unsafe_get(Int(abs(power)))
+        pow = lut[POWER_OF_TEN](Int(abs(power)))
 
         d = d / pow if neg_power else d * pow
         if negative:
@@ -412,19 +409,20 @@ struct Parser[origin: ImmutableOrigin, options: ParseOptions = ParseOptions()]:
         var index = Int(2 * (power - smallest_power))
 
         var first_product = full_multiplication(
-            i, power_of_five_128.unsafe_get(index)
+            i, lut[POWER_OF_FIVE_128](index)
         )
 
-        if unlikely(first_product[1] & 0x1FF == 0x1FF):
-            second_product = full_multiplication(
-                i, power_of_five_128.unsafe_get(index + 1)
-            )
-            first_product[0] += second_product[1]
-            if second_product[1] > first_product[0]:
-                first_product[1] += 1
+        var upper = UInt64(first_product >> 64)
+        var lower = UInt64(first_product)
 
-        var lower = first_product[0]
-        var upper = first_product[1]
+        if unlikely(upper & 0x1FF == 0x1FF):
+            second_product = full_multiplication(
+                i, lut[POWER_OF_FIVE_128](index + 1)
+            )
+            var upper_s = UInt64(second_product)
+            lower += upper_s
+            if upper_s > lower:
+                upper += 1
 
         var upperbit: UInt64 = upper >> 63
         var mantissa: UInt64 = upper >> (upperbit + 9)
@@ -625,24 +623,24 @@ fn minify(s: String, out out_str: String) raises:
             var p = ptr
             p += 1
             var block = StringBlock.find(p)
-            var length = UInt(1)
+            var length = 1
 
             while not block.has_quote_first() and p < end:
                 if unlikely(block.has_unescaped()):
                     raise "Invalid JSON, unescaped control character"
                 elif block.has_backslash():
                     var ind = Int(block.bs_index()) + 2
-                    length += UInt(ind)
+                    length += ind
                     p += ind
                 else:
                     var ind = SIMD8_WIDTH if is_block_iter else (
                         Int(end) - Int(ptr)
                     )
-                    length += UInt(ind)
+                    length += ind
                     p += ind
                 block = StringBlock.find(p)
 
-            length += UInt(block.quote_index() + 1)
+            length += Int(block.quote_index() + 1)
             out_str += StringSlice[ptr.origin](ptr=ptr, length=length)
             ptr += length
 
@@ -653,5 +651,5 @@ fn minify(s: String, out out_str: String) raises:
             var valid_bits = count_trailing_zeros(~get_non_space_bits(chunk))
             if quotes != 0:
                 valid_bits = min(valid_bits, count_trailing_zeros(quotes))
-            out_str += StringSlice[ptr.origin](ptr=ptr, length=UInt(valid_bits))
+            out_str += StringSlice[ptr.origin](ptr=ptr, length=Int(valid_bits))
             ptr += valid_bits

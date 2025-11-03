@@ -203,7 +203,7 @@ fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
 
     alias MAX_SHIFT = 60
     alias NUM_POWERS = 19
-    alias POWERS = StackArray[UInt8, NUM_POWERS](
+    var POWERS = StackArray[UInt8, NUM_POWERS](
         0, 3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46, 49, 53, 56, 59
     )
 

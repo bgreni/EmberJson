@@ -136,7 +136,7 @@ struct _TreeValueIter(Copyable, Movable, Sized):
 struct Tree(Copyable, Movable, Sized, Stringable, Writable):
     alias NodePtr = UnsafePointer[TreeNode]
     var root: Self.NodePtr
-    var size: UInt
+    var size: Int
 
     fn __init__(out self):
         self.root = Self.NodePtr()

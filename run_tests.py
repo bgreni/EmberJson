@@ -11,10 +11,15 @@ if __name__ == '__main__':
     for file in os.listdir(test_dir):
         p = os.path.join(test_dir, file)
 
-        ret = subprocess.call(f"mojo -D ASSERT=all -I . {p}", shell=True)
+        ret = subprocess.run(f"mojo -D ASSERT=all -I . {p}", shell=True, capture_output=True, text=True)
 
-        if ret:
+        if ret.returncode or "FAIL" in ret.stdout:
             failed.append(p)
+
+        if ret.returncode:
+            print(ret.stderr)
+        else:
+            print(ret.stdout)
 
     if len(failed) != 0:
         print("Failed tests", *failed, sep="\n")

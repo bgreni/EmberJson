@@ -11,7 +11,7 @@ from .helpers import (
     is_tie_uncentered,
 )
 from .tables import MULTIPLIERS
-from ..utils import StackArray
+from ..utils import StackArray, lut
 from emberjson.format_int import write_int
 
 
@@ -124,7 +124,7 @@ fn teju(binary: Fields, out dec: Fields):
     var r = log10_pow2_residual(e)
     var i = f - STORAGE_INDEX_OFFSET
 
-    var mult = MULTIPLIERS.unsafe_get(i)
+    var mult = lut[MULTIPLIERS](i)
     var u = mult[0]
     var l = mult[1]
 

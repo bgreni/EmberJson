@@ -127,4 +127,4 @@ def main():
                 _ = parse(j)
             i += 1
         except:
-            raise "CASE FAILED: " + j
+            raise Error("CASE FAILED: " + j)

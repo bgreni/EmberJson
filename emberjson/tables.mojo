@@ -1,6 +1,6 @@
 from .utils import StackArray
 
-alias power_of_ten = StackArray[Float64, 23](
+alias POWER_OF_TEN = StackArray[Float64, 23](
     1e0,
     1e1,
     1e2,
@@ -26,8 +26,6 @@ alias power_of_ten = StackArray[Float64, 23](
     1e22,
 )
 
-alias _U128 = SIMD[DType.uint64, 2]
-
 
 @always_inline
 fn _truncate[
@@ -40,24 +38,10 @@ fn _truncate[
 
 
 @always_inline
-fn full_multiplication(out answer: _U128, x: UInt64, y: UInt64):
-    answer = SIMD[DType.uint64, 2](
-        mlir_value=__mlir_op.`pop.bitcast`[
-            _type = __mlir_type.`!pop.simd<2, ui64>`
-        ](
-            __mlir_op.`pop.mul`(
-                __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](
-                    x._mlir_value
-                ),
-                __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<ui128>`](
-                    y._mlir_value
-                ),
-            )
-        )
-    )
+fn full_multiplication(out answer: UInt128, x: UInt64, y: UInt64):
+    answer = UInt128(x) * UInt128(y)
 
-
-alias power_of_five_128 = StackArray[UInt64, 1302](
+alias POWER_OF_FIVE_128 = StackArray[UInt64, 1302](
     0xEEF453D6923BD65A,
     0x113FAA2906A13B3F,
     0x9558B4661B6565F8,

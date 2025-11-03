@@ -1,4 +1,5 @@
 from .tables import MINIVERSE
+from ..utils import lut
 
 alias LOG10_POW2_MAX: Int32 = 112815
 alias LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
@@ -69,7 +70,7 @@ fn is_tie(m: UInt64, f: Int32) -> Bool:
 
 @always_inline
 fn is_multiple_of_pow5(n: UInt64, f: Int32) -> Bool:
-    var p = MINIVERSE.unsafe_get(f)
+    var p = lut[MINIVERSE](f)
     return n * p[0] <= p[1]
 
 
