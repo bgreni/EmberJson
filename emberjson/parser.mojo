@@ -268,89 +268,92 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             v = self.parse_number()
         else:
             raise Error("Invalid json value")
-
-    fn cont(
-        mut self, start: CheckedPointer, found_unicode: Bool, out s: String
-    ) raises:
-        self.data += 1
-        if self.data[] == `u`:
-            self.data += 1
-            return self.find(start, True)
-        else:
-            if unlikely(self.data[] not in acceptable_escapes):
-                raise Error(
-                    "Invalid escape sequence: ",
-                    to_string(self.data[-1]),
-                    to_string(self.data[]),
-                )
-        self.data += 1
-        if self.data[] == `\\`:
-            return self.cont(start, found_unicode)
-        return self.find(start, found_unicode)
-
+        
+    
     fn find(
-        mut self, start: CheckedPointer, found_unicode: Bool, out s: String
+        mut self, start: CheckedPointer, out s: String
     ) raises:
-        var block = StringBlock.find(self.data)
-        if block.has_quote_first():
-            self.data += block.quote_index()
-            return copy_to_string[options.ignore_unicode](
-                start.p, self.data.p, found_unicode
-            )
-        elif unlikely(self.data.p > self.data.end):
-            # We got EOF before finding the end quote, so obviously this
-            # input is malformed
-            raise Error("Unexpected EOF")
-
-        if unlikely(block.has_unescaped()):
-            raise Error(
-                "Control characters must be escaped: ",
-                to_string(self.load_chunk()),
-                " : ",
-                String(block.unescaped_index()),
-            )
-        if not block.has_backslash():
-            self.data += SIMD8_WIDTH
-            return self.find(start, found_unicode)
-        self.data += block.bs_index()
-        return self.cont(start, found_unicode)
-
-    fn read_string(mut self, out s: String) raises:
-        self.data += 1
-        var start = self.data
         var found_unicode = False
-        while likely(self.has_more()):
-            # compile time interpreter is incompatible with the SIMD accelerated
-            # path, so fallback to the serial implementation
-            if self.can_load_chunk() and not is_compile_time():
-                s = self.find(start, False)
-                self.data += 1
-                return
-            else:
-                if self.data[] == `"`:
-                    s = copy_to_string[options.ignore_unicode](
-                        start.p, self.data.p, found_unicode
-                    )
+        while True:
+            var block = StringBlock.find(self.data)
+            if block.has_quote_first():
+                self.data += block.quote_index()
+                return copy_to_string[options.ignore_unicode](
+                    start.p, self.data.p, found_unicode
+                )
+            elif unlikely(self.data.p > self.data.end):
+                # We got EOF before finding the end quote, so obviously this
+                # input is malformed
+                raise Error("Unexpected EOF")
+
+            if unlikely(block.has_unescaped()):
+                raise Error(
+                    "Control characters must be escaped: ",
+                    to_string(self.load_chunk()),
+                    " : ",
+                    String(block.unescaped_index()),
+                )
+            if not block.has_backslash():
+                self.data += SIMD8_WIDTH
+                continue
+            self.data += block.bs_index()
+            
+            while True:
+                self.data += 1  
+                if self.data[] == `u`:
                     self.data += 1
-                    return
-                if self.data[] == `\\`:
-                    self.data += 1
+                    found_unicode = True
+                    break
+                else:
                     if unlikely(self.data[] not in acceptable_escapes):
                         raise Error(
                             "Invalid escape sequence: ",
                             to_string(self.data[-1]),
                             to_string(self.data[]),
                         )
-                    if self.data[] == `u`:
-                        found_unicode = True
-                alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
-                if unlikely(self.data[] in control_chars):
-                    raise Error(
-                        "Control characters must be escaped: ",
-                        String(self.data[]),
-                    )
                 self.data += 1
+                if self.data[] != `\\`:
+                    break
+
+    fn read_serial(mut self, start: CheckedPointer, out s: String) raises:
+        var found_unicode = False
+        while likely(self.has_more()):
+            if self.data[] == `"`:
+                s = copy_to_string[options.ignore_unicode](
+                    start.p, self.data.p, found_unicode
+                )
+                self.data += 1
+                return
+            if self.data[] == `\\`:
+                self.data += 1
+                if unlikely(self.data[] not in acceptable_escapes):
+                    raise Error(
+                        "Invalid escape sequence: ",
+                        to_string(self.data[-1]),
+                        to_string(self.data[]),
+                    )
+                if self.data[] == `u`:
+                    found_unicode = True
+            alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
+            if unlikely(self.data[] in control_chars):
+                raise Error(
+                    "Control characters must be escaped: ",
+                    String(self.data[]),
+                )
+            self.data += 1
+        
         raise Error("Invalid String")
+
+    fn read_string(mut self, out s: String) raises:
+        self.data += 1
+        var start = self.data
+        # compile time interpreter is incompatible with the SIMD accelerated
+        # path, so fallback to the serial implementation
+        if self.can_load_chunk() and not is_compile_time():
+            s = self.find(start)
+            self.data += 1
+        else:
+            s = self.read_serial(start)
 
     @always_inline
     fn skip_whitespace(mut self) raises:
