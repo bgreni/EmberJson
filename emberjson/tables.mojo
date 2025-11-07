@@ -41,6 +41,7 @@ fn _truncate[
 fn full_multiplication(out answer: UInt128, x: UInt64, y: UInt64):
     answer = UInt128(x) * UInt128(y)
 
+
 alias POWER_OF_FIVE_128 = StackArray[UInt64, 1302](
     0xEEF453D6923BD65A,
     0x113FAA2906A13B3F,

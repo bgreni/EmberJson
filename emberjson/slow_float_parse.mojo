@@ -9,7 +9,7 @@ from ._parser_helper import (
     is_exp_char,
     append_digit,
 )
-from .utils import select, StackArray, CheckedPointer
+from .utils import select, StackArray, CheckedPointer, lut
 from memory.unsafe import bitcast
 from memory import UnsafePointer
 
@@ -143,26 +143,26 @@ struct Decimal(Copyable, Movable):
     fn number_of_digits_decimal_left_shift(self, var shift: UInt64) -> UInt32:
         shift &= 63
 
-        var x_a = number_of_digits_decimal_left_shift_table.unsafe_get(
-            shift
-        ).cast[DType.uint32]()
-        var x_b = number_of_digits_decimal_left_shift_table.unsafe_get(
+        var x_a = lut[number_of_digits_decimal_left_shift_table](shift).cast[
+            DType.uint32
+        ]()
+        var x_b = lut[number_of_digits_decimal_left_shift_table](
             shift + 1
         ).cast[DType.uint32]()
         var num_new_digits: UInt32 = x_a >> 11
         var pow5_a = 0x7FF & x_a
         var pow5_b = 0x7FF & x_b
 
-        # kinda cursed
-        var pow5 = number_of_digits_decimal_left_shift_table_powers_of_5.unsafe_ptr().offset(
-            pow5_a
-        )
         for i in range(pow5_b - pow5_a):
             if i >= self.num_digits:
                 return num_new_digits - 1
-            elif self.digits.unsafe_get(i) == pow5[i]:
+            elif self.digits.unsafe_get(i) == lut[
+                number_of_digits_decimal_left_shift_table_powers_of_5
+            ](i + pow5_a):
                 continue
-            elif self.digits.unsafe_get(i) < pow5[i]:
+            elif self.digits.unsafe_get(i) < lut[
+                number_of_digits_decimal_left_shift_table_powers_of_5
+            ](i + pow5_a):
                 return num_new_digits - 1
             else:
                 break

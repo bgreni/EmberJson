@@ -25,6 +25,7 @@ def test_read_lines_big():
         assert_equal(line.object(), Object({"key": i}))
         i += 1
 
+
 def main():
     var s = TestSuite.discover_tests[__functions_in_module()]()
     print(s.generate_report())

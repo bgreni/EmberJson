@@ -268,11 +268,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             v = self.parse_number()
         else:
             raise Error("Invalid json value")
-        
-    
-    fn find(
-        mut self, start: CheckedPointer, out s: String
-    ) raises:
+
+    fn find(mut self, start: CheckedPointer, out s: String) raises:
         var found_unicode = False
         while True:
             var block = StringBlock.find(self.data)
@@ -297,9 +294,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 self.data += SIMD8_WIDTH
                 continue
             self.data += block.bs_index()
-            
+
             while True:
-                self.data += 1  
+                self.data += 1
                 if self.data[] == `u`:
                     self.data += 1
                     found_unicode = True
@@ -341,7 +338,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     String(self.data[]),
                 )
             self.data += 1
-        
+
         raise Error("Invalid String")
 
     fn read_string(mut self, out s: String) raises:

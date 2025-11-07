@@ -9,7 +9,13 @@ from emberjson import (
     try_parse,
 )
 from emberjson import write_pretty
-from testing import assert_equal, assert_true, assert_raises, assert_not_equal, TestSuite
+from testing import (
+    assert_equal,
+    assert_true,
+    assert_raises,
+    assert_not_equal,
+    TestSuite,
+)
 from sys.param_env import is_defined
 
 

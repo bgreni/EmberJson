@@ -20,6 +20,7 @@ alias ByteVec = SIMD[DType.uint8, _]
 alias ByteView = Span[Byte, _]
 alias BytePtr = UnsafePointer[Byte, mut=False]
 
+
 fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
     if is_compile_time():
         return A.unsafe_get(i).copy()
@@ -122,9 +123,7 @@ struct CheckedPointer(Comparable, Copyable):
             " bytes remaining, received: ",
             self.dist() + 1,
             "\ninput:\n\n",
-            StringSlice(
-                ptr=self.start, length=Int(self.end) - Int(self.start)
-            ),
+            StringSlice(ptr=self.start, length=Int(self.end) - Int(self.start)),
         )
 
 
