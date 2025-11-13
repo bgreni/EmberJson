@@ -1,7 +1,7 @@
 from sys import simd_width_of
 
 
-alias SIMD8_WIDTH = simd_width_of[Byte.dtype]()
-alias SIMD8 = SIMD[Byte.dtype, _]
-alias SIMD8xT = SIMD8[SIMD8_WIDTH]
-alias SIMDBool = SIMD[DType.bool, _]
+comptime SIMD8_WIDTH = simd_width_of[Byte.dtype]()
+comptime SIMD8 = SIMD[Byte.dtype, _]
+comptime SIMD8xT = SIMD8[SIMD8_WIDTH]
+comptime SIMDBool = SIMD[DType.bool, _]

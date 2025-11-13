@@ -1,14 +1,14 @@
 from .tables import MINIVERSE
 from ..utils import lut
 
-alias LOG10_POW2_MAX: Int32 = 112815
-alias LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
+comptime LOG10_POW2_MAX: Int32 = 112815
+comptime LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
 
 
 @always_inline
 fn remove_trailing_zeros(var m: UInt64, var e: Int32) -> Fields:
-    alias minv5: UInt64 = -(UInt64.MAX // 5)
-    alias bound: UInt64 = (UInt64.MAX // 10 + 1)
+    comptime minv5: UInt64 = -(UInt64.MAX // 5)
+    comptime bound: UInt64 = (UInt64.MAX // 10 + 1)
 
     while True:
         var q = ror(m * minv5)
@@ -32,7 +32,7 @@ fn is_small_integer(m: UInt64, e: Int32) -> Bool:
 
 @always_inline
 fn div10(n: UInt64) -> UInt64:
-    alias a = UInt128(UInt64.MAX // 10 + 1)
+    comptime a = UInt128(UInt64.MAX // 10 + 1)
     return UInt64((a * UInt128(n)) >> 64)
 
 
@@ -41,7 +41,7 @@ fn is_multiple_of_pow2(m: UInt64, e: Int32) -> Bool:
     return (m & ~(UInt64.MAX << UInt64(e))) == 0
 
 
-alias LOG10_POW2_MAGIC_NUM = 1292913987
+comptime LOG10_POW2_MAGIC_NUM = 1292913987
 
 
 @always_inline
@@ -64,7 +64,7 @@ fn mshift(m: UInt64, u: UInt64, l: UInt64) -> UInt64:
 
 @always_inline
 fn is_tie(m: UInt64, f: Int32) -> Bool:
-    alias LEN_MINIVERSE = 27
+    comptime LEN_MINIVERSE = 27
     return Int32(0) <= f < LEN_MINIVERSE and is_multiple_of_pow5(m, f)
 
 

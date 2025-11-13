@@ -17,14 +17,14 @@ from emberjson.format_int import write_int
 
 # Mojo port of the Teju Jagua algorithm https://github.com/cassioneri/teju_jagua
 
-alias MANTISSA_SIZE: UInt64 = 53
-alias EXPONENT_MIN: Int32 = -1074
-alias STORAGE_INDEX_OFFSET = -324
+comptime MANTISSA_SIZE: UInt64 = 53
+comptime EXPONENT_MIN: Int32 = -1074
+comptime STORAGE_INDEX_OFFSET = -324
 
 
 @always_inline
 fn write_f64(d: Float64, mut writer: Some[Writer]):
-    alias TOP_BIT = 1 << 63
+    comptime TOP_BIT = 1 << 63
     if bitcast[DType.uint64](d) & TOP_BIT != 0:
         writer.write("-")
 
@@ -197,8 +197,8 @@ fn teju(binary: Fields, out dec: Fields):
 @always_inline
 fn f64_to_binary(d: Float64, out bin: Fields):
     var bits = bitcast[DType.uint64](d)
-    alias k = MANTISSA_SIZE - 1
-    alias MANTISSA_MASK = (((1) << (k)) - 1)
+    comptime k = MANTISSA_SIZE - 1
+    comptime MANTISSA_MASK = (((1) << (k)) - 1)
 
     var mantissa = bits & MANTISSA_MASK
 
@@ -207,7 +207,7 @@ fn f64_to_binary(d: Float64, out bin: Fields):
 
     if exponent != 0:
         exponent -= 1
-        alias `1 << k` = 1 << k
+        comptime `1 << k` = 1 << k
         mantissa |= `1 << k`
 
     exponent += EXPONENT_MIN

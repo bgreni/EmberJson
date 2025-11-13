@@ -3,19 +3,21 @@ from memory import UnsafePointer
 from os import abort
 
 
+comptime TreeNodePtr = UnsafePointer[TreeNode, MutAnyOrigin]
+
 struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
     var data: Value
     var key: String
-    var left: UnsafePointer[Self]
-    var right: UnsafePointer[Self]
-    var parent: UnsafePointer[Self]
+    var left: UnsafePointer[Self, MutAnyOrigin]
+    var right: UnsafePointer[Self, MutAnyOrigin]
+    var parent: UnsafePointer[Self, MutAnyOrigin]
 
     fn __init__(out self, var key: String, var data: Value):
         self.data = data^
         self.key = key^
-        self.left = UnsafePointer[Self]()
-        self.right = UnsafePointer[Self]()
-        self.parent = UnsafePointer[Self]()
+        self.left = UnsafePointer[Self, MutAnyOrigin]()
+        self.right = UnsafePointer[Self, MutAnyOrigin]()
+        self.parent = UnsafePointer[Self, MutAnyOrigin]()
 
     @always_inline
     fn __eq__(self, other: Self) -> Bool:
@@ -43,8 +45,8 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
         writer.write('"', self.key, '"', ":", self.data)
 
     @staticmethod
-    fn make_ptr(var key: String, var data: Value, out p: UnsafePointer[Self]):
-        p = UnsafePointer[Self].alloc(1)
+    fn make_ptr(var key: String, var data: Value, out p: UnsafePointer[Self, MutAnyOrigin]):
+        p = alloc[Self](1)
         p.init_pointee_move(TreeNode(key^, data^))
 
     fn steal_data(mut self, mut other: Self):
@@ -55,7 +57,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
 @fieldwise_init
 @register_passable("trivial")
 struct _TreeIter(Copyable, Movable, Sized):
-    var curr: UnsafePointer[TreeNode]
+    var curr: TreeNodePtr
     var seen: Int
     var total: Int
 
@@ -82,7 +84,7 @@ struct _TreeIter(Copyable, Movable, Sized):
 @fieldwise_init
 @register_passable("trivial")
 struct _TreeKeyIter(Copyable, Movable, Sized):
-    var curr: UnsafePointer[TreeNode]
+    var curr: TreeNodePtr
     var seen: Int
     var total: Int
 
@@ -109,7 +111,7 @@ struct _TreeKeyIter(Copyable, Movable, Sized):
 @fieldwise_init
 @register_passable("trivial")
 struct _TreeValueIter(Copyable, Movable, Sized):
-    var curr: UnsafePointer[TreeNode]
+    var curr: TreeNodePtr
     var seen: Int
     var total: Int
 
@@ -134,7 +136,7 @@ struct _TreeValueIter(Copyable, Movable, Sized):
 
 
 struct Tree(Copyable, Movable, Sized, Stringable, Writable):
-    alias NodePtr = UnsafePointer[TreeNode]
+    comptime NodePtr = TreeNodePtr
     var root: Self.NodePtr
     var size: Int
 
@@ -268,7 +270,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
 ########################################################################
 
 
-fn for_each[visit: fn (UnsafePointer[TreeNode])](node: UnsafePointer[TreeNode]):
+fn for_each[visit: fn (TreeNodePtr)](node: TreeNodePtr):
     if not node:
         return
     for_each[visit](node[].left)
@@ -276,7 +278,7 @@ fn for_each[visit: fn (UnsafePointer[TreeNode])](node: UnsafePointer[TreeNode]):
     for_each[visit](node[].right)
 
 
-fn _find(node: UnsafePointer[TreeNode], key: String) -> type_of(node):
+fn _find(node: TreeNodePtr, key: String) -> type_of(node):
     if not node or node[].key == key:
         return node
 
@@ -285,13 +287,13 @@ fn _find(node: UnsafePointer[TreeNode], key: String) -> type_of(node):
     return _find(node[].left, key)
 
 
-fn _get_left_most(var node: UnsafePointer[TreeNode]) -> type_of(node):
+fn _get_left_most(var node: TreeNodePtr) -> type_of(node):
     while node[].left:
         node = node[].left
     return node
 
 
-fn _get_next(var node: UnsafePointer[TreeNode]) -> type_of(node):
+fn _get_next(var node: TreeNodePtr) -> type_of(node):
     if node[].right:
         return _get_left_most(node[].right)
     while node[].parent and node == node[].parent[].right:

@@ -22,12 +22,12 @@ from bit import count_trailing_zeros
 from sys.info import bit_width_of
 from sys.intrinsics import _type_is_eq, likely, unlikely
 
-alias smallest_power: Int64 = -342
-alias largest_power: Int64 = 308
+comptime smallest_power: Int64 = -342
+comptime largest_power: Int64 = 308
 
-alias TRUE: UInt32 = _to_uint32("true")
-alias ALSE: UInt32 = _to_uint32("alse")
-alias NULL: UInt32 = _to_uint32("null")
+comptime TRUE: UInt32 = _to_uint32("true")
+comptime ALSE: UInt32 = _to_uint32("alse")
+comptime NULL: UInt32 = _to_uint32("null")
 
 
 fn _to_uint32(s: StaticString) -> UInt32:
@@ -49,7 +49,7 @@ fn is_numerical_component(char: Byte) -> Bool:
     return isdigit(char) or char == `+` or char == `-`
 
 
-alias Bits_T = Scalar[_uint(SIMD8_WIDTH)]
+comptime Bits_T = Scalar[_uint(SIMD8_WIDTH)]
 
 
 @always_inline
@@ -75,7 +75,7 @@ fn ptr_dist(start: BytePtr, end: BytePtr) -> Int:
 
 @register_passable("trivial")
 struct StringBlock:
-    alias BitMask = SIMD[DType.bool, SIMD8_WIDTH]
+    comptime BitMask = SIMD[DType.bool, SIMD8_WIDTH]
 
     var bs_bits: Bits_T
     var quote_bits: Bits_T
@@ -138,7 +138,7 @@ struct StringBlock:
 fn hex_to_u32(p: BytePtr) -> UInt32:
     var v = p.load[width=4]().cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
-    alias shifts = SIMD[DType.uint32, 4](12, 8, 4, 0)
+    comptime shifts = SIMD[DType.uint32, 4](12, 8, 4, 0)
     v <<= shifts
     return v.reduce_or()
 
@@ -259,7 +259,7 @@ fn unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
 fn to_double(
     var mantissa: UInt64, real_exponent: UInt64, negative: Bool
 ) -> Float64:
-    alias `1 << 52` = 1 << 52
+    comptime `1 << 52` = 1 << 52
     mantissa &= ~(`1 << 52`)
     mantissa |= real_exponent << 52
     mantissa |= Int(negative) << 63

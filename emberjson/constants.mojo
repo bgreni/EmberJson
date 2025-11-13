@@ -1,39 +1,39 @@
-alias `"` = _to_byte('"')
-alias `t` = _to_byte("t")
-alias `f` = _to_byte("f")
-alias `n` = _to_byte("n")
-alias `{` = _to_byte("{")
-alias `}` = _to_byte("}")
-alias `[` = _to_byte("[")
-alias `]` = _to_byte("]")
-alias `:` = _to_byte(":")
-alias `,` = _to_byte(",")
+comptime `"` = _to_byte('"')
+comptime `t` = _to_byte("t")
+comptime `f` = _to_byte("f")
+comptime `n` = _to_byte("n")
+comptime `{` = _to_byte("{")
+comptime `}` = _to_byte("}")
+comptime `[` = _to_byte("[")
+comptime `]` = _to_byte("]")
+comptime `:` = _to_byte(":")
+comptime `,` = _to_byte(",")
 
-alias `\n` = _to_byte("\n")
-alias `\t` = _to_byte("\t")
-alias ` ` = _to_byte(" ")
-alias `\r` = _to_byte("\r")
-alias `\\` = _to_byte("\\")
+comptime `\n` = _to_byte("\n")
+comptime `\t` = _to_byte("\t")
+comptime ` ` = _to_byte(" ")
+comptime `\r` = _to_byte("\r")
+comptime `\\` = _to_byte("\\")
 
-alias `e` = _to_byte("e")
-alias `E` = _to_byte("E")
+comptime `e` = _to_byte("e")
+comptime `E` = _to_byte("E")
 
-alias `/` = _to_byte("/")
-alias `b` = _to_byte("b")
-alias `r` = _to_byte("r")
-alias `u` = _to_byte("u")
+comptime `/` = _to_byte("/")
+comptime `b` = _to_byte("b")
+comptime `r` = _to_byte("r")
+comptime `u` = _to_byte("u")
 # fmt: off
-alias acceptable_escapes = SIMD[DType.uint8, 16](
+comptime acceptable_escapes = SIMD[DType.uint8, 16](
     `"`, `\\`, `/`, `b`, `f`, `n`, `r`, `t`,
     `u`, `u`, `u`, `u`, `u`, `u`, `u`, `u`
 )
 # fmt: on
-alias `.` = _to_byte(".")
-alias `+` = _to_byte("+")
-alias `-` = _to_byte("-")
-alias `0` = _to_byte("0")
-alias `9` = _to_byte("9")
-alias `1` = _to_byte("1")
+comptime `.` = _to_byte(".")
+comptime `+` = _to_byte("+")
+comptime `-` = _to_byte("-")
+comptime `0` = _to_byte("0")
+comptime `9` = _to_byte("9")
+comptime `1` = _to_byte("1")
 
 
 @always_inline

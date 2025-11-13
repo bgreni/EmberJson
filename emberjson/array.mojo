@@ -51,7 +51,7 @@ struct Array(JsonValue, Sized):
     is essentially a variant type of the possible valid json types.
     """
 
-    alias Type = List[Value]
+    comptime Type = List[Value]
     var _data: Self.Type
 
     @always_inline

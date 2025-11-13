@@ -14,12 +14,12 @@ struct Object(JsonValue, Sized):
     a variant type of any valid JSON type.
     """
 
-    alias Type = Tree
+    comptime Type = Tree
     var _data: Self.Type
 
-    alias ObjectIter = _TreeIter
-    alias ObjectKeyIter = _TreeKeyIter
-    alias ObjectValueIter = _TreeValueIter
+    comptime ObjectIter = _TreeIter
+    comptime ObjectKeyIter = _TreeKeyIter
+    comptime ObjectValueIter = _TreeValueIter
 
     @always_inline
     fn __init__(out self):

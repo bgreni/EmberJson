@@ -87,7 +87,7 @@ struct ParseOptions(Copyable, Movable):
 
 
 struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
-    var data: CheckedPointer
+    var data: CheckedPointer[origin]
     var size: Int
 
     fn __init__(s: String, out self: Parser[origin_of(s), options]):
@@ -102,11 +102,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn __init__(
         out self,
         *,
-        ptr: UnsafePointer[Byte, mut=False, origin=origin],
+        ptr: UnsafePointer[Byte, origin=origin],
         length: Int,
     ):
-        var b = rebind[BytePtr](ptr)
-        self.data = CheckedPointer(b, b, b + length)
+        self.data = CheckedPointer(ptr, ptr, ptr + length)
         self.size = length
 
     @always_inline
@@ -331,7 +330,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     )
                 if self.data[] == `u`:
                     found_unicode = True
-            alias control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
+            comptime control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
             if unlikely(self.data[] in control_chars):
                 raise Error(
                     "Control characters must be escaped: ",
@@ -394,8 +393,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn compute_float64(
         self, out d: Float64, power: Int64, var i: UInt64, negative: Bool
     ) raises:
-        alias min_fast_power = Int64(-22)
-        alias max_fast_power = Int64(22)
+        comptime min_fast_power = Int64(-22)
+        comptime max_fast_power = Int64(22)
 
         if min_fast_power <= power <= max_fast_power and i <= 9007199254740991:
             return self.compute_float_fast(power, i, negative)
@@ -428,8 +427,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var mantissa: UInt64 = upper >> (upperbit + 9)
         lz += Int(1 ^ upperbit)
 
-        alias `152170 + 65536` = 152170 + 65536
-        alias `1024 + 63` = 1024 + 63
+        comptime `152170 + 65536` = 152170 + 65536
+        comptime `1024 + 63` = 1024 + 63
 
         var real_exponent: Int64 = (
             (((`152170 + 65536`) * power) >> 16)
@@ -437,7 +436,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             - lz.cast[DType.int64]()
         )
 
-        alias `1 << 52` = 1 << 52
+        comptime `1 << 52` = 1 << 52
 
         if unlikely(real_exponent <= 0):
             if -real_exponent + 1 >= 64:
@@ -453,14 +452,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if unlikely(
             lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)
         ):
-            alias `64 - 53 - 2` = 64 - 53 - 2
+            comptime `64 - 53 - 2` = 64 - 53 - 2
             if (mantissa << (upperbit + `64 - 53 - 2`)) == upper:
                 mantissa &= ~1
 
         mantissa += mantissa & 1
         mantissa >>= 1
 
-        alias `1 << 53` = 1 << 53
+        comptime `1 << 53` = 1 << 53
         if mantissa >= (`1 << 53`):
             mantissa = `1 << 52`
             real_exponent += 1
@@ -562,7 +561,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             return
 
         var longest_digit_count = select(neg, 19, 20)
-        alias SIGNED_OVERFLOW = UInt64(Int64.MAX)
+        comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
         if digit_count > longest_digit_count:
             raise Error("integer overflow")
         if digit_count == longest_digit_count:
@@ -589,7 +588,7 @@ fn minify(s: String, out out_str: String) raises:
     var s_len = s.byte_length()
     out_str = String(capacity=s_len)
 
-    var ptr = s.unsafe_ptr()
+    var ptr = BytePtr[origin_of(s)](s.unsafe_ptr())
     var end = ptr + s_len
 
     @always_inline

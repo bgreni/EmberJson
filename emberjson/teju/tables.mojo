@@ -1,7 +1,7 @@
 from ..utils import StackArray
 
-alias Pair = SIMD[DType.uint64, 2]
-alias MINIVERSE = StackArray[Pair, 27](
+comptime Pair = SIMD[DType.uint64, 2]
+comptime MINIVERSE = StackArray[Pair, 27](
     Pair(0x0000000000000001, 0xFFFFFFFFFFFFFFFF),
     Pair(0xCCCCCCCCCCCCCCCD, 0x3333333333333333),
     Pair(0x8F5C28F5C28F5C29, 0x0A3D70A3D70A3D70),
@@ -31,7 +31,7 @@ alias MINIVERSE = StackArray[Pair, 27](
     Pair(0x01C445D3A8CC9189, 0x000000000000000C),
 )
 
-alias MULTIPLIERS = StackArray[Pair, 617](
+comptime MULTIPLIERS = StackArray[Pair, 617](
     Pair(0x9E19DB92B4E31BA9, 0x6C07A2C26A8346D2),
     Pair(0xFCF62C1DEE382C42, 0x46729E03DD9ED7B6),
     Pair(0xCA5E89B18B602368, 0x385BB19CB14BDFC5),

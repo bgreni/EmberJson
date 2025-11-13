@@ -5,7 +5,7 @@ from .constants import `\n`, `\r`
 
 
 struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
-    alias BUFFER_SIZE = 4096
+    comptime BUFFER_SIZE = 4096
     var buf: InlineArray[Byte, Self.BUFFER_SIZE]
     var length: Int
 
@@ -46,7 +46,7 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
 
 
 struct JSONLinesIter(Movable):
-    alias Element = JSON
+    comptime Element = JSON
 
     var f: FileHandle
     var next_object: JSON

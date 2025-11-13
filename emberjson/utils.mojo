@@ -16,24 +16,21 @@ from utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
 from builtin.globals import global_constant
 
-alias ByteVec = SIMD[DType.uint8, _]
-alias ByteView = Span[Byte, _]
-alias BytePtr = UnsafePointer[Byte, mut=False]
+comptime ByteVec = SIMD[DType.uint8, _]
+comptime ByteView = Span[Byte, _]
+comptime BytePtr[origin: ImmutOrigin] = UnsafePointer[Byte, origin]
 
-
+@always_inline
 fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
-    if is_compile_time():
-        return A.unsafe_get(i).copy()
-    else:
-        return global_constant[A]().unsafe_get(i).copy()
+    return global_constant[A]().unsafe_get(i).copy()
 
 
 @fieldwise_init
 @register_passable("trivial")
-struct CheckedPointer(Comparable, Copyable):
-    var p: BytePtr
-    var start: BytePtr
-    var end: BytePtr
+struct CheckedPointer[origin: ImmutOrigin](Comparable, Copyable):
+    var p: BytePtr[origin]
+    var start: BytePtr[origin]
+    var end: BytePtr[origin]
 
     @always_inline("nodebug")
     fn __add__(self, v: Int) -> Self:
@@ -88,7 +85,7 @@ struct CheckedPointer(Comparable, Copyable):
     @always_inline("nodebug")
     fn __getitem__(
         ref self,
-    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+    ) raises -> ref [origin, self.p.address_space] Byte:
         if unlikely(self.dist() <= 0):
             raise Error("Unexpected EOF")
         return self.p[]
@@ -96,7 +93,7 @@ struct CheckedPointer(Comparable, Copyable):
     @always_inline("nodebug")
     fn __getitem__(
         ref self, i: Int
-    ) raises -> ref [self.p.origin, self.p.address_space] Byte:
+    ) raises -> ref [origin, self.p.address_space] Byte:
         if unlikely(self.dist() - i <= 0):
             raise Error("Unexpected EOF")
         return self.p[i]
@@ -127,9 +124,9 @@ struct CheckedPointer(Comparable, Copyable):
         )
 
 
-alias DefaultPrettyIndent = 4
+comptime DefaultPrettyIndent = 4
 
-alias StackArray[T: Copyable & Movable, size: Int] = InlineArray[T, size]
+comptime StackArray[T: Copyable & Movable, size: Int] = InlineArray[T, size]
 
 
 @always_inline
@@ -190,7 +187,7 @@ fn to_string(var i: UInt32) -> String:
 
 
 fn constrain_json_type[T: Movable & Copyable]():
-    alias valid = _type_is_eq[T, Int64]() or _type_is_eq[
+    comptime valid = _type_is_eq[T, Int64]() or _type_is_eq[
         T, UInt64
     ]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
         T, Bool
@@ -232,7 +229,7 @@ fn estimate_bytes_to_write(value: Int) -> UInt:
 
 
 # fn estimate_bytes_to_write(value: UInt) -> UInt:
-#     alias uint_dtype = _uint_type_of_width[UInt.BITWIDTH]()
+#     comptime uint_dtype = _uint_type_of_width[UInt.BITWIDTH]()
 #     return estimate_bytes_to_write(Scalar[uint_dtype](value))
 
 
@@ -260,16 +257,16 @@ fn _estimate_bytes_to_write_int(value: Scalar) -> UInt:
 
 
 fn _estimate_bytes_to_write_float(value: Scalar) -> UInt:
-    alias FP = FPUtils[value.dtype]
-    alias MANTISSA_SIZE = FP.mantissa_width()
-    alias EXPONENT_MASK = FP.exponent_mask()
-    alias MANTISSA_MASK = FP.mantissa_mask()
+    comptime FP = FPUtils[value.dtype]
+    comptime MANTISSA_SIZE = FP.mantissa_width()
+    comptime EXPONENT_MASK = FP.exponent_mask()
+    comptime MANTISSA_MASK = FP.mantissa_mask()
 
     var is_negative = FP.get_sign(value)
     var exp = (FP.bitcast_to_integer(value) & EXPONENT_MASK) >> MANTISSA_SIZE
     var mant = FP.bitcast_to_uint(value) & MANTISSA_MASK
 
-    alias `log10(2)` = 0.3010299956639812
+    comptime `log10(2)` = 0.3010299956639812
     # TODO: maybe constraint until we have a more generic way to extract
     # -0, nan, +inf, -inf
     var amnt_exp: UInt

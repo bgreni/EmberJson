@@ -206,7 +206,7 @@ def test_incomplete_data():
 
 
 def test_compile_time():
-    alias data = r"""{
+    comptime data = r"""{
     "key": [
         1.234,
         352.329384920,
@@ -220,7 +220,7 @@ def test_compile_time():
         "string that has unicode in it: \u00FC"
     ]
 }"""
-    alias j = try_parse(data)
+    comptime j = try_parse(data)
     assert_true(j)
 
     ref arr = j.value().object()["key"].array()
@@ -242,7 +242,7 @@ def test_compile_time():
     assert_equal(arr[9].string(), "string that has unicode in it: ü")
 
 
-alias dir = String("./bench_data/data/jsonchecker/")
+comptime dir = String("./bench_data/data/jsonchecker/")
 
 
 def expect_fail(datafile: String):
@@ -521,7 +521,7 @@ def test_roundtrip26():
 
 def test_unicode_parsing():
     # Just check it doesn't trip up on any of these
-    alias s = r"""{
+    comptime s = r"""{
   "user": {
     "id": 123456,
     "username": "maría_87",
@@ -673,5 +673,4 @@ def test_unicode_parsing():
 
 
 def main():
-    var s = TestSuite.discover_tests[__functions_in_module()]()
-    print(s.generate_report())
+    TestSuite.discover_tests[__functions_in_module()]().run()

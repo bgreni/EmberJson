@@ -60,7 +60,7 @@ struct Null(JsonValue):
 
 
 struct Value(JsonValue):
-    alias Type = Variant[
+    comptime Type = Variant[
         Int64, UInt64, Float64, String, Bool, Object, Array, Null
     ]
     var _data: Self.Type

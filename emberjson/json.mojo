@@ -13,7 +13,7 @@ from python import PythonObject
 struct JSON(JsonValue, Sized):
     """Top level JSON object, can either be an Array, or an Object."""
 
-    alias Type = Variant[Object, Array]
+    comptime Type = Variant[Object, Array]
     var _data: Self.Type
 
     @always_inline

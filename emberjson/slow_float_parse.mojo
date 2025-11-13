@@ -14,12 +14,12 @@ from memory.unsafe import bitcast
 from memory import UnsafePointer
 
 
-alias MANTISSA_EXPLICIT_BITS = 52
-alias MINIMUM_EXPONENT: Int32 = -1023
-alias INFINITE_POWER = 0x7FF
-alias SIGN_INDEX = 63
-alias MAX_DIGITS = 768
-alias DECIMAL_POINT_RANGE = 2047
+comptime MANTISSA_EXPLICIT_BITS = 52
+comptime MINIMUM_EXPONENT: Int32 = -1023
+comptime INFINITE_POWER = 0x7FF
+comptime SIGN_INDEX = 63
+comptime MAX_DIGITS = 768
+comptime DECIMAL_POINT_RANGE = 2047
 
 
 @fieldwise_init
@@ -201,8 +201,8 @@ fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
     if d.decimal_point >= 310:
         raise Error("Infinite float")
 
-    alias MAX_SHIFT = 60
-    alias NUM_POWERS = 19
+    comptime MAX_SHIFT = 60
+    comptime NUM_POWERS = 19
     var POWERS = StackArray[UInt8, NUM_POWERS](
         0, 3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46, 49, 53, 56, 59
     )
@@ -252,7 +252,7 @@ fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
     if exp2 - MINIMUM_EXPONENT >= INFINITE_POWER:
         raise Error("Infinite float")
 
-    alias mantissa_size_in_bits = MANTISSA_EXPLICIT_BITS + 1
+    comptime mantissa_size_in_bits = MANTISSA_EXPLICIT_BITS + 1
     d <<= mantissa_size_in_bits
 
     var mantissa: UInt64 = d.round()
@@ -329,7 +329,7 @@ fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
         answer.decimal_point += select(neg_exp, -exp_number, exp_number)
 
 
-alias number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
+comptime number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x0000,
     0x0800,
     0x0801,
@@ -397,7 +397,7 @@ alias number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x051C,
 )
 
-alias number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
+comptime number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
     UInt8, 0x051C
 ](
     5,
