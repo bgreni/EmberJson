@@ -1,6 +1,7 @@
 [project]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
 channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
@@ -24,6 +25,21 @@ test_python_compat = "python python_compat.py"
 mojo = ">=0.25.7.0.dev2025101518,<0.26.0.0"
 
 
+[package]
+name = "emberjson"
+version = "0.2.0"
+
+[package.build]
+backend = { name = "pixi-build-mojo", version = "0.1.*" }
+
+[package.host-dependencies]
+mojo-compiler = ">=0.25.7.0.dev2025101518,<0.26.0.0"
+
+[package.build-dependencies]
+mojo-compiler = ">=0.25.7.0.dev2025101518,<0.26.0.0"
+
+[package.run-dependencies]
+mojo-compiler = ">=0.25.7.0.dev2025101518,<0.26.0.0"
 
 
 [feature.fuzz.tasks]
