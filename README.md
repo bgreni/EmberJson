@@ -3,7 +3,7 @@
 <!-- ![emberlogo](./image/ember_logo.jpeg) -->
 <image src='./image/ember_logo.jpeg' width='300'/>
 
-![license_badge](https://badgen.net/static/license/Apache-2.0/blue)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 ![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)
 ![CodeQL](https://github.com/bgreni/EmberJson/workflows/CodeQL/badge.svg)
 
