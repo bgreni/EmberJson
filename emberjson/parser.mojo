@@ -87,22 +87,22 @@ struct ParseOptions(Copyable, Movable):
 
 
 struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
-    var data: CheckedPointer[origin]
+    var data: CheckedPointer[Self.origin]
     var size: Int
 
-    fn __init__(s: String, out self: Parser[origin_of(s), options]):
+    fn __init__(s: String, out self: Parser[origin_of(s), Self.options]):
         self = type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
 
-    fn __init__(out self, s: StringSlice[origin]):
+    fn __init__(out self, s: StringSlice[Self.origin]):
         self = Self(ptr=s.unsafe_ptr(), length=s.byte_length())
 
-    fn __init__(out self, s: ByteView[origin]):
+    fn __init__(out self, s: ByteView[Self.origin]):
         self = Self(ptr=s.unsafe_ptr(), length=len(s))
 
     fn __init__(
         out self,
         *,
-        ptr: UnsafePointer[Byte, origin=origin],
+        ptr: UnsafePointer[Byte, origin=Self.origin],
         length: Int,
     ):
         self.data = CheckedPointer(ptr, ptr, ptr + length)
@@ -274,7 +274,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             var block = StringBlock.find(self.data)
             if block.has_quote_first():
                 self.data += block.quote_index()
-                return copy_to_string[options.ignore_unicode](
+                return copy_to_string[Self.options.ignore_unicode](
                     start.p, self.data.p, found_unicode
                 )
             elif unlikely(self.data.p > self.data.end):
@@ -315,7 +315,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var found_unicode = False
         while likely(self.has_more()):
             if self.data[] == `"`:
-                s = copy_to_string[options.ignore_unicode](
+                s = copy_to_string[Self.options.ignore_unicode](
                     start.p, self.data.p, found_unicode
                 )
                 self.data += 1

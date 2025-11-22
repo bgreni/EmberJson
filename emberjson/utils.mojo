@@ -28,9 +28,9 @@ fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
 @fieldwise_init
 @register_passable("trivial")
 struct CheckedPointer[origin: ImmutOrigin](Comparable, Copyable):
-    var p: BytePtr[origin]
-    var start: BytePtr[origin]
-    var end: BytePtr[origin]
+    var p: BytePtr[Self.origin]
+    var start: BytePtr[Self.origin]
+    var end: BytePtr[Self.origin]
 
     @always_inline("nodebug")
     fn __add__(self, v: Int) -> Self:
@@ -85,7 +85,7 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, Copyable):
     @always_inline("nodebug")
     fn __getitem__(
         ref self,
-    ) raises -> ref [origin, self.p.address_space] Byte:
+    ) raises -> ref [Self.origin, self.p.address_space] Byte:
         if unlikely(self.dist() <= 0):
             raise Error("Unexpected EOF")
         return self.p[]
@@ -93,7 +93,7 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, Copyable):
     @always_inline("nodebug")
     fn __getitem__(
         ref self, i: Int
-    ) raises -> ref [origin, self.p.address_space] Byte:
+    ) raises -> ref [Self.origin, self.p.address_space] Byte:
         if unlikely(self.dist() - i <= 0):
             raise Error("Unexpected EOF")
         return self.p[i]

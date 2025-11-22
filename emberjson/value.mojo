@@ -56,7 +56,7 @@ struct Null(JsonValue):
         writer.write(self)
 
     fn to_python_object(self) raises -> PythonObject:
-        return None
+        return {}
 
 
 struct Value(JsonValue):
@@ -405,11 +405,11 @@ struct Value(JsonValue):
         elif self.is_bool():
             return self.bool()
         elif self.is_null():
-            return None
+            return {}
         elif self.is_object():
             return self.object().to_python_object()
         elif self.is_array():
             return self.array().to_python_object()
         else:
             abort("Unreachable: to_python_object")
-        return None
+        return {}

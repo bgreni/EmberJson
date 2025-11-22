@@ -10,13 +10,13 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
     Copyable, Movable, Sized
 ):
     var index: Int
-    var src: Pointer[Array, origin]
+    var src: Pointer[Array, Self.origin]
 
-    fn __init__(out self, src: Pointer[Array, origin]):
+    fn __init__(out self, src: Pointer[Array, Self.origin]):
         self.src = src
 
         @parameter
-        if forward:
+        if Self.forward:
             self.index = 0
         else:
             self.index = len(self.src[])
@@ -26,7 +26,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
 
     fn __next__(mut self) -> ref [self.src[]._data] Value:
         @parameter
-        if forward:
+        if Self.forward:
             self.index += 1
             return self.src[].__getitem__(self.index - 1)
         else:
@@ -38,7 +38,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
 
     fn __len__(self) -> Int:
         @parameter
-        if forward:
+        if Self.forward:
             return len(self.src[]) - self.index
         else:
             return self.index

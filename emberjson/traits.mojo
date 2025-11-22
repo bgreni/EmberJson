@@ -13,7 +13,7 @@ trait JsonValue(
     ConvertibleToPython,
     Copyable,
     Defaultable,
-    EqualityComparable,
+    Equatable,
     ImplicitlyBoolable,
     Movable,
     PrettyPrintable,
