@@ -3,21 +3,21 @@ from memory import UnsafePointer
 from os import abort
 
 
-comptime TreeNodePtr = UnsafePointer[TreeNode, MutOrigin.external]
+comptime TreeNodePtr = UnsafePointer[TreeNode, MutAnyOrigin]
 
 struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
     var data: Value
     var key: String
-    var left: UnsafePointer[Self, MutOrigin.external]
-    var right: UnsafePointer[Self, MutOrigin.external]
-    var parent: UnsafePointer[Self, MutOrigin.external]
+    var left: UnsafePointer[Self, MutAnyOrigin]
+    var right: UnsafePointer[Self, MutAnyOrigin]
+    var parent: UnsafePointer[Self, MutAnyOrigin]
 
     fn __init__(out self, var key: String, var data: Value):
         self.data = data^
         self.key = key^
-        self.left = UnsafePointer[Self, MutOrigin.external]()
-        self.right = UnsafePointer[Self, MutOrigin.external]()
-        self.parent = UnsafePointer[Self, MutOrigin.external]()
+        self.left = UnsafePointer[Self, MutAnyOrigin]()
+        self.right = UnsafePointer[Self, MutAnyOrigin]()
+        self.parent = UnsafePointer[Self, MutAnyOrigin]()
 
     @always_inline
     fn __eq__(self, other: Self) -> Bool:
@@ -33,18 +33,19 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
 
     @always_inline
     fn __str__(self) -> String:
-        return String.write(self)
+        return String(self)
 
-    fn __repr__(self, out s: String):
-        s = String()
-        s.write("TreeNode(", self.key, ", ", self.data, ")")
+    fn __repr__(self) -> String:
+        var out = String()
+        out.write("TreeNode(", self.key, ", ", self.data, ")")
+        return out
 
     @always_inline
     fn write_to(self, mut writer: Some[Writer]):
         writer.write('"', self.key, '"', ":", self.data)
 
     @staticmethod
-    fn make_ptr(var key: String, var data: Value, out p: UnsafePointer[Self, MutOrigin.external]):
+    fn make_ptr(var key: String, var data: Value, out p: UnsafePointer[Self, MutAnyOrigin]):
         p = alloc[Self](1)
         p.init_pointee_move(TreeNode(key^, data^))
 
