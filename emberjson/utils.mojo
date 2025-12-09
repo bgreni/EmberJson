@@ -20,6 +20,7 @@ comptime ByteVec = SIMD[DType.uint8, _]
 comptime ByteView = Span[Byte, _]
 comptime BytePtr[origin: ImmutOrigin] = UnsafePointer[Byte, origin]
 
+
 @always_inline
 fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
     return global_constant[A]().unsafe_get(i).copy()

@@ -81,13 +81,14 @@ def test_equality():
 
 
 def test_list_ctr():
-    var arr = Array(List[Value](123, "foo", Null(), False))
+    var l: List[Value] = [123, "foo", Null(), False]
+    var arr = Array(l^)
     assert_equal(arr[0].int(), 123)
     assert_equal(arr[1].string(), "foo")
     assert_equal(arr[2].null(), Null())
     assert_equal(arr[3].bool(), False)
 
-    assert_equal(arr.to_list(), List[Value](123, "foo", Null(), False))
+    assert_equal(arr.to_list(), [123, "foo", Null(), False])
 
 
 def test_iter():

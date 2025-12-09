@@ -5,6 +5,7 @@ from os import abort
 
 comptime TreeNodePtr = UnsafePointer[TreeNode, MutAnyOrigin]
 
+
 struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
     var data: Value
     var key: String
@@ -45,7 +46,11 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
         writer.write('"', self.key, '"', ":", self.data)
 
     @staticmethod
-    fn make_ptr(var key: String, var data: Value, out p: UnsafePointer[Self, MutAnyOrigin]):
+    fn make_ptr(
+        var key: String,
+        var data: Value,
+        out p: UnsafePointer[Self, MutAnyOrigin],
+    ):
         p = alloc[Self](1)
         p.init_pointee_move(TreeNode(key^, data^))
 

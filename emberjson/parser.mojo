@@ -102,7 +102,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn __init__(
         out self,
         *,
-        ptr: UnsafePointer[Byte, origin=Self.origin],
+        ptr: UnsafePointer[Byte, origin = Self.origin],
         length: Int,
     ):
         self.data = CheckedPointer(ptr, ptr, ptr + length)

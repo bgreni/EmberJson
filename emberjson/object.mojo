@@ -94,10 +94,6 @@ struct Object(JsonValue, Sized):
         return len(self) == 0
 
     @always_inline
-    fn __as_bool__(self) -> Bool:
-        return Bool(self)
-
-    @always_inline
     fn keys(ref self) -> Self.ObjectKeyIter:
         return self._data.keys()
 
@@ -155,5 +151,5 @@ struct Object(JsonValue, Sized):
     fn to_python_object(self) raises -> PythonObject:
         var d = Python.dict()
         for item in self.items():
-            d[item.key] = item.data.to_python_object()
+            d[PythonObject(item.key)] = item.data.to_python_object()
         return d

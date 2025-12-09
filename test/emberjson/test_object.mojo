@@ -125,7 +125,7 @@ def test_nested_object_copy():
 def test_iter():
     var ob: Object = {"a": "stuff", "b": 123, "c": 3.423}
 
-    var keys = List[String]("a", "b", "c")
+    var keys: List[String] = ["a", "b", "c"]
 
     var i = 0
     for el in ob.keys():

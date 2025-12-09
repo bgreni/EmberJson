@@ -1,4 +1,3 @@
-from collections import Dict, Optional
 from utils import Variant
 from .object import Object
 from .array import Array
@@ -160,7 +159,6 @@ struct JSON(JsonValue, Sized):
         elif self.is_array():
             return self.array() == other.array()
         abort("unreachable")
-        return False
 
     @always_inline
     fn __ne__(self, other: Self) -> Bool:
@@ -189,15 +187,6 @@ struct JSON(JsonValue, Sized):
             True if the inner container is non-empty else False
         """
         return len(self) == 0
-
-    @always_inline
-    fn __as_bool__(self) -> Bool:
-        """Returns True if the size of the inner collection is non-empty.
-
-        Return:
-            True if the inner container is non-empty else False
-        """
-        return Bool(self)
 
     @always_inline
     fn write_to[W: Writer](self, mut writer: W):

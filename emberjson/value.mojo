@@ -42,10 +42,6 @@ struct Null(JsonValue):
         return False
 
     @always_inline
-    fn __as_bool__(self) -> Bool:
-        return False
-
-    @always_inline
     fn write_to(self, mut writer: Some[Writer]):
         writer.write(self.__str__())
 
@@ -211,7 +207,6 @@ struct Value(JsonValue):
         elif self.isa[Null]():
             return True
         abort("Unreachable: __eq__")
-        return False
 
     fn __getitem__(
         self, ind: Some[Indexer]
@@ -249,11 +244,6 @@ struct Value(JsonValue):
         elif self.isa[Array]():
             return Bool(self.array())
         abort("Unreachable: __bool__")
-        return False
-
-    @always_inline
-    fn __as_bool__(self) -> Bool:
-        return Bool(self)
 
     @always_inline
     fn isa[T: Movable & Copyable](self) -> Bool:
@@ -395,21 +385,20 @@ struct Value(JsonValue):
 
     fn to_python_object(self) raises -> PythonObject:
         if self.is_int():
-            return self.int()
+            return PythonObject(self.int())
         elif self.is_uint():
-            return self.uint()
+            return PythonObject(self.uint())
         elif self.is_float():
-            return self.float()
+            return PythonObject(self.float())
         elif self.is_string():
-            return self.string()
+            return PythonObject(self.string())
         elif self.is_bool():
-            return self.bool()
+            return PythonObject(self.bool())
         elif self.is_null():
-            return {}
+            return PythonObject()
         elif self.is_object():
             return self.object().to_python_object()
         elif self.is_array():
             return self.array().to_python_object()
         else:
             abort("Unreachable: to_python_object")
-        return {}

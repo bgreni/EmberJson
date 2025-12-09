@@ -14,7 +14,6 @@ trait JsonValue(
     Copyable,
     Defaultable,
     Equatable,
-    ImplicitlyBoolable,
     Movable,
     PrettyPrintable,
     Representable,

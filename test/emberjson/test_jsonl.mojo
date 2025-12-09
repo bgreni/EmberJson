@@ -7,7 +7,12 @@ def test_read_lines():
     if is_defined["DISABLE_TEST_FILES"]():
         return
 
-    var lines = List[Object]({"test": 1}, {"test": 2}, {"test": 3}, {"test": 4})
+    var lines: List[Object] = [
+        {"test": 1},
+        {"test": 2},
+        {"test": 3},
+        {"test": 4},
+    ]
 
     var i = 0
 

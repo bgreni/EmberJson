@@ -93,10 +93,6 @@ struct Array(JsonValue, Sized):
         return len(self) == 0
 
     @always_inline
-    fn __as_bool__(self) -> Bool:
-        return Bool(self)
-
-    @always_inline
     fn __contains__(self, v: Value) -> Bool:
         return v in self._data
 
