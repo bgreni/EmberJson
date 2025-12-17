@@ -14,9 +14,7 @@ fn PyInit_emberjson_python() -> PythonObject:
         m.add_type[JSON]("JSON")
         return m.finalize()
     except e:
-        return abort[PythonObject](
-            String("error creating Python Mojo module:", e)
-        )
+        abort(String("error creating Python Mojo module:", e))
 
 
 fn parse(obj: PythonObject) raises -> PythonObject:
@@ -25,4 +23,4 @@ fn parse(obj: PythonObject) raises -> PythonObject:
 
 
 fn minify(obj: PythonObject) raises -> PythonObject:
-    return minify_mojo(String(obj))
+    return minify_mojo(String(obj)).to_python_object()
