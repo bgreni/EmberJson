@@ -24,17 +24,17 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
     fn __iter__(self) -> Self:
         return self
 
-    fn __next__(mut self) -> ref [self.src[]._data] Value:
+    fn __next__(mut self) raises StopIteration -> ref [self.src[]._data] Value:
+        if self.index >= len(self):
+            raise StopIteration()
+
         @parameter
         if Self.forward:
             self.index += 1
-            return self.src[].__getitem__(self.index - 1)
+            return self.src[][self.index - 1]
         else:
             self.index -= 1
-            return self.src[].__getitem__(self.index)
-
-    fn __has_next__(self) -> Bool:
-        return len(self) > 0
+            return self.src[][self.index]
 
     fn __len__(self) -> Int:
         @parameter

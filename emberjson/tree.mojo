@@ -71,15 +71,13 @@ struct _TreeIter(Copyable, Movable, Sized):
         return self
 
     @always_inline
-    fn __next__(mut self) -> ref [self.curr[]] TreeNode:
+    fn __next__(mut self) raises StopIteration -> ref [self.curr[]] TreeNode:
+        if self.seen >= self.total:
+            raise StopIteration()
         self.seen += 1
         ref p = self.curr[]
         self.curr = _get_next(self.curr)
         return p
-
-    @always_inline
-    fn __has_next__(self) -> Bool:
-        return self.seen < self.total
 
     @always_inline
     fn __len__(self) -> Int:
@@ -98,15 +96,13 @@ struct _TreeKeyIter(Copyable, Movable, Sized):
         return self
 
     @always_inline
-    fn __next__(mut self) -> ref [self.curr[].key] String:
+    fn __next__(mut self) raises StopIteration -> ref [self.curr[].key] String:
+        if self.seen >= self.total:
+            raise StopIteration()
         self.seen += 1
         ref p = self.curr[].key
         self.curr = _get_next(self.curr)
         return p
-
-    @always_inline
-    fn __has_next__(self) -> Bool:
-        return self.seen < self.total
 
     @always_inline
     fn __len__(self) -> Int:
@@ -125,7 +121,9 @@ struct _TreeValueIter(Copyable, Movable, Sized):
         return self
 
     @always_inline
-    fn __next__(mut self) -> ref [self.curr[].data] Value:
+    fn __next__(mut self) raises StopIteration -> ref [self.curr[].data] Value:
+        if self.seen >= self.total:
+            raise StopIteration()
         self.seen += 1
         ref p = self.curr[].data
         self.curr = _get_next(self.curr)

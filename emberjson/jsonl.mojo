@@ -45,7 +45,7 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
         return self.length
 
 
-struct JSONLinesIter(Movable):
+struct JSONLinesIter(Iterator):
     comptime Element = JSON
 
     var f: FileHandle
@@ -57,20 +57,14 @@ struct JSONLinesIter(Movable):
         self.next_object = JSON()
         self.read_buf = _ReadBuffer()
 
-    fn __has_next__(mut self) -> Bool:
+    fn __next__(mut self, out j: JSON) raises StopIteration:
         try:
             var line = self._read_until_newline()
             if not line:
-                return False
-            self.next_object = JSON(parse_bytes=line.as_bytes())
-            return True
+                raise StopIteration()
+            j = JSON(parse_bytes=line.as_bytes())
         except e:
-            print(e)
-        return False
-
-    fn __next__(mut self, out j: JSON):
-        j = self.next_object^
-        self.next_object = JSON()
+            raise StopIteration()
 
     fn __iter__(var self) -> Self:
         return self^
