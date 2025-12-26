@@ -6,7 +6,7 @@ from python import PythonObject, Python
 
 
 @register_passable("trivial")
-struct _ArrayIter[mut: Bool, //, origin: Origin[mut], forward: Bool = True](
+struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
     Copyable, Movable, Sized
 ):
     var index: Int
