@@ -7,7 +7,6 @@ from memory import Span
 from memory import memcmp, UnsafePointer
 from io.write import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
-from os import abort
 from sys import size_of
 from sys.intrinsics import unlikely
 from sys.intrinsics import _type_is_eq
@@ -127,7 +126,9 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, Copyable):
 
 comptime DefaultPrettyIndent = 4
 
-comptime StackArray[T: Copyable & Movable, size: Int] = InlineArray[T, size]
+comptime StackArray[
+    T: Copyable & Movable & ImplicitlyDestructible, size: Int
+] = InlineArray[T, size]
 
 
 @always_inline

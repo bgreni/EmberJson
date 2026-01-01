@@ -1,6 +1,5 @@
 from .value import Value
 from memory import UnsafePointer
-from os import abort
 
 
 comptime TreeNodePtr = UnsafePointer[TreeNode, MutAnyOrigin]

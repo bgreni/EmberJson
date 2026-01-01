@@ -5,7 +5,6 @@ from .traits import JsonValue, PrettyPrintable
 from .parser import Parser
 from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
 from python import PythonObject, Python
-from os import abort
 
 
 struct Object(JsonValue, Sized):
