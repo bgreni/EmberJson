@@ -90,12 +90,15 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer[Self.origin]
     var size: Int
 
+    @implicit
     fn __init__(s: String, out self: Parser[origin_of(s), Self.options]):
         self = type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
 
+    @implicit
     fn __init__(out self, s: StringSlice[Self.origin]):
         self = Self(ptr=s.unsafe_ptr(), length=s.byte_length())
 
+    @implicit
     fn __init__(out self, s: ByteView[Self.origin]):
         self = Self(ptr=s.unsafe_ptr(), length=len(s))
 
@@ -225,7 +228,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             if unlikely(self.bytes_remaining() < 3):
                 raise Error('Encountered EOF when expecting "true"')
             # Safety: Safe because we checked the amount of bytes remaining
-            var w = self.data.p.bitcast[UInt32]()[0]
+            var w = self.data.p.bitcast[UInt32]()[]
             if w != TRUE:
                 raise Error("Expected 'true', received: ", to_string(w))
             v = True

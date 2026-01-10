@@ -111,6 +111,9 @@ struct Object(JsonValue, Sized):
     fn write_to(self, mut writer: Some[Writer]):
         writer.write(self._data)
 
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
+
     fn pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):

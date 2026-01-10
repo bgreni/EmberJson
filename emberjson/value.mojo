@@ -2,7 +2,7 @@ from .object import Object
 from .array import Array
 from .utils import will_overflow, constrain_json_type
 from utils import Variant
-from .traits import JsonValue, PrettyPrintable
+from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
 from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
@@ -54,12 +54,18 @@ struct Null(JsonValue):
     fn to_python_object(self) raises -> PythonObject:
         return {}
 
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
+
 
 struct Value(JsonValue):
     comptime Type = Variant[
         Int64, UInt64, Float64, String, Bool, Object, Array, Null
     ]
     var _data: Self.Type
+
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
 
     @always_inline
     fn __init__(out self):
