@@ -4,7 +4,7 @@ from .array import Array
 from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
 from sys.intrinsics import unlikely
-from .parser import Parser
+from ._deserialize import Parser
 from os import abort
 from python import PythonObject
 
@@ -200,6 +200,7 @@ struct JSON(JsonValue, Sized):
         else:
             writer.write(self.array())
 
+    @always_inline
     fn write_json(self, mut writer: Some[Writer]):
         writer.write(self)
 
@@ -266,3 +267,7 @@ struct JSON(JsonValue, Sized):
             .to_python_object() if self.is_array() else self.object()
             .to_python_object()
         )
+
+    @staticmethod
+    fn from_json(mut json: Parser, out s: Self) raises:
+        s = json.parse()

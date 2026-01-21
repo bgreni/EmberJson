@@ -1,7 +1,7 @@
-from .utils import BytePtr, CheckedPointer, select
+from emberjson.utils import BytePtr, CheckedPointer, select
 from memory import UnsafePointer
-from .simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
-from .constants import (
+from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
+from emberjson.constants import (
     `0`,
     `9`,
     ` `,

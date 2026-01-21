@@ -1,4 +1,4 @@
-from .utils import StackArray
+from emberjson.utils import StackArray
 
 comptime POWER_OF_TEN = StackArray[Float64, 23](
     1e0,

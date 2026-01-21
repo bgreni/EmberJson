@@ -6,7 +6,7 @@ from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
 from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
-from .parser import Parser
+from ._deserialize import Parser
 from .format_int import write_int
 from sys.info import bit_width_of
 from .teju import write_f64
@@ -54,8 +54,13 @@ struct Null(JsonValue):
     fn to_python_object(self) raises -> PythonObject:
         return {}
 
+    @always_inline
     fn write_json(self, mut writer: Some[Writer]):
         writer.write(self)
+
+    @staticmethod
+    fn from_json(mut json: Parser, out s: Self) raises:
+        s = json.parse_null()
 
 
 struct Value(JsonValue):
@@ -63,9 +68,6 @@ struct Value(JsonValue):
         Int64, UInt64, Float64, String, Bool, Object, Array, Null
     ]
     var _data: Self.Type
-
-    fn write_json(self, mut writer: Some[Writer]):
-        writer.write(self)
 
     @always_inline
     fn __init__(out self):
@@ -388,6 +390,10 @@ struct Value(JsonValue):
     @always_inline
     fn __repr__(self) -> String:
         return self.__str__()
+
+    @always_inline
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
 
     fn to_python_object(self) raises -> PythonObject:
         if self.is_int():

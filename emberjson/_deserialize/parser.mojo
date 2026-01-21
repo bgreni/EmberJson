@@ -1,4 +1,4 @@
-from .utils import (
+from emberjson.utils import (
     CheckedPointer,
     BytePtr,
     ByteView,
@@ -8,11 +8,11 @@ from .utils import (
     select,
     lut,
 )
-from .json import JSON
-from .simd import SIMD8_WIDTH, SIMD8xT
-from .array import Array
-from .object import Object
-from .value import Value
+from emberjson.json import JSON
+from emberjson.simd import SIMD8_WIDTH, SIMD8xT
+from emberjson.array import Array
+from emberjson.object import Object
+from emberjson.value import Value
 from bit import count_trailing_zeros
 from memory import UnsafePointer, memset
 from sys.intrinsics import unlikely, likely
@@ -40,8 +40,12 @@ from memory.unsafe import bitcast
 from bit import count_leading_zeros
 from .slow_float_parse import from_chars_slow
 from sys.compile import is_compile_time
-from .tables import POWER_OF_TEN, full_multiplication, POWER_OF_FIVE_128
-from .constants import (
+from .tables import (
+    POWER_OF_TEN,
+    full_multiplication,
+    POWER_OF_FIVE_128,
+)
+from emberjson.constants import (
     `[`,
     `]`,
     `{`,
@@ -91,8 +95,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var size: Int
 
     @implicit
-    fn __init__(s: String, out self: Parser[origin_of(s), Self.options]):
+    fn __init__(out self: Parser[origin_of(s), Self.options], s: String):
         self = type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
+
+    @implicit
+    fn __init__(
+        out self: Parser[StaticConstantOrigin, Self.options], s: StringLiteral
+    ):
+        self = type_of(self)(StaticString(s))
 
     @implicit
     fn __init__(out self, s: StringSlice[Self.origin]):
@@ -216,6 +226,40 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.data += 1
         self.skip_whitespace()
 
+    @always_inline
+    fn parse_true(mut self) raises -> Bool:
+        if unlikely(self.bytes_remaining() < 3):
+            raise Error('Encountered EOF when expecting "true"')
+        # Safety: Safe because we checked the amount of bytes remaining
+        var w = self.data.p.bitcast[UInt32]()[]
+        if w != TRUE:
+            raise Error("Expected 'true', received: ", to_string(w))
+        self.data += 4
+        return True
+
+    @always_inline
+    fn parse_false(mut self) raises -> Bool:
+        self.data += 1
+        if unlikely(self.bytes_remaining() < 3):
+            raise Error('Encountered EOF when expecting "false"')
+        # Safety: Safe because we checked the amount of bytes remaining
+        var w = self.data.p.bitcast[UInt32]()[0]
+        if w != ALSE:
+            raise Error("Expected 'false', received: f", to_string(w))
+        self.data += 4
+        return False
+
+    @always_inline
+    fn parse_null(mut self) raises -> Null:
+        if unlikely(self.bytes_remaining() < 3):
+            raise Error("Encountered EOF when expecting 'null'")
+        # Safety: Safe because we checked the amount of bytes remaining
+        var w = self.data.p.bitcast[UInt32]()[0]
+        if w != NULL:
+            raise Error("Expected 'null', received: ", to_string(w))
+        self.data += 4
+        return Null()
+
     fn parse_value(mut self, out v: Value) raises:
         self.skip_whitespace()
         var b = self.data[]
@@ -225,37 +269,15 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         # Handle "true" atom
         elif b == `t`:
-            if unlikely(self.bytes_remaining() < 3):
-                raise Error('Encountered EOF when expecting "true"')
-            # Safety: Safe because we checked the amount of bytes remaining
-            var w = self.data.p.bitcast[UInt32]()[]
-            if w != TRUE:
-                raise Error("Expected 'true', received: ", to_string(w))
-            v = True
-            self.data += 4
+            v = self.parse_true()
 
         # handle "false" atom
         elif b == `f`:
-            self.data += 1
-            if unlikely(self.bytes_remaining() < 3):
-                raise Error('Encountered EOF when expecting "false"')
-            # Safety: Safe because we checked the amount of bytes remaining
-            var w = self.data.p.bitcast[UInt32]()[0]
-            if w != ALSE:
-                raise Error("Expected 'false', received: f", to_string(w))
-            v = False
-            self.data += 4
+            v = self.parse_false()
 
         # handle "null" atom
         elif b == `n`:
-            if unlikely(self.bytes_remaining() < 3):
-                raise Error('Encountered EOF when expecting "null"')
-            # Safety: Safe because we checked the amount of bytes remaining
-            var w = self.data.p.bitcast[UInt32]()[0]
-            if w != NULL:
-                raise Error("Expected 'null', received: ", to_string(w))
-            v = Null()
-            self.data += 4
+            v = self.parse_null()
 
         # handle object
         elif b == `{`:
@@ -580,6 +602,25 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if i > SIGNED_OVERFLOW:
             return i
         return select(neg, Int64(~i + 1), Int64(i))
+
+    fn expect(mut self, expected: Byte) raises:
+        self.skip_whitespace()
+        if unlikely(self.data[] != expected):
+            print(to_string(expected), " : ", self.remaining())
+            raise Error("Invalid JSON")
+        self.data += 1
+        self.skip_whitespace()
+
+    fn expect_bool(mut self) raises -> Bool:
+        if self.data[] == `t`:
+            return self.parse_true()
+        elif self.data[] == `f`:
+            return self.parse_false()
+        raise Error("Expected Bool")
+
+    @always_inline
+    fn peek(self) raises -> Byte:
+        return self.data[]
 
 
 fn minify(s: String, out out_str: String) raises:

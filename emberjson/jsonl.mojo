@@ -36,7 +36,9 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
         self.length = 0
 
     fn __str__(self) -> String:
-        return String(bytes=Span(ptr=self.buf.unsafe_ptr(), length=self.length))
+        return String(
+            unsafe_from_utf8=Span(ptr=self.buf.unsafe_ptr(), length=self.length)
+        )
 
     fn write_to(self, mut writer: Some[Writer]):
         writer.write(String(self))
@@ -63,7 +65,7 @@ struct JSONLinesIter(Iterator):
             if not line:
                 raise StopIteration()
             j = JSON(parse_bytes=line.as_bytes())
-        except e:
+        except:
             raise StopIteration()
 
     fn __iter__(var self) -> Self:

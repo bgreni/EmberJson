@@ -9,7 +9,7 @@ from ._parser_helper import (
     is_exp_char,
     append_digit,
 )
-from .utils import select, StackArray, CheckedPointer, lut
+from emberjson.utils import select, StackArray, CheckedPointer, lut
 from memory.unsafe import bitcast
 from memory import UnsafePointer
 

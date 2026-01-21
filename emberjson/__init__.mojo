@@ -3,9 +3,16 @@ from .array import Array
 from .object import Object
 from .value import Value, Null
 from .utils import write, write_pretty
-from .parser import Parser, ParseOptions, minify
+from ._deserialize import (
+    Parser,
+    ParseOptions,
+    minify,
+    deserialize,
+    JsonDeserializable,
+)
 from .jsonl import read_lines, write_lines
-from .traits import JsonValue, JsonSerializable
+from .traits import JsonValue
+from ._serialize import JsonSerializable, serialize
 
 
 @always_inline

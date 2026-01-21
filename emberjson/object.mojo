@@ -2,7 +2,7 @@ from .value import Value, Null
 from collections import Dict
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
-from .parser import Parser
+from ._deserialize import Parser
 from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
 from python import PythonObject, Python
 
@@ -108,9 +108,7 @@ struct Object(JsonValue, Sized):
     fn items(ref self) -> Self.ObjectIter:
         return self._data.items()
 
-    fn write_to(self, mut writer: Some[Writer]):
-        writer.write(self._data)
-
+    @always_inline
     fn write_json(self, mut writer: Some[Writer]):
         writer.write(self)
 
@@ -136,6 +134,10 @@ struct Object(JsonValue, Sized):
             done += 1
 
     @always_inline
+    fn write_to(self, mut writer: Some[Writer]):
+        writer.write(self._data)
+
+    @always_inline
     fn __str__(self) -> String:
         return write(self)
 
@@ -155,3 +157,7 @@ struct Object(JsonValue, Sized):
         for item in self.items():
             d[PythonObject(item.key)] = item.data.to_python_object()
         return d
+
+    @staticmethod
+    fn from_json(mut json: Parser, out s: Self) raises:
+        s = json.parse_object()

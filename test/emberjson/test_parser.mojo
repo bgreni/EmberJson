@@ -1,4 +1,4 @@
-from emberjson.parser import Parser
+from emberjson._deserialize.parser import Parser
 from emberjson import JSON, Null, Array, Object, parse
 from testing import assert_true, assert_equal, assert_raises, TestSuite
 

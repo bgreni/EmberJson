@@ -1,7 +1,7 @@
 from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
-from .parser import Parser
+from ._deserialize import Parser
 from python import PythonObject, Python
 
 
@@ -128,6 +128,7 @@ struct Array(JsonValue, Sized):
                 writer.write(",")
         writer.write("]")
 
+    @always_inline
     fn write_json(self, mut writer: Some[Writer]):
         writer.write(self)
 
@@ -166,3 +167,7 @@ struct Array(JsonValue, Sized):
 
     fn to_python_object(self) raises -> PythonObject:
         return Python.list(self._data)
+
+    @staticmethod
+    fn from_json(mut json: Parser, out s: Self) raises:
+        s = json.parse_array()

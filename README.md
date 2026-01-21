@@ -100,3 +100,40 @@ var l = arr.to_list()
 var ob = Object()
 var d = ob.to_dict()
 ```
+
+### Automatic Serilization
+
+Through the power of Mojo's reflection capabilities, it is possible to automatically serialize structs to JSON strings. Users can optionally implement the `JsonSerializable` trait to customize the serialization process, and plain structs will be serialized as objects.
+
+```mojo
+from emberjson import *
+
+@fieldwise_init
+struct Point:
+    var x: Int
+    var y: Int
+
+
+@fieldwise_init
+struct Coordinate(JsonSerializable):
+    var lat: Float64
+    var lng: Float64
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return True
+
+
+@fieldwise_init
+struct MyInt(JsonSerializable):
+    var value: Int
+
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self.value)
+
+
+fn main():
+    print(serialize(Point(1, 2)))  # prints {"x":1,"y":2}
+    print(serialize(Coordinate(1.0, 2.0)))  # prints [1.0,2.0]
+    print(serialize(MyInt(1)))  # prints 1
+```
