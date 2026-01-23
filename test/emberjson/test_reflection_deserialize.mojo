@@ -2,7 +2,7 @@ from testing import TestSuite, assert_equal, assert_false
 from emberjson._deserialize import deserialize
 
 
-struct Foo(Defaultable, Movable):
+struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var a: String
     var i: Int
     var f: Float64
@@ -13,6 +13,9 @@ struct Foo(Defaultable, Movable):
     var bs: SIMD[DType.bool, 1]
     var li: List[Int]
     # var ina: InlineArray[Float64, 3]
+    var d: Dict[String, Int]
+    var il: type_of(Self.I)
+    var fl: type_of(Self.F)
 
     fn __init__(out self):
         self.a = ""
@@ -24,11 +27,14 @@ struct Foo(Defaultable, Movable):
         self.b = False
         self.bs = False
         self.li = []
+        self.d = {}
+        self.il = {}
+        self.fl = {}
         # self.ina = InlineArray[Float64, 3](uninitialized=True)
 
 
 def test_deserialize():
-    var foo = deserialize[Foo](
+    var foo = deserialize[Foo[23, 234.23]](
         """
 {
     "a": "hello",
@@ -39,7 +45,10 @@ def test_deserialize():
     "o2": 1234,
     "b": true,
     "bs": true,
-    "li": [1, 2, 3]
+    "li": [1, 2, 3],
+    "d": {"some key": 12345},
+    "il": 23,
+    "fl": 234.23
 }
 """
     )
@@ -52,6 +61,23 @@ def test_deserialize():
     assert_equal(foo.b, True)
     assert_equal(foo.bs, True)
     assert_equal(foo.li, [1, 2, 3])
+    assert_equal(String(foo.d), String({"some key": 12345}))
+    assert_equal(foo.il, 23)
+    assert_equal(foo.fl, 234.23)
+
+
+@fieldwise_init
+struct Bar(Defaultable, Movable):
+    var a: Int
+    var b: Bool
+
+    fn __init__(out self):
+        self.a = 0
+        self.b = False
+
+
+def test_out_of_order_keys():
+    var bar = deserialize[Bar]('{"b": false, "a": 10}')
 
 
 def main():

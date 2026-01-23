@@ -191,6 +191,23 @@ fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
     b.iter[do]()
 
 
+# struct CatalogData(Defaultable, Movable):
+#     var areaNames: Dict[String, String]
+#     var audienceSubCategoryNames: Dict[String, String]
+#     var blockNames: Dict[String, String]
+#     # var events: Dict[String, pass]
+
+# struct Event(Defaulable, Movable):
+
+# @parameter
+# fn benchmark_deserialize_catalog_with_reflection(mut b: Bencher, s: String) raises:
+#     @always_inline
+#     @parameter
+#     fn do() raises:
+#         pass
+
+#     b.iter[do]()
+
 # source https://opensource.adobe.com/Spry/samples/data_region/JSONDataSetSample.html
 comptime small_data = """{
 	"id": "0001",

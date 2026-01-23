@@ -8,7 +8,7 @@ struct Bar(Copyable):
 
 
 @fieldwise_init
-struct Foo:
+struct Foo[I: IntLiteral, F: FloatLiteral]:
     var f: Int
     var s: String
     var o: Optional[Int]
@@ -18,6 +18,8 @@ struct Foo:
     var l: List[Int]
     var arr: InlineArray[Bool, 3]
     var dic: Dict[String, Int]
+    var il: type_of(Self.I)
+    var fl: type_of(Self.F)
 
 
 @fieldwise_init
@@ -32,7 +34,7 @@ struct Baz(JsonSerializable):
 
 
 def test_serialize():
-    var f = Foo(
+    var f = Foo[45, 7.43](
         1,
         "something",
         10,
@@ -42,13 +44,15 @@ def test_serialize():
         [32, 42, 353],
         [False, True, True],
         {"a key": 1234},
+        {},
+        {},
     )
 
     assert_equal(
         serialize(f),
         (
             '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
-            ' key":1234}}'
+            ' key":1234},"il":45,"fl":7.43}'
         ),
     )
 

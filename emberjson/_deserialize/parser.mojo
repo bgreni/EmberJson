@@ -251,13 +251,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     fn parse_null(mut self) raises -> Null:
-        if unlikely(self.bytes_remaining() < 3):
-            raise Error("Encountered EOF when expecting 'null'")
-        # Safety: Safe because we checked the amount of bytes remaining
-        var w = self.data.p.bitcast[UInt32]()[0]
-        if w != NULL:
-            raise Error("Expected 'null', received: ", to_string(w))
-        self.data += 4
+        self.expect_null()
         return Null()
 
     fn parse_value(mut self, out v: Value) raises:
@@ -606,8 +600,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn expect(mut self, expected: Byte) raises:
         self.skip_whitespace()
         if unlikely(self.data[] != expected):
-            print(to_string(expected), " : ", self.remaining())
-            raise Error("Invalid JSON")
+            raise Error(
+                "Invalid JSON, Expected: ",
+                to_string(expected),
+                ", Received: ",
+                to_string(self.data[]),
+            )
         self.data += 1
         self.skip_whitespace()
 
@@ -617,6 +615,15 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         elif self.data[] == `f`:
             return self.parse_false()
         raise Error("Expected Bool")
+
+    fn expect_null(mut self) raises:
+        if unlikely(self.bytes_remaining() < 3):
+            raise Error("Encountered EOF when expecting 'null'")
+        # Safety: Safe because we checked the amount of bytes remaining
+        var w = self.data.p.bitcast[UInt32]()[0]
+        if w != NULL:
+            raise Error("Expected 'null', received: ", to_string(w))
+        self.data += 4
 
     @always_inline
     fn peek(self) raises -> Byte:

@@ -4,6 +4,7 @@ from std.reflection import (
     struct_field_types,
     is_struct_type,
 )
+from sys.intrinsics import _type_is_eq
 
 
 trait JsonSerializable:
@@ -166,6 +167,9 @@ __extension InlineArray(JsonSerializable):
 
 __extension Dict(JsonSerializable):
     fn write_json(self, mut writer: Some[Writer]):
+        __comptime_assert _type_is_eq[
+            Self.K, String
+        ](), "Dict must have string keys"
         writer.write("{")
         var i = 0
         for item in self.items():
@@ -177,6 +181,24 @@ __extension Dict(JsonSerializable):
                 writer.write(",")
             i += 1
         writer.write("}")
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return False
+
+
+__extension IntLiteral(JsonSerializable):
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return False
+
+
+__extension FloatLiteral(JsonSerializable):
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
 
     @staticmethod
     fn serialize_as_array() -> Bool:

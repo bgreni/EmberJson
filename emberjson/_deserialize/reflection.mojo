@@ -9,7 +9,7 @@ from std.builtin.rebind import downcast
 
 from .parser import Parser
 from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`
-from std.sys.intrinsics import unlikely
+from std.sys.intrinsics import unlikely, _type_is_eq
 from emberjson.utils import to_string
 from ._parser_helper import NULL
 
@@ -18,104 +18,117 @@ comptime non_struct_error = "Cannot deserialize non-struct type"
 
 trait JsonDeserializable(Defaultable, Movable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
-        s = _default_deserialize[Self](j)
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = _default_deserialize[Self](p)
 
 
-fn deserialize[T: Defaultable & Movable](var j: Parser, out s: T) raises:
-    s = _deserialize_impl[T](j)
+fn deserialize[T: Defaultable & Movable](var p: Parser, out s: T) raises:
+    s = _deserialize_impl[T](p)
 
 
 @always_inline
 fn _default_deserialize[
     T: Defaultable & Movable
-](mut j: Parser, out s: T) raises:
+](mut p: Parser, out s: T) raises:
     s = T()
     comptime field_count = struct_field_count[T]()
-    comptime types = struct_field_types[T]()
-    j.expect(`{`)
+    comptime field_names = struct_field_names[T]()
 
-    @parameter
+    p.expect(`{`)
+
     for i in range(field_count):
-        var ident = j.read_string()
-        j.expect(`:`)
-        comptime TField = downcast[types[i], Movable & Defaultable]
-        __comptime_assert is_struct_type[TField](), non_struct_error
-        var field = UnsafePointer(to=__struct_field_ref(i, s))
-        field.bitcast[TField]()[] = _deserialize_impl[TField](j)
+        var ident = p.read_string()
+        p.expect(`:`)
 
         @parameter
+        for j in range(field_count):
+            comptime name = field_names[j]
+
+            if ident == name:
+                ref field = __struct_field_ref(j, s)
+                comptime TField = downcast[
+                    type_of(field), Movable & Defaultable
+                ]
+
+                field = rebind[type_of(field)](_deserialize_impl[TField](p))
+
         if i < field_count - 1:
-            j.expect(`,`)
-    j.expect(`}`)
+            p.expect(`,`)
+    p.expect(`}`)
 
 
-fn _deserialize_impl[T: Defaultable & Movable](mut j: Parser, out s: T) raises:
+fn _deserialize_impl[T: Defaultable & Movable](mut p: Parser, out s: T) raises:
     __comptime_assert is_struct_type[T](), non_struct_error
 
     @parameter
     if conforms_to(T, JsonDeserializable):
-        s = rebind_var[T](downcast[T, JsonDeserializable].from_json(j))
+        s = rebind_var[T](downcast[T, JsonDeserializable].from_json(p))
     else:
-        s = _default_deserialize[T](j)
+        s = _default_deserialize[T](p)
 
 
 __extension String(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
-        s = j.read_string()
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = p.read_string()
 
 
 __extension Int(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
+    fn from_json(mut p: Parser, out s: Self) raises:
         # TODO: Make this specifically parse an integer
-        s = Int(j.parse_number().int())
+        try:
+            s = Int(p.parse_number().int())
+        except:
+            raise Error("Expected integer")
 
 
 __extension Bool(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
-        s = j.expect_bool()
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = p.expect_bool()
 
 
 __extension SIMD(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
+    fn from_json(mut p: Parser, out s: Self) raises:
         @parameter
         if dtype.is_numeric():
 
             @parameter
             if dtype.is_floating_point():
-                s = j.parse_number().float().cast[dtype]()
+                try:
+                    s = p.parse_number().float().cast[dtype]()
+                except:
+                    raise Error("Expected float point number")
             else:
 
                 @parameter
                 if dtype.is_signed():
-                    s = j.parse_number().int().cast[dtype]()
+                    try:
+                        s = p.parse_number().int().cast[dtype]()
+                    except:
+                        raise Error("Expected integer")
                 else:
-                    s = j.parse_number().uint().cast[dtype]()
+                    try:
+                        s = p.parse_number().uint().cast[dtype]()
+                    except:
+                        raise Error("Expected unsigned integer")
         else:
-            s = Self(j.expect_bool())
+            s = Self(p.expect_bool())
 
 
 __extension Optional(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
-        if j.data[] == `n`:
-            if unlikely(j.bytes_remaining() < 3):
-                raise Error("Encountered EOF when expecting 'null'")
-            # Safety: Safe because we checked the amount of bytes remaining
-            var w = j.data.p.bitcast[UInt32]()[0]
-            if w != NULL:
-                raise Error("Expected 'null', received: ", to_string(w))
+    fn from_json(mut p: Parser, out s: Self) raises:
+        if p.data[] == `n`:
+            p.expect_null()
             s = None
-            j.data += 4
         else:
             s = Self(
                 rebind_var[Self.T](
                     _deserialize_impl[downcast[Self.T, Defaultable & Movable]](
-                        j
+                        p
                     )
                 )
             )
@@ -123,22 +136,61 @@ __extension Optional(JsonDeserializable):
 
 __extension List(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
-        j.expect(`[`)
+    fn from_json(mut p: Parser, out s: Self) raises:
+        p.expect(`[`)
         s = Self()
-        var i = 0
-        while j.peek() != `]`:
+
+        while p.peek() != `]`:
             s.append(
                 rebind_var[Self.T](
                     _deserialize_impl[downcast[Self.T, Defaultable & Movable]](
-                        j
+                        p
                     )
                 )
             )
-            j.skip_whitespace()
-            if j.peek() != `]`:
-                j.expect(`,`)
-        j.expect(`]`)
+            p.skip_whitespace()
+            if p.peek() != `]`:
+                p.expect(`,`)
+        p.expect(`]`)
+
+
+__extension Dict(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        __comptime_assert _type_is_eq[
+            Self.K, String
+        ](), "Dict must have string keys"
+        p.expect(`{`)
+        s = Self()
+
+        while p.peek() != `}`:
+            var ident = rebind_var[Self.K](p.read_string())
+            p.expect(`:`)
+            s[ident^] = rebind_var[Self.V](
+                _deserialize_impl[downcast[Self.V, Defaultable & Movable]](p)
+            )
+            p.skip_whitespace()
+            if p.peek() != `}`:
+                p.expect(`,`)
+        p.expect(`}`)
+
+
+__extension IntLiteral(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = Self()
+        var i = p.parse_number().int()
+        if i != s:
+            raise Error("Expected: ", s, ", Received: ", i)
+
+
+__extension FloatLiteral(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = Self()
+        var f = p.parse_number().float()
+        if f != s:
+            raise Error("Expected: ", s, ", Received: ", f)
 
 
 # __extension InlineArray(JsonDeserializable):
