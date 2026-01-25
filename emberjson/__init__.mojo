@@ -8,6 +8,7 @@ from ._deserialize import (
     ParseOptions,
     minify,
     deserialize,
+    try_deserialize,
     JsonDeserializable,
 )
 from .jsonl import read_lines, write_lines

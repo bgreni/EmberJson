@@ -57,5 +57,31 @@ def test_serialize():
     )
 
 
+def test_ctime_serialize():
+    comptime f = Foo[45, 7.43](
+        1,
+        "something",
+        10,
+        Bar(20),
+        23,
+        [2.32, 5.345],
+        [32, 42, 353],
+        [False, True, True],
+        {"a key": 1234},
+        {},
+        {},
+    )
+
+    comptime serialized = serialize(f)
+
+    assert_equal(
+        serialized,
+        (
+            '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
+            ' key":1234},"il":45,"fl":7.43}'
+        ),
+    )
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

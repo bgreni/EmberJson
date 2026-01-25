@@ -22,6 +22,13 @@ trait JsonDeserializable(Defaultable, Movable):
         s = _default_deserialize[Self](p)
 
 
+fn try_deserialize[T: Defaultable & Movable](var p: Parser) -> Optional[T]:
+    try:
+        return _deserialize_impl[T](p)
+    except:
+        return None
+
+
 fn deserialize[T: Defaultable & Movable](var p: Parser, out s: T) raises:
     s = _deserialize_impl[T](p)
 
@@ -92,30 +99,50 @@ __extension Bool(JsonDeserializable):
 __extension SIMD(JsonDeserializable):
     @staticmethod
     fn from_json(mut p: Parser, out s: Self) raises:
-        @parameter
-        if dtype.is_numeric():
+        s = Self()
 
+        @parameter
+        fn parse_simd_element(mut p: Parser) raises -> Scalar[Self.dtype]:
             @parameter
-            if dtype.is_floating_point():
-                try:
-                    s = p.parse_number().float().cast[dtype]()
-                except:
-                    raise Error("Expected float point number")
-            else:
+            if Self.dtype.is_numeric():
 
                 @parameter
-                if dtype.is_signed():
+                if Self.dtype.is_floating_point():
                     try:
-                        s = p.parse_number().int().cast[dtype]()
+                        return p.parse_number().float().cast[Self.dtype]()
                     except:
-                        raise Error("Expected integer")
+                        raise Error("Expected float point number")
                 else:
-                    try:
-                        s = p.parse_number().uint().cast[dtype]()
-                    except:
-                        raise Error("Expected unsigned integer")
-        else:
-            s = Self(p.expect_bool())
+
+                    @parameter
+                    if Self.dtype.is_signed():
+                        try:
+                            return p.parse_number().int().cast[Self.dtype]()
+                        except:
+                            raise Error("Expected integer")
+                    else:
+                        try:
+                            return p.parse_number().uint().cast[Self.dtype]()
+                        except:
+                            raise Error("Expected unsigned integer")
+            else:
+                return Scalar[Self.dtype](p.expect_bool())
+
+        @parameter
+        if size > 1:
+            p.expect(`[`)
+
+        @parameter
+        for i in range(size):
+            s[i] = parse_simd_element(p)
+
+            @parameter
+            if i < size - 1:
+                p.expect(`,`)
+
+        @parameter
+        if size > 1:
+            p.expect(`]`)
 
 
 __extension Optional(JsonDeserializable):
