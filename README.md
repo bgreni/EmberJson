@@ -101,9 +101,39 @@ var ob = Object()
 var d = ob.to_dict()
 ```
 
-### Automatic Serilization
+### Reflection
 
-Through the power of Mojo's reflection capabilities, it is possible to automatically serialize structs to JSON strings. Users can optionally implement the `JsonSerializable` trait to customize the serialization process, and plain structs will be serialized as objects.
+Using Mojo's reflection features, it is now possible to automatically serialize and deserialize JSON to and from Mojo structs without the need for propagating trait implementations for all
+relevant types. As is the case with other frameworks like `serde`. Plain structs are treated as objects by default. Each trait is implemented on many of the basic stdlib types to support this
+pattern as when a non-conforming type is passed to `serialize/deserialize`, the logic will recursively traverse it's fields until it finds conforming types.
+
+If you desire to customize the behavior, you can implement the `JsonSerializable` and `JsonDeserializable` traits for a particular struct.
+
+#### Deserialization
+
+The target struct must implement the `Defaultable` and `Movable` traits.
+
+```mojo
+from emberjson import deserialize, try_deserialize
+
+@fieldwise_init
+struct User(Movable, Defaultable):
+    var id: Int
+    var name: String
+    var is_active: Bool
+    var scores: List[Float64]
+
+fn main() raises:
+    var json_str = '{"id": 1, "name": "Mojo", "is_active": true, "scores": [9.9, 8.5]}'
+
+    var user_opt = try_deserialize[User](json_str)
+    if user_opt:
+        print(user_opt.value().name) # prints Mojo
+
+    var user = deserialize[User](json_str)
+```
+
+#### Serialization
 
 ```mojo
 from emberjson import *
