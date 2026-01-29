@@ -276,5 +276,44 @@ def test_unicode_byte_lengths():
     assert_equal(j5.object()["key"].string(), "𝄞")
 
 
+def test_trailing_tokens():
+    with assert_raises(
+        contains="Invalid json, expected end of input, recieved: garbage tokens"
+    ):
+        _ = parse("[1, null, false] garbage tokens")
+
+    with assert_raises(
+        contains=(
+            'Invalid json, expected end of input, recieved: "trailing string"'
+        )
+    ):
+        _ = parse('{"key": null} "trailing string"')
+
+
+def test_incomplete_data():
+    with assert_raises():
+        _ = parse("[1 null, false,")
+
+    with assert_raises():
+        _ = parse('{"key": 123')
+
+    with assert_raises():
+        _ = parse('["asdce]')
+
+    with assert_raises():
+        _ = parse('["no close')
+
+
+def test_reject_comment():
+    var s = """
+    {
+        // a comment
+        "key": 123
+    }
+"""
+    with assert_raises():
+        _ = parse(s)
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

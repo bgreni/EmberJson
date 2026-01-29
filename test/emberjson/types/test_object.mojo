@@ -1,6 +1,7 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
+from emberjson import parse, JSON
 from testing import (
     assert_true,
     assert_equal,
@@ -150,6 +151,31 @@ def test_iter():
 
         assert_equal(o["key"], 1234)
         assert_equal(o["key2"], False)
+
+
+def test_parse_simple_object():
+    var s = '{"key": 123}'
+    var json = parse(s)
+    assert_true(json.is_object())
+    assert_equal(json.object()["key"].int(), 123)
+    assert_equal(json.object()["key"].int(), 123)
+
+    assert_equal(String(json), '{"key":123}')
+
+    assert_equal(len(json), 1)
+
+
+def test_setter_object_generic():
+    var ob: JSON = Object()
+    ob.object()["key"] = "foo"
+    assert_true("key" in ob)
+    assert_equal(ob.object()["key"], "foo")
+
+
+def test_nested_access_generic():
+    var nested: JSON = {"key": [True, None, {"inner2": False}]}
+
+    assert_equal(nested["key"][2]["inner2"].bool(), False)
 
 
 def main():

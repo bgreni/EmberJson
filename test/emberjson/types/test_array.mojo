@@ -1,6 +1,7 @@
 from emberjson.array import Array
 from emberjson import Object
 from emberjson.value import Null, Value
+from emberjson import parse
 from testing import (
     assert_equal,
     assert_true,
@@ -108,6 +109,37 @@ def test_iter():
 def test_list_literal():
     var a: Array = [123, 435, False, None, 12.32, "string"]
     assert_equal(a, Array(123, 435, False, None, 12.32, "string"))
+
+
+def test_parse_simple_array():
+    var s = "[123, 345]"
+    var json = parse(s)
+    assert_true(json.is_array())
+    assert_equal(json.array()[0].int(), 123)
+    assert_equal(json.array()[1].int(), 345)
+    assert_equal(json.array()[0].int(), 123)
+
+    assert_equal(String(json), "[123,345]")
+
+    assert_equal(len(json), 2)
+
+    json = parse("[1, 2, 3]")
+    assert_true(json.is_array())
+    assert_equal(json.array()[0], 1)
+    assert_equal(json.array()[1], 2)
+    assert_equal(json.array()[2], 3)
+
+
+def test_setter_array_generic():
+    var arr = parse('[123, "foo"]')
+    arr.array()[0] = Null()
+    assert_true(arr.array()[0].is_null())
+    assert_equal(arr.array()[1], "foo")
+
+
+def test_stringify_array_generic():
+    var arr = parse('[123,"foo",false,null]')
+    assert_equal(String(arr), '[123,"foo",false,null]')
 
 
 def main():
