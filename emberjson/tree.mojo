@@ -1,4 +1,5 @@
 from .value import Value
+from .utils import write_escaped_string
 from memory import UnsafePointer
 
 
@@ -42,7 +43,8 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
 
     @always_inline
     fn write_to(self, mut writer: Some[Writer]):
-        writer.write('"', self.key, '"', ":", self.data)
+        write_escaped_string(self.key, writer)
+        writer.write(":", self.data)
 
     @staticmethod
     fn make_ptr(

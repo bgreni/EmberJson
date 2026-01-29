@@ -4,6 +4,7 @@ from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser
 from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
+from .utils import write_escaped_string
 from python import PythonObject, Python
 
 
@@ -126,7 +127,8 @@ struct Object(JsonValue, Sized):
         for item in self._data:
             for _ in range(curr_depth):
                 writer.write(indent)
-            writer.write('"', item.key, '"', ": ")
+            write_escaped_string(item.key, writer)
+            writer.write(": ")
             item.data._pretty_to_as_element(writer, indent, curr_depth)
             if done < len(self._data) - 1:
                 writer.write(",")

@@ -43,7 +43,7 @@ mojo-compiler = ">=0.26.1.0.dev2025112105,<0.27"
 
 
 [feature.fuzz.tasks]
-fuzz = "mojo -D ASSERT=all fuzz.mojo"
+fuzz = "mojo -D ASSERT=all --disable-warnings fuzz.mojo"
 
 [feature.fuzz.dependencies]
 faker = ">=36.1.1,<37"

@@ -2,6 +2,9 @@ comptime `"` = _to_byte('"')
 comptime `t` = _to_byte("t")
 comptime `f` = _to_byte("f")
 comptime `n` = _to_byte("n")
+comptime `b` = _to_byte("b")
+comptime `r` = _to_byte("r")
+comptime `u` = _to_byte("u")
 comptime `{` = _to_byte("{")
 comptime `}` = _to_byte("}")
 comptime `[` = _to_byte("[")
@@ -14,14 +17,14 @@ comptime `\t` = _to_byte("\t")
 comptime ` ` = _to_byte(" ")
 comptime `\r` = _to_byte("\r")
 comptime `\\` = _to_byte("\\")
+comptime `\b` = _to_byte("\b")
+comptime `\f` = _to_byte("\f")
 
 comptime `e` = _to_byte("e")
 comptime `E` = _to_byte("E")
 
 comptime `/` = _to_byte("/")
-comptime `b` = _to_byte("b")
-comptime `r` = _to_byte("r")
-comptime `u` = _to_byte("u")
+
 # fmt: off
 comptime acceptable_escapes = SIMD[DType.uint8, 16](
     `"`, `\\`, `/`, `b`, `f`, `n`, `r`, `t`,

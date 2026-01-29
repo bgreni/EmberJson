@@ -11,11 +11,19 @@ from emberjson.constants import (
     `\t`,
     `\r`,
     `\\`,
+    `\b`,
+    `\f`,
     `"`,
     `u`,
     `e`,
     `E`,
     `.`,
+    `b`,
+    `f`,
+    `n`,
+    `r`,
+    `t`,
+    `/`,
 )
 from memory.unsafe import bitcast, pack_bits, _uint
 from bit import count_trailing_zeros
@@ -179,22 +187,9 @@ fn handle_unicode_codepoint(
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
         p += 4
 
-    if likely(c1 <= 0x7F):
-        dest.append_byte(c1.cast[DType.uint8]())
-    elif c1 <= 0x7FF:
-        dest.append_byte(((c1 >> 6) | 192).cast[DType.uint8]())
-        dest.append_byte(((c1 & 63) | 128).cast[DType.uint8]())
-    elif c1 <= 0xFFFF:
-        dest.append_byte(((c1 >> 12) | 224).cast[DType.uint8]())
-        dest.append_byte((((c1 >> 6) & 63) | 128).cast[DType.uint8]())
-        dest.append_byte(((c1 & 63) | 128).cast[DType.uint8]())
-    else:
-        if unlikely(c1 > 0x10FFFF):
-            raise Error("Invalid unicode")
-        dest.append_byte(((c1 >> 18) | 240).cast[DType.uint8]())
-        dest.append_byte((((c1 >> 12) & 63) | 128).cast[DType.uint8]())
-        dest.append_byte((((c1 >> 6) & 63) | 128).cast[DType.uint8]())
-        dest.append_byte(((c1 & 63) | 128).cast[DType.uint8]())
+    if unlikely(c1 > 0x10FFFF):
+        raise Error("Invalid unicode")
+    dest.append(Codepoint(unsafe_unchecked_codepoint=c1))
 
 
 @always_inline
@@ -206,25 +201,66 @@ fn copy_to_string[
     var length = ptr_dist(start, end)
 
     @parameter
-    fn decode_unicode(out res: String) raises:
+    fn decode_escaped(out res: String) raises:
         # This will usually slightly overallocate if the string contains
         # escaped unicode
         var l = String(capacity=length)
         var p = start
 
         while p < end:
-            if p[0] == `\\` and p[Int(p + 1 != end)] == `u`:
-                p += 2
-                handle_unicode_codepoint(p, l, end)
-            else:
-                l.append_byte(p[0])
+            # Fast scan for next backslash
+            var chunk_start = p
+            while p < end and p[] != `\\`:
                 p += 1
+
+            # Bulk copy non-escaped chunk
+            if p > chunk_start:
+                l.write(
+                    StringSlice(
+                        ptr=chunk_start, length=ptr_dist(chunk_start, p)
+                    )
+                )
+
+            # If we hit backslash, handle escape
+            if p < end:
+                p += 1  # skip backslash
+                if p < end:
+                    var c = p[0]
+                    if c == `u`:  # u
+                        p += 1
+                        handle_unicode_codepoint(p, l, end)
+                    elif c == `"`:  # "
+                        l.append(Codepoint(`"`))
+                        p += 1
+                    elif c == `\\`:  # \
+                        l.append(Codepoint(`\\`))
+                        p += 1
+                    elif c == `/`:
+                        l.append(Codepoint(`/`))
+                        p += 1
+                    elif c == `b`:
+                        l.append(Codepoint(`\b`))
+                        p += 1
+                    elif c == `f`:
+                        l.append(Codepoint(`\f`))
+                        p += 1
+                    elif c == `n`:
+                        l.append(Codepoint(`\n`))
+                        p += 1
+                    elif c == `r`:
+                        l.append(Codepoint(`\r`))
+                        p += 1
+                    elif c == `t`:
+                        l.append(Codepoint(`\t`))
+                        p += 1
+                    else:
+                        raise Error("Invalid escape sequence")
         res = l^
 
     @parameter
     if not ignore_unicode:
         if found_unicode:
-            return decode_unicode()
+            return decode_escaped()
         else:
             return String(StringSlice(ptr=start, length=length))
     else:

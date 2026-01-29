@@ -45,6 +45,53 @@ def test_parse_utf16_surrogates():
     assert_equal(json2.object()["𐐷"].string(), "𐐷")
 
 
+def test_parse_escaped_strings():
+    # Quotes
+    var s_quote = r'{"key": "foo \"bar\""}'
+    var json_quote = parse(s_quote)
+    assert_equal(json_quote.object()["key"].string(), 'foo "bar"')
+
+    # Backslash
+    var s_bs = r'{"key": "foo \\ bar"}'
+    var json_bs = parse(s_bs)
+    assert_equal(json_bs.object()["key"].string(), "foo \\ bar")
+
+    # Forward slash
+    var s_fs = r'{"key": "foo \/ bar"}'
+    var json_fs = parse(s_fs)
+    assert_equal(json_fs.object()["key"].string(), "foo / bar")
+
+    # Controls
+    var s_b = r'{"key": "foo \b bar"}'
+    var json_b = parse(s_b)
+    assert_equal(json_b.object()["key"].string(), "foo \b bar")
+
+    var s_f = r'{"key": "foo \f bar"}'
+    var json_f = parse(s_f)
+    assert_equal(json_f.object()["key"].string(), "foo \f bar")
+
+    var s_n = r'{"key": "foo \n bar"}'
+    var json_n = parse(s_n)
+    assert_equal(json_n.object()["key"].string(), "foo \n bar")
+
+    var s_r = r'{"key": "foo \r bar"}'
+    var json_r = parse(s_r)
+    assert_equal(json_r.object()["key"].string(), "foo \r bar")
+
+    var s_t = r'{"key": "foo \t bar"}'
+    var json_t = parse(s_t)
+    assert_equal(json_t.object()["key"].string(), "foo \t bar")
+
+    # Null byte \u0000
+    var s_null = r'{"key": "foo \u0000 bar"}'
+    var json_null = parse(s_null)
+    # Construct expected string with null byte manually
+    var expected_null = String("foo ")
+    expected_null.append(Codepoint(0))
+    expected_null += " bar"
+    assert_equal(json_null.object()["key"].string(), expected_null)
+
+
 def test_parse_wrong_backslash():
     var data = List('{"key": "This should raise and not segfault:'.as_bytes())
     data.append(Byte(ord("\\")))
@@ -205,6 +252,28 @@ def test_float_edge_cases():
     with assert_raises():
         var p = Parser("1.e1")
         _ = p.expect_float()  # Dot must be followed by digit
+
+
+def test_unicode_byte_lengths():
+    # 1 byte: A (U+0041)
+    var s1 = r'{"key": "\u0041"}'
+    var j1 = parse(s1)
+    assert_equal(j1.object()["key"].string(), "A")
+
+    # 2 bytes: £ (U+00A3)
+    var s2 = r'{"key": "\u00A3"}'
+    var j2 = parse(s2)
+    assert_equal(j2.object()["key"].string(), "£")
+
+    # 3 bytes: € (U+20AC)
+    var s3 = r'{"key": "\u20AC"}'
+    var j3 = parse(s3)
+    assert_equal(j3.object()["key"].string(), "€")
+
+    # 4 bytes: 𝄞 (U+1D11E) - Surrogate pair \uD834\uDD1E
+    var s5 = r'{"key": "\uD834\uDD1E"}'
+    var j5 = parse(s5)
+    assert_equal(j5.object()["key"].string(), "𝄞")
 
 
 def main():

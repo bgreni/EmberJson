@@ -1,6 +1,6 @@
 from .object import Object
 from .array import Array
-from .utils import will_overflow, constrain_json_type
+from .utils import will_overflow, constrain_json_type, write_escaped_string
 from utils import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
@@ -341,9 +341,7 @@ struct Value(JsonValue):
         elif self.is_float():
             write_f64(self.float(), writer)
         elif self.is_string():
-            writer.write('"')
-            writer.write(self.string())
-            writer.write('"')
+            write_escaped_string(self.string(), writer)
         elif self.is_bool():
             writer.write("true") if self.bool() else writer.write("false")
         elif self.is_null():

@@ -1,130 +1,103 @@
-from python import Python
-from random.random import random_ui64, random_si64, random_float64, seed
 from emberjson import parse, Array, Object, Value, Null, JSON
 from utils.numerics import isinf
 from time import monotonic
 from testing import assert_equal
+from testing.prop.strategy import Strategy, Rng
+from testing.prop import PropTest, PropTestConfig
+from benchmark import keep
+from time import perf_counter_ns
 
 
-def gen_collection_len() -> Int:
-    return Int(random_ui64(0, 200))
+@fieldwise_init
+struct JsonStringStrategy(Movable, Strategy):
+    comptime Value = String
+
+    fn value(self, mut rng: Rng) raises -> Self.Value:
+        var j: JSON
+
+        if coin_flip(rng):
+            j = self.gen_object(rng, 0)
+        else:
+            j = self.gen_array(rng, 0)
+
+        return String(j)
+
+    fn gen_value(self, mut rng: Rng, depth: Int) raises -> Value:
+        var max_choice = 7  # 0-7
+        if depth > 5:
+            max_choice = 5  # 0-5 (Scalars: Null, Int, UInt, Str, Bool, Float)
+
+        var a = rng.rand_int(min=0, max=max_choice)
+
+        if a == 0:
+            return Null()
+        elif a == 1:
+            return rng.rand_scalar[DType.int64]()
+        elif a == 2:
+            return rng.rand_scalar[DType.uint64]()
+        elif a == 3:
+            return self.gen_string(rng)
+        elif a == 4:
+            return coin_flip(rng)
+        elif a == 5:
+            return rng.rand_scalar[DType.float64]()
+        elif a == 6:
+            return self.gen_array(rng, depth + 1)
+        elif a == 7:
+            return self.gen_object(rng, depth + 1)
+        else:
+            raise Error("Invalid choice")
+
+    fn gen_string(self, mut rng: Rng) raises -> String:
+        var strat = String.strategy(unicode=coin_flip(rng))
+        return strat.value(rng)
+
+    fn gen_array(self, mut rng: Rng, depth: Int) raises -> Array:
+        var arr = Array()
+        var l = rng.rand_int(min=0, max=200 // min(depth, 1))
+        arr.reserve(l)
+        for _ in range(l):
+            arr.append(self.gen_value(rng, depth))
+        return arr^
+
+    fn gen_object(self, mut rng: Rng, depth: Int) raises -> Object:
+        var ob = Object()
+        var l = rng.rand_int(min=0, max=200 // min(depth, 1))
+        for _ in range(l):
+            ob[self.gen_string(rng)] = self.gen_value(rng, depth)
+        return ob^
 
 
-def gen_int() -> Int64:
-    return random_si64(Int64.MIN, Int64.MAX)
+fn coin_flip(mut rng: Rng) raises -> Bool:
+    return rng.rand_bool()
 
 
-def gen_uint() -> UInt64:
-    return random_ui64(UInt64.MIN, UInt64.MAX)
-
-
-def gen_float() -> Float64:
-    # TODO: This doesn't work very well
-    return random_float64(-100.123214, 1000.123154)
-
-
-def gen_string() -> String:
-    var faker = Python.import_module("faker").Faker()
-    return String(faker.lexify("?" * (gen_collection_len() + 1)))
-
-
-def gen_array(out arr: Array):
-    arr = Array()
-
-    var l = gen_collection_len()
-    arr.reserve(l)
-
-    for _ in range(l):
-        arr.append(gen_value())
-
-
-def gen_object(out ob: Object):
-    ob = Object()
-
-    for _ in range(gen_collection_len()):
-        ob[gen_string()] = gen_value()
-
-
-def gen_value() -> Value:
-    var a = random_ui64(0, 5)
-
-    if a == 0:
-        return Null()
-    elif a == 1:
-        return gen_int()
-    elif a == 2:
-        return gen_uint()
-    elif a == 3:
-        return gen_string()
-    elif a == 4:
-        return coin_flip()
-    elif a == 5:
-        return gen_float()
-    elif a == 6:
-        return gen_array()
-    else:
-        return gen_object()
-
-
-def gen_json(out j: JSON):
-    if coin_flip():
-        return gen_array()
-    return gen_object()
-
-
-def gen_object_string() -> String:
-    var s = String("{")
-
-    var l = gen_collection_len()
-    for i in range(l):
-        s += String('"', gen_string(), '"', ":", gen_value())
-        if i < l - 1:
-            s += ","
-
-    s += "}"
-
-    return s
-
-
-def gen_array_string() -> String:
-    var s: String = "["
-    var l = gen_collection_len()
-
-    for i in range(l):
-        s += String(gen_value())
-        if i < l - 1:
-            s += ","
-
-    s += "]"
-    return s
-
-
-def gen_json_string() -> String:
-    return gen_array_string() if coin_flip() else gen_object_string()
-
-
-def coin_flip() -> Bool:
-    return random_ui64(0, 1) == 1
-
-
-def main():
+fn main() raises:
     print("Running fuzzy tests...")
-    seed()
-    var start = monotonic()
-    var i = 0
-    while monotonic() - start < 5000000000:
-        var j = gen_json_string()
-        try:
-            if i % 5 == 0:
-                # Randomly slice the input to check for UB in the parser
-                # since we have debug_assert enabled
-                j = j[: Int(random_ui64(0, len(j) - 1))]
-                try:
-                    _ = parse(j)
-                except e:
-                    pass
-            else:
-                _ = parse(j)
-            i += 1
-        except:
-            raise Error("CASE FAILED: " + j)
+    var iters = 100
+
+    var rng = Rng(seed=Int(perf_counter_ns()))
+
+    @parameter
+    fn test_parse(s: String) raises:
+        var j: JSON
+        if iters % 4 == 0:
+            var start = rng.rand_int(min=0, max=len(s))
+            var end = rng.rand_int(min=start, max=len(s))
+            var corrupted = s[start:end]
+            try:
+                j = parse(corrupted)
+            except:
+                # Main thing is we don't want this to crash.
+                # But don't enforce failure on the off chance this slicing happens to
+                # produce valid json.
+                j = JSON()
+                pass
+        else:
+            j = parse(s)
+        iters -= 1
+        keep(j)
+
+    var test = PropTest(config=PropTestConfig(runs=iters))
+    test.test[test_parse](JsonStringStrategy())
+    print("Test passed!")

@@ -20,8 +20,7 @@ if __name__ == "__main__":
 
         if ret.returncode:
             print(ret.stderr)
-        else:
-            print(ret.stdout)
+        print(ret.stdout)
 
     if len(failed) != 0:
         print("Failed tests", *failed, sep="\n")

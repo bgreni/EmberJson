@@ -1,5 +1,5 @@
 from bit import pop_count
-from .constants import ` `, `\n`, `\t`, `\r`
+from .constants import ` `, `\n`, `\t`, `\r`, `\b`, `\f`, `"`, `\\`
 from utils import Variant
 from utils.numerics import FPUtils
 from math import log10, log2
@@ -172,13 +172,13 @@ fn to_string(v: ByteVec, out s: String):
 
     @parameter
     for i in range(v.size):
-        s.append_byte(v[i])
+        s.append(Codepoint(v[i]))
 
 
 @always_inline
 fn to_string(b: Byte, out s: String):
     s = String(capacity=1)
-    s.append_byte(b)
+    s.append(Codepoint(b))
     return s^
 
 
@@ -203,86 +203,57 @@ fn constrain_json_type[T: Movable & Copyable]():
     constrained[valid, "Invalid type for JSON"]()
 
 
-@parameter
+fn write_escaped_string(s: String, mut writer: Some[Writer]):
+    writer.write('"')
+    var start = 0
+    var p = s.as_bytes()
+    var len = len(s)
+
+    for i in range(len):
+        var c = p[i]
+        if c == `"` or c == `\\` or c < 32:
+            if i > start:
+                writer.write(StringSlice(unsafe_from_utf8=p[start:i]))
+
+            start = i + 1
+            if c == `"`:
+                writer.write(r"\"")
+            elif c == `\\`:
+                writer.write(r"\\")
+            elif c == `\b`:
+                writer.write(r"\b")
+            elif c == `\f`:
+                writer.write(r"\f")
+            elif c == `\n`:
+                writer.write(r"\n")
+            elif c == `\r`:
+                writer.write(r"\r")
+            elif c == `\t`:
+                writer.write(r"\t")
+            else:
+                # Control chars
+                writer.write(r"\u00")
+                _write_hex_byte(c, writer)
+
+    if start < len:
+        writer.write(StringSlice(unsafe_from_utf8=p[start:len]))
+
+    writer.write('"')
+
+
+comptime hex_chars = "0123456789abcdef"
+
+
+fn get_hex_bytes(out o: InlineArray[Byte, len(hex_chars)]):
+    o = {fill = 0}
+    for i in range(len(hex_chars)):
+        o[i] = hex_chars.as_bytes()[i]
+
+
 @always_inline
-fn _uint_type_of_width[width: Int]() -> DType:
-    constrained[
-        width in (8, 16, 32, 64, 128, 256),
-        "width must be either 8, 16, 32, 64, 128, or 256",
-    ]()
-
-    @parameter
-    if width == 8:
-        return DType.uint8
-    elif width == 16:
-        return DType.uint16
-    elif width == 32:
-        return DType.uint32
-    elif width == 64:
-        return DType.uint64
-    elif width == 128:
-        return DType.uint128
-    else:
-        return DType.uint256
-
-
-fn estimate_bytes_to_write(value: Int) -> UInt:
-    return estimate_bytes_to_write(Scalar[DType.int](value))
-
-
-# fn estimate_bytes_to_write(value: UInt) -> UInt:
-#     comptime uint_dtype = _uint_type_of_width[UInt.BITWIDTH]()
-#     return estimate_bytes_to_write(Scalar[uint_dtype](value))
-
-
-fn estimate_bytes_to_write(value: Scalar) -> UInt:
-    constrained[
-        value.dtype.is_floating_point() or value.dtype.is_integral(),
-        "Value must be integral or floating point",
-    ]()
-
-    @parameter
-    if value.dtype.is_floating_point():
-        return _estimate_bytes_to_write_float(value)
-    else:
-        return _estimate_bytes_to_write_int(value)
-
-
-fn _estimate_bytes_to_write_int(value: Scalar) -> UInt:
-    constrained[value.dtype.is_integral(), "Function for integral types only"]()
-
-    @parameter
-    if value.dtype.is_unsigned():
-        return UInt(Int(log10(Float64(value)))) + 1
-    else:
-        return UInt(Int(log10(Float64(value)))) + 1 + UInt(value < 0)
-
-
-fn _estimate_bytes_to_write_float(value: Scalar) -> UInt:
-    comptime FP = FPUtils[value.dtype]
-    comptime MANTISSA_SIZE = FP.mantissa_width()
-    comptime EXPONENT_MASK = FP.exponent_mask()
-    comptime MANTISSA_MASK = FP.mantissa_mask()
-
-    var is_negative = FP.get_sign(value)
-    var exp = (FP.bitcast_to_integer(value) & EXPONENT_MASK) >> MANTISSA_SIZE
-    var mant = FP.bitcast_to_uint(value) & MANTISSA_MASK
-
-    comptime `log10(2)` = 0.3010299956639812
-    # TODO: maybe constraint until we have a more generic way to extract
-    # -0, nan, +inf, -inf
-    var amnt_exp: UInt
-    # usually inf or NaN, both use 3 letters
-    if exp == 2 * FP.max_exponent() - 1:
-        amnt_exp = 3
-    elif exp == 0 and mant == 0:  # usually -0
-        amnt_exp = 0
-    else:  # normal exponentiation
-        var e: Int = exp - FP.exponent_bias()
-        # +2 is for `e+/-` or +1 for `.` when abs(e) <= 4
-        var est_exp = Int(log10(Float64(abs(e)) * `log10(2)`) + 1) + 1
-        amnt_exp = UInt((est_exp & -Int(abs(e) > 4)) + 1)
-
-    # +2 is to ensure up to 17 characters (53 * log10(2) ~ 15.95458977)
-    var amnt_mantissa = Int(Float64(pop_count(mant)) * `log10(2)`) + 2
-    return UInt(is_negative) + UInt(amnt_exp) + UInt(amnt_mantissa)
+fn _write_hex_byte(b: Byte, mut writer: Some[Writer]):
+    var bytes = materialize[get_hex_bytes()]()
+    var h1 = bytes[Int(b >> 4)]
+    var h2 = bytes[Int(b & 0xF)]
+    writer.write(Codepoint(h1))
+    writer.write(Codepoint(h2))

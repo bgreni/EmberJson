@@ -1,4 +1,4 @@
-from emberjson.utils import write, estimate_bytes_to_write
+from emberjson.utils import write
 from emberjson import Value
 from testing import assert_equal, assert_true, TestSuite
 
@@ -7,28 +7,24 @@ def test_string_builder_string():
     assert_equal(write(Value("foo bar")), '"foo bar"')
 
 
-def estimate_bytes_to_write_int():
-    assert_equal(estimate_bytes_to_write(123), 3)
-    assert_equal(estimate_bytes_to_write(-123), 4)
-    assert_equal(estimate_bytes_to_write(1234567890), 10)
-    assert_equal(estimate_bytes_to_write(-1234567890), 11)
+def test_write_escaped_string():
+    # Quotes
+    assert_equal(write(Value('foo "bar"')), r'"foo \"bar\""')
 
+    # Backslash
+    assert_equal(write(Value("foo \\ bar")), r'"foo \\ bar"')
 
-def estimate_bytes_to_write_float():
-    assert_true(estimate_bytes_to_write(Float64(1.0)) >= 2)
-    assert_true(estimate_bytes_to_write(Float64(-1.0)) >= 3)
-    assert_true(estimate_bytes_to_write(Float64(0.1)) >= 3)
-    assert_true(estimate_bytes_to_write(Float64(-0.1)) >= 4)
-    assert_true(estimate_bytes_to_write(Float64(1e123)) >= 5)
-    assert_true(estimate_bytes_to_write(Float64(-1e123)) >= 6)
-    assert_true(estimate_bytes_to_write(Float64(1e-123)) >= 6)
-    assert_true(estimate_bytes_to_write(Float64(-1e-123)) >= 7)
-    assert_true(estimate_bytes_to_write(Float64(1.23e123)) >= 8)
-    assert_true(estimate_bytes_to_write(Float64(-1.23e123)) >= 9)
-    assert_true(estimate_bytes_to_write(Float64(1.23e-123)) >= 9)
-    assert_true(estimate_bytes_to_write(Float64(-1.23e-123)) >= 10)
-    assert_true(estimate_bytes_to_write(Float64(0.3)) >= 3)
-    assert_true(estimate_bytes_to_write(Float64(-0.3)) >= 4)
+    # Control chars
+    assert_equal(write(Value("foo \b bar")), r'"foo \b bar"')
+    assert_equal(write(Value("foo \f bar")), r'"foo \f bar"')
+    assert_equal(write(Value("foo \n bar")), r'"foo \n bar"')
+    assert_equal(write(Value("foo \r bar")), r'"foo \r bar"')
+    assert_equal(write(Value("foo \t bar")), r'"foo \t bar"')
+
+    # Null byte (should be \u0000)
+    var null_str = String()
+    null_str.append_byte(0)
+    assert_equal(write(Value(null_str)), r'"\u0000"')
 
 
 def main():

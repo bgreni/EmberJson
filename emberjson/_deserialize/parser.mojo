@@ -194,6 +194,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     if has_comma:
                         raise Error("Illegal trailing comma")
                     break
+                elif unlikely(not has_comma):
+                    raise Error("Expected ',' or ']'")
                 if unlikely(not self.has_more()):
                     raise Error("Expected ']'")
 
@@ -226,6 +228,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     if has_comma:
                         raise Error("Illegal trailing comma")
                     break
+                elif not has_comma:
+                    raise Error("Expected ',' or '}'")
                 if unlikely(self.bytes_remaining() == 0):
                     raise Error("Expected '}'")
 
@@ -319,11 +323,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 continue
             self.data += block.bs_index()
 
+            # We found a backslash, so we need to unescape
+            found_unicode = True
             while True:
                 self.data += 1
                 if self.data[] == `u`:
                     self.data += 1
-                    found_unicode = True
                     break
                 else:
                     if unlikely(self.data[] not in acceptable_escapes):
@@ -353,8 +358,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                         to_string(self.data[-1]),
                         to_string(self.data[]),
                     )
-                if self.data[] == `u`:
-                    found_unicode = True
+                # We found a backslash, so we need to unescape
+                found_unicode = True
             comptime control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
             if unlikely(self.data[] in control_chars):
                 raise Error(
