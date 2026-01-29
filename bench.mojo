@@ -8,6 +8,8 @@ from emberjson import (
     minify,
     ParseOptions,
     Null,
+    deserialize,
+    serialize,
 )
 from benchmark import (
     Bench,
@@ -16,6 +18,7 @@ from benchmark import (
     Bencher,
     BenchMetric,
     BenchConfig,
+    keep,
 )
 
 
@@ -57,6 +60,21 @@ fn run[
     )
 
 
+fn run[
+    T: Movable,
+    //,
+    func: fn[_T: Movable] (mut Bencher, _T) raises capturing,
+    name: String,
+](mut m: Bench, data: T) raises:
+    m.bench_with_input[T, func[T]](
+        BenchId(name),
+        data,
+        [
+            get_gbs_measure(serialize(data)),
+        ],
+    )
+
+
 fn main() raises:
     var config = BenchConfig()
     config.verbose_timing = True
@@ -77,8 +95,9 @@ fn main() raises:
         @always_inline
         @parameter
         fn do() raises:
-            p = Parser[options = ParseOptions(ignore_unicode=True)](s)
-            _ = p.parse()
+            var p = Parser[options = ParseOptions(ignore_unicode=True)](s)
+            var v = p.parse()
+            keep(v)
 
         b.iter[do]()
 
@@ -87,13 +106,23 @@ fn main() raises:
         @always_inline
         @parameter
         fn do() raises:
-            _ = minify(s)
+            var v = minify(s)
+            keep(v)
 
         b.iter[do]()
 
     run[benchmark_json_parse, "ParseTwitter"](m, twitter)
     run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
+    run[
+        benchmark_deserialize_catalog_with_reflection,
+        "ParseCitmCatalogWithReflection",
+    ](m, catalog)
+
     run[benchmark_json_parse, "ParseCanada"](m, canada)
+    run[
+        benchmark_deserialize_canada_with_reflection,
+        "ParseCanadaWithReflection",
+    ](m, canada)
 
     run[benchmark_json_parse, "ParseSmall"](m, small_data)
     run[benchmark_json_parse, "ParseMedium"](m, medium_array)
@@ -120,7 +149,16 @@ fn main() raises:
 
     run[benchmark_json_stringify, "StringifyLarge"](m, parse(large_array))
     run[benchmark_json_stringify, "StringifyCanada"](m, parse(canada))
+    var pcanada = Parser(canada)
+    run[benchmark_reflection_serialize, "StringifyCanadaWithReflection"](
+        m, deserialize[Canada](pcanada^)
+    )
     run[benchmark_json_stringify, "StringifyTwitter"](m, parse(twitter))
+
+    var pcat = Parser(catalog)
+    run[benchmark_reflection_serialize, "StringifyCitmCatalogWithReflection"](
+        m, deserialize[CatalogData](pcat^)
+    )
     run[benchmark_json_stringify, "StringifyCitmCatalog"](m, parse(catalog))
 
     run[benchmark_value_stringify, "StringifyBool"](m, False)
@@ -142,11 +180,25 @@ fn main() raises:
 
 
 @parameter
+fn benchmark_reflection_serialize[
+    T: Movable, //
+](mut b: Bencher, data: T) raises:
+    @always_inline
+    @parameter
+    fn do():
+        var a = serialize(data)
+        keep(a)
+
+    b.iter[do]()
+
+
+@parameter
 fn benchmark_pretty_print(mut b: Bencher, s: JSON) raises:
     @always_inline
     @parameter
     fn do():
-        _ = write_pretty(s)
+        var a = write_pretty(s)
+        keep(a)
 
     b.iter[do]()
 
@@ -156,7 +208,8 @@ fn benchmark_value_parse(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        _ = Value(parse_string=s)
+        var a = Value(parse_string=s)
+        keep(a)
 
     b.iter[do]()
 
@@ -166,7 +219,8 @@ fn benchmark_json_parse(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        _ = parse(s)
+        var a = parse(s)
+        keep(a)
 
     b.iter[do]()
 
@@ -176,7 +230,8 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
     @parameter
     fn do():
-        _ = String(v)
+        var a = String(v)
+        keep(a)
 
     b.iter[do]()
 
@@ -186,27 +241,112 @@ fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
     @always_inline
     @parameter
     fn do() raises:
-        _ = String(json)
+        var a = String(json)
+        keep(a)
 
     b.iter[do]()
 
 
-# struct CatalogData(Defaultable, Movable):
-#     var areaNames: Dict[String, String]
-#     var audienceSubCategoryNames: Dict[String, String]
-#     var blockNames: Dict[String, String]
-#     # var events: Dict[String, pass]
+struct CatalogData(Movable):
+    var areaNames: Dict[String, String]
+    var audienceSubCategoryNames: Dict[String, String]
+    var blockNames: Dict[String, String]
+    var events: Dict[String, Event]
+    var performances: List[Performance]
+    var seatCategoryNames: Dict[String, String]
+    var subTopicNames: Dict[String, String]
+    var subjectNames: Dict[String, String]
+    var topicNames: Dict[String, String]
+    var topicSubTopics: Dict[String, List[Int]]
+    var venueNames: Dict[String, String]
 
-# struct Event(Defaulable, Movable):
 
-# @parameter
-# fn benchmark_deserialize_catalog_with_reflection(mut b: Bencher, s: String) raises:
-#     @always_inline
-#     @parameter
-#     fn do() raises:
-#         pass
+struct Event(Copyable):
+    var description: Optional[String]
+    var id: Int
+    var logo: Optional[String]
+    var name: String
+    var subTopicIds: List[Int]
+    var subjectCode: Optional[Int]
+    var subtitle: Optional[String]
+    var topicIds: List[Int]
 
-#     b.iter[do]()
+
+struct Performance(Copyable):
+    var eventId: Int
+    var id: Int
+    var logo: Optional[String]
+    var name: Optional[String]
+    var prices: List[Price]
+    var seatCategories: List[SeatCategory]
+    var seatMapImage: Optional[String]
+    var start: Int
+    var venueCode: String
+
+
+struct SeatCategory(Copyable):
+    var areas: List[Area]
+    var seatCategoryId: Int
+
+
+struct Area(Copyable):
+    var areaId: Int
+    var blockIds: List[Int]
+
+
+struct Price(Copyable):
+    var amount: Int
+    var audienceSubCategoryId: Int
+    var seatCategoryId: Int
+
+
+@parameter
+fn benchmark_deserialize_catalog_with_reflection(
+    mut b: Bencher, s: String
+) raises:
+    @always_inline
+    @parameter
+    fn do() raises:
+        var parser = Parser(s)
+        var a = deserialize[CatalogData](parser^)
+        keep(a)
+
+    b.iter[do]()
+
+
+struct Canada(Movable):
+    var type: String
+    var features: List[Feature]
+
+
+struct Feature(Copyable):
+    var type: String
+    var properties: Properties
+    var geometry: Geometry
+
+
+struct Geometry(Copyable):
+    var type: String
+    var coordinates: List[List[Tuple[Float64, Float64]]]
+
+
+struct Properties(Copyable):
+    var name: String
+
+
+@parameter
+fn benchmark_deserialize_canada_with_reflection(
+    mut b: Bencher, s: String
+) raises:
+    @always_inline
+    @parameter
+    fn do() raises:
+        var parser = Parser(s)
+        var a = deserialize[Canada](parser^)
+        keep(a)
+
+    b.iter[do]()
+
 
 # source https://opensource.adobe.com/Spry/samples/data_region/JSONDataSetSample.html
 comptime small_data = """{

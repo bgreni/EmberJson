@@ -6,6 +6,8 @@ from std.reflection import (
 )
 
 from std.builtin.rebind import downcast
+from std.collections import Set
+from std.memory import ArcPointer, OwnedPointer
 
 from .parser import Parser
 from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`
@@ -16,55 +18,64 @@ from ._parser_helper import NULL
 comptime non_struct_error = "Cannot deserialize non-struct type"
 
 
-trait JsonDeserializable(Defaultable, Movable):
+comptime _Base = ImplicitlyDestructible & Movable
+
+
+trait JsonDeserializable(_Base):
     @staticmethod
     fn from_json(mut p: Parser, out s: Self) raises:
         s = _default_deserialize[Self](p)
 
 
-fn try_deserialize[T: Defaultable & Movable](var p: Parser) -> Optional[T]:
+fn try_deserialize[T: _Base](var p: Parser) -> Optional[T]:
     try:
         return _deserialize_impl[T](p)
     except:
         return None
 
 
-fn deserialize[T: Defaultable & Movable](var p: Parser, out s: T) raises:
+fn deserialize[T: _Base](var p: Parser, out s: T) raises:
     s = _deserialize_impl[T](p)
 
 
 @always_inline
-fn _default_deserialize[
-    T: Defaultable & Movable
-](mut p: Parser, out s: T) raises:
-    s = T()
+fn _default_deserialize[T: _Base](mut p: Parser, out s: T) raises:
+    __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
+
     comptime field_count = struct_field_count[T]()
     comptime field_names = struct_field_names[T]()
 
     p.expect(`{`)
 
+    var seen = InlineArray[Bool, field_count](fill=False)
+
     for i in range(field_count):
         var ident = p.read_string()
         p.expect(`:`)
+        var found = False
 
         @parameter
         for j in range(field_count):
             comptime name = field_names[j]
+            comptime name_hash = hash(name)
 
-            if ident == name:
+            if not seen[j] and ident == name:
+                found = True
+                seen[j] = True
                 ref field = __struct_field_ref(j, s)
-                comptime TField = downcast[
-                    type_of(field), Movable & Defaultable
-                ]
+                comptime TField = downcast[type_of(field), _Base]
 
-                field = rebind[type_of(field)](_deserialize_impl[TField](p))
+                field = rebind_var[type_of(field)](_deserialize_impl[TField](p))
+
+        if not found:
+            raise Error("Unexpected field: " + ident)
 
         if i < field_count - 1:
             p.expect(`,`)
     p.expect(`}`)
 
 
-fn _deserialize_impl[T: Defaultable & Movable](mut p: Parser, out s: T) raises:
+fn _deserialize_impl[T: _Base](mut p: Parser, out s: T) raises:
     __comptime_assert is_struct_type[T](), non_struct_error
 
     @parameter
@@ -72,6 +83,11 @@ fn _deserialize_impl[T: Defaultable & Movable](mut p: Parser, out s: T) raises:
         s = rebind_var[T](downcast[T, JsonDeserializable].from_json(p))
     else:
         s = _default_deserialize[T](p)
+
+
+# ===============================================
+# Primitives
+# ===============================================
 
 
 __extension String(JsonDeserializable):
@@ -83,11 +99,7 @@ __extension String(JsonDeserializable):
 __extension Int(JsonDeserializable):
     @staticmethod
     fn from_json(mut p: Parser, out s: Self) raises:
-        # TODO: Make this specifically parse an integer
-        try:
-            s = Int(p.parse_number().int())
-        except:
-            raise Error("Expected integer")
+        s = Int(p.expect_integer())
 
 
 __extension Bool(JsonDeserializable):
@@ -102,29 +114,21 @@ __extension SIMD(JsonDeserializable):
         s = Self()
 
         @parameter
+        @always_inline
         fn parse_simd_element(mut p: Parser) raises -> Scalar[Self.dtype]:
             @parameter
             if Self.dtype.is_numeric():
 
                 @parameter
                 if Self.dtype.is_floating_point():
-                    try:
-                        return p.parse_number().float().cast[Self.dtype]()
-                    except:
-                        raise Error("Expected float point number")
+                    return p.expect_float[Self.dtype]()
                 else:
 
                     @parameter
                     if Self.dtype.is_signed():
-                        try:
-                            return p.parse_number().int().cast[Self.dtype]()
-                        except:
-                            raise Error("Expected integer")
+                        return p.expect_integer[Self.dtype]()
                     else:
-                        try:
-                            return p.parse_number().uint().cast[Self.dtype]()
-                        except:
-                            raise Error("Expected unsigned integer")
+                        return p.expect_unsigned_integer[Self.dtype]()
             else:
                 return Scalar[Self.dtype](p.expect_bool())
 
@@ -145,6 +149,48 @@ __extension SIMD(JsonDeserializable):
             p.expect(`]`)
 
 
+__extension IntLiteral(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = Self()
+        var i = p.expect_integer()
+        if i != s:
+            raise Error("Expected: ", s, ", Received: ", i)
+
+
+__extension FloatLiteral(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = Self()
+        var f = p.expect_float()
+        if f != s:
+            raise Error("Expected: ", s, ", Received: ", f)
+
+
+# ===============================================
+# Pointers
+# ===============================================
+
+
+__extension ArcPointer(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
+
+
+__extension OwnedPointer(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut p: Parser, out s: Self) raises:
+        s = rebind_var[Self](
+            OwnedPointer(_deserialize_impl[downcast[Self.T, _Base]](p))
+        )
+
+
+# ===============================================
+# Collections
+# ===============================================
+
+
 __extension Optional(JsonDeserializable):
     @staticmethod
     fn from_json(mut p: Parser, out s: Self) raises:
@@ -154,9 +200,7 @@ __extension Optional(JsonDeserializable):
         else:
             s = Self(
                 rebind_var[Self.T](
-                    _deserialize_impl[downcast[Self.T, Defaultable & Movable]](
-                        p
-                    )
+                    _deserialize_impl[downcast[Self.T, _Base]](p)
                 )
             )
 
@@ -170,9 +214,7 @@ __extension List(JsonDeserializable):
         while p.peek() != `]`:
             s.append(
                 rebind_var[Self.T](
-                    _deserialize_impl[downcast[Self.T, Defaultable & Movable]](
-                        p
-                    )
+                    _deserialize_impl[downcast[Self.T, _Base]](p)
                 )
             )
             p.skip_whitespace()
@@ -194,7 +236,7 @@ __extension Dict(JsonDeserializable):
             var ident = rebind_var[Self.K](p.read_string())
             p.expect(`:`)
             s[ident^] = rebind_var[Self.V](
-                _deserialize_impl[downcast[Self.V, Defaultable & Movable]](p)
+                _deserialize_impl[downcast[Self.V, _Base]](p)
             )
             p.skip_whitespace()
             if p.peek() != `}`:
@@ -202,35 +244,58 @@ __extension Dict(JsonDeserializable):
         p.expect(`}`)
 
 
-__extension IntLiteral(JsonDeserializable):
+__extension Tuple(JsonDeserializable):
     @staticmethod
     fn from_json(mut p: Parser, out s: Self) raises:
-        s = Self()
-        var i = p.parse_number().int()
-        if i != s:
-            raise Error("Expected: ", s, ", Received: ", i)
+        __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
+        p.expect(`[`)
+
+        @parameter
+        for i in range(Self.__len__()):
+            UnsafePointer(to=s[i]).init_pointee_move(
+                rebind_var[Self.element_types[i]](
+                    _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
+                )
+            )
+
+            if i < Self.__len__() - 1:
+                p.expect(`,`)
+
+        p.expect(`]`)
 
 
-__extension FloatLiteral(JsonDeserializable):
+__extension InlineArray(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut j: Parser, out s: Self) raises:
+        j.expect(`[`)
+        s = Self(uninitialized=True)
+
+        for i in range(size):
+            UnsafePointer(to=s[i]).init_pointee_move(
+                rebind_var[Self.ElementType](
+                    _deserialize_impl[downcast[Self.ElementType, _Base]](j)
+                )
+            )
+
+            if i != size - 1:
+                j.expect(`,`)
+
+        j.expect(`]`)
+
+
+__extension Set(JsonDeserializable):
+    @staticmethod
+    fn from_json(mut j: Parser, out s: Self) raises:
+        j.expect(`[`)
         s = Self()
-        var f = p.parse_number().float()
-        if f != s:
-            raise Error("Expected: ", s, ", Received: ", f)
 
-
-# __extension InlineArray(JsonDeserializable):
-#     @staticmethod
-#     fn from_json(mut j: Parser, out s: Self) raises:
-#         j.expect(`[`)
-#         s = Self(uninitialized=True)
-
-#         for i in range(size):
-#             # error: '<unknown>' abandoned without being explicitly destroyed: Unhandled explicit_destroy type Copyable
-#             s[i] = rebind_var[Self.ElementType](_deserialize_impl[downcast[Self.ElementType, Defaultable & Movable]](j))
-
-#             if i != size - 1:
-#                 j.expect(`,`)
-
-#         j.expect(`]`)
+        while j.peek() != `]`:
+            s.add(
+                rebind_var[Self.T](
+                    _deserialize_impl[downcast[Self.T, _Base]](j)
+                )
+            )
+            j.skip_whitespace()
+            if j.peek() != `]`:
+                j.expect(`,`)
+        j.expect(`]`)

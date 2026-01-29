@@ -8,6 +8,7 @@ from emberjson.utils import (
     select,
     lut,
 )
+from math import isinf
 from emberjson.json import JSON
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
 from emberjson.array import Array
@@ -88,6 +89,11 @@ struct ParseOptions(Copyable, Movable):
 
     fn __init__(out self, *, ignore_unicode: Bool = False):
         self.ignore_unicode = ignore_unicode
+
+
+comptime IntegerParseResult[origin: ImmutOrigin] = Tuple[
+    UInt64, Bool, CheckedPointer[origin], Int, CheckedPointer[origin]
+]
 
 
 struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
@@ -608,6 +614,200 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             )
         self.data += 1
         self.skip_whitespace()
+
+    @always_inline
+    fn _parse_integer_common(
+        mut self,
+    ) raises -> IntegerParseResult[Self.origin]:
+        var neg = self.data[] == `-`
+        var p = self.data + Int(neg or self.data[] == `+`)
+
+        var start_digits = p
+        var i: UInt64 = 0
+
+        while parse_digit(p, i):
+            p += 1
+
+        var digit_count = ptr_dist(start_digits.p, p.p)
+
+        if unlikely(
+            digit_count == 0 or (start_digits[] == `0` and digit_count > 1)
+        ):
+            raise Error("Invalid number")
+
+        if p.dist() > 0 and (p[] == `.` or is_exp_char(p[])):
+            raise Error("Expected integer, found float")
+
+        return i, neg, p, digit_count, start_digits
+
+    fn expect_integer[
+        type: DType = DType.int64
+    ](mut self) raises -> Scalar[type]:
+        __comptime_assert (
+            type.is_signed()
+        ), "Expected signed integer, found unsigned type: " + String(type)
+
+        var i, neg, p, digit_count, start_digits = self._parse_integer_common()
+
+        var longest_digit_count = select(neg, 19, 20)
+        comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
+        if unlikely(digit_count > longest_digit_count):
+            raise Error("integer overflow")
+        if unlikely(digit_count == longest_digit_count):
+            if neg:
+                if unlikely(i > SIGNED_OVERFLOW + 1):
+                    raise Error("integer overflow")
+
+                var res = Int64(~i + 1)
+
+                @parameter
+                if type != DType.int64:
+                    if res < Scalar[type].MIN.cast[DType.int64]():
+                        raise Error("integer overflow")
+                self.data = p
+                return res.cast[type]()
+            elif unlikely(start_digits[0] != `1` or i <= SIGNED_OVERFLOW):
+                raise Error("integer overflow")
+
+        self.data = p
+        if i > SIGNED_OVERFLOW:
+            raise Error("integer overflow")
+
+        var res = select(neg, Int64(~i + 1), Int64(i))
+
+        @parameter
+        if type != DType.int64:
+            comptime MIN = Int64(Scalar[type].MIN)
+            comptime MAX = Int64(Scalar[type].MAX)
+
+            if unlikely(res < MIN or res > MAX):
+                raise Error("integer overflow")
+            return res.cast[type]()
+
+        return res.cast[type]()
+
+    fn expect_unsigned_integer[
+        type: DType = DType.uint64
+    ](mut self) raises -> Scalar[type]:
+        __comptime_assert (
+            type.is_unsigned()
+        ), "Expected unsigned integer, found signed type: " + String(type)
+
+        if unlikely(self.data[] == `-`):
+            raise Error("Expected unsigned integer, found negative")
+
+        var i, neg, p, digit_count, start_digits = self._parse_integer_common()
+
+        if unlikely(neg):
+            raise Error("Expected unsigned integer, found negative")
+
+        var longest_digit_count = 20
+        comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
+
+        if unlikely(digit_count > longest_digit_count):
+            raise Error("integer overflow")
+        if unlikely(digit_count == longest_digit_count):
+            if unlikely(start_digits[0] != `1` or i <= SIGNED_OVERFLOW):
+                raise Error("integer overflow")
+
+        self.data = p
+
+        @parameter
+        if type != DType.uint64:
+            comptime MAX = UInt64(Scalar[type].MAX)
+
+            if unlikely(i > MAX):
+                raise Error("integer overflow")
+            return i.cast[type]()
+
+        return i.cast[type]()
+
+    fn expect_float[
+        type: DType = DType.float64
+    ](mut self) raises -> Scalar[type]:
+        var neg = self.data[] == `-`
+        var p = self.data + Int(neg or self.data[] == `+`)
+
+        var start_digits = p
+        var i: UInt64 = 0
+
+        while parse_digit(p, i):
+            p += 1
+
+        var digit_count = ptr_dist(start_digits.p, p.p)
+
+        if unlikely(
+            digit_count == 0 or (start_digits[] == `0` and digit_count > 1)
+        ):
+            raise Error("Invalid number")
+
+        var exponent: Int64 = 0
+
+        if p.dist() > 0 and p[] == `.`:
+            p += 1
+
+            var first_after_period = p
+            if p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+                i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
+                p += 8
+            while parse_digit(p, i):
+                p += 1
+            exponent = ptr_dist(p.p, first_after_period.p)
+            if exponent == 0:
+                raise Error("Invalid number")
+            digit_count = ptr_dist(start_digits.p, p.p)
+
+        if p.dist() > 0 and is_exp_char(p[]):
+            p += 1
+
+            var neg_exp = p[] == `-`
+            p += Int(neg_exp or p[] == `+`)
+
+            if unlikely(is_exp_char(p[])):
+                raise Error("Invalid float: Double sign for exponent")
+
+            var start_exp = p
+            var exp_number: Int64 = 0
+            while parse_digit(p, exp_number):
+                p += 1
+
+            if unlikely(p == start_exp):
+                raise Error("Invalid number")
+
+            if unlikely(p > start_exp + 18):
+                while start_exp.dist() > 0 and start_exp[] == `0`:
+                    start_exp += 1
+                if p > start_exp + 18:
+                    exp_number = 999999999999999999
+
+            exponent += select(neg_exp, -exp_number, exp_number)
+
+        var f: Float64
+        # Inline write_float logic for float return
+        if unlikely(
+            digit_count > 19
+            and significant_digits(self.data.p, digit_count) > 19
+        ):
+            f = from_chars_slow(self.data)
+        elif unlikely(exponent < smallest_power or exponent > largest_power):
+            if likely(exponent < smallest_power or i == 0):
+                f = select(neg, -0.0, 0.0)
+            else:
+                raise Error("Invalid number: inf")
+        else:
+            f = self.compute_float64(exponent, i, neg)
+
+        self.data = p
+
+        @parameter
+        if type != DType.float64:
+            var casted = f.cast[type]()
+            # Check if casting caused infinity where original wasn't
+            if unlikely(not isinf(f) and isinf(casted)):
+                raise Error("float overflow")
+            return casted
+
+        return f.cast[type]()
 
     fn expect_bool(mut self) raises -> Bool:
         if self.data[] == `t`:

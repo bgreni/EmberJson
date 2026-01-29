@@ -1,5 +1,7 @@
 from testing import TestSuite, assert_equal
 from emberjson._serialize import serialize, JsonSerializable
+from std.collections import Set
+from std.memory import ArcPointer, OwnedPointer
 
 
 @fieldwise_init
@@ -20,6 +22,10 @@ struct Foo[I: IntLiteral, F: FloatLiteral]:
     var dic: Dict[String, Int]
     var il: type_of(Self.I)
     var fl: type_of(Self.F)
+    var tup: Tuple[Int, Int, Int]
+    var set: Set[Int]
+    var arc_ptr: ArcPointer[Int]
+    var owned_ptr: OwnedPointer[Int]
 
 
 @fieldwise_init
@@ -46,13 +52,17 @@ def test_serialize():
         {"a key": 1234},
         {},
         {},
+        (1, 2, 3),
+        {1, 2, 3},
+        ArcPointer(1234),
+        OwnedPointer(4321),
     )
 
     assert_equal(
         serialize(f),
         (
             '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
-            ' key":1234},"il":45,"fl":7.43}'
+            ' key":1234},"il":45,"fl":7.43,"tup":[1,2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321}'
         ),
     )
 
@@ -70,6 +80,10 @@ def test_ctime_serialize():
         {"a key": 1234},
         {},
         {},
+        (1, 2, 3),
+        {1, 2, 3},
+        ArcPointer(1234),
+        OwnedPointer(4321),
     )
 
     comptime serialized = serialize(f)
@@ -78,7 +92,8 @@ def test_ctime_serialize():
         serialized,
         (
             '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
-            ' key":1234},"il":45,"fl":7.43}'
+            ' key":1234},"il":45,"fl":7.43,"tup":[1'
+            ',2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321}'
         ),
     )
 

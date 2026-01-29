@@ -1,8 +1,10 @@
-from testing import TestSuite, assert_equal, assert_false
+from testing import TestSuite, assert_equal, assert_false, assert_true
 from emberjson._deserialize import deserialize, try_deserialize
+from std.collections import Set
+from std.memory import ArcPointer, OwnedPointer
 
 
-struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
+struct Foo[I: IntLiteral, F: FloatLiteral](Movable):
     var a: String
     var i: Int
     var f: Float64
@@ -12,27 +14,32 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var b: Bool
     var bs: SIMD[DType.bool, 1]
     var li: List[Int]
-    # var ina: InlineArray[Float64, 3]
+    var tup: Tuple[Int, Int, Int]
+    var ina: InlineArray[Float64, 3]
     var d: Dict[String, Int]
     var il: type_of(Self.I)
     var fl: type_of(Self.F)
     var vec: SIMD[DType.float32, 4]
+    var set: Set[Int]
+    var ap: ArcPointer[Int]
+    var op: OwnedPointer[Int]
 
-    fn __init__(out self):
-        self.a = ""
-        self.i = 0
-        self.f = 0.0
-        self.i32 = 0
-        self.o = None
-        self.o2 = None
-        self.b = False
-        self.bs = False
-        self.li = []
-        self.d = {}
-        self.il = {}
-        self.fl = {}
-        self.vec = {}
-        # self.ina = InlineArray[Float64, 3](uninitialized=True)
+    # fn __init__(out self):
+    #     self.a = ""
+    #     self.i = 0
+    #     self.f = 0.0
+    #     self.i32 = 0
+    #     self.o = None
+    #     self.o2 = None
+    #     self.b = False
+    #     self.bs = False
+    #     self.li = []
+    #     self.tup = {}
+    #     self.d = {}
+    #     self.il = {}
+    #     self.fl = {}
+    #     self.vec = {}
+    # self.ina = InlineArray[Float64, 3](uninitialized=True)
 
 
 def test_deserialize():
@@ -51,7 +58,12 @@ def test_deserialize():
     "d": {"some key": 12345},
     "il": 23,
     "fl": 234.23,
-    "vec": [1.0, 2.0, 3.0, 4.0]
+    "vec": [1.0, 2.0, 3.0, 4.0],
+    "tup": [1, 2, 3],
+    "ina": [1.0, 2.0, 3.0],
+    "set": [1, 2, 3],
+    "ap": 42,
+    "op": 42
 }
 """
     )
@@ -68,6 +80,12 @@ def test_deserialize():
     assert_equal(foo.il, 23)
     assert_equal(foo.fl, 234.23)
     assert_equal(foo.vec, SIMD[DType.float32, 4](1.0, 2.0, 3.0, 4.0))
+    assert_true(foo.tup == (1, 2, 3))
+    for i in range(3):
+        assert_equal(foo.ina[i], Float64(i + 1))
+    assert_equal(foo.set, {1, 2, 3})
+    assert_equal(foo.ap[], 42)
+    assert_equal(foo.op[], 42)
 
 
 @fieldwise_init

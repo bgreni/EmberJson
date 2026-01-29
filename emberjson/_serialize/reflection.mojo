@@ -4,7 +4,10 @@ from std.reflection import (
     struct_field_types,
     is_struct_type,
 )
+from std.collections import Set
 from sys.intrinsics import _type_is_eq
+from std.memory import ArcPointer, OwnedPointer
+from std.format._utils import _WriteBufferStack
 
 
 trait JsonSerializable:
@@ -41,7 +44,9 @@ fn serialize[
     T: AnyType, //, Out: Writer & Defaultable = String
 ](value: T, out writer: Out):
     writer = Out()
-    serialize(value, writer)
+    var stack_writer = _WriteBufferStack(writer)
+    serialize(value, stack_writer)
+    stack_writer.flush()
 
 
 fn serialize[T: AnyType, //](value: T, mut writer: Some[Writer]):
@@ -69,6 +74,11 @@ fn serialize[T: AnyType, //](value: T, mut writer: Some[Writer]):
                 writer.write(",")
 
         writer.write("}")
+
+
+# ===============================================
+# Primitives
+# ===============================================
 
 
 __extension String(JsonSerializable):
@@ -112,21 +122,67 @@ __extension SIMD(JsonSerializable):
         return False
 
 
-__extension Optional(JsonSerializable):
+__extension Bool(JsonSerializable):
     fn write_json(self, mut writer: Some[Writer]):
-        if self:
-            serialize(self.value(), writer)
-        else:
-            writer.write("null")
+        writer.write("true" if self else "false")
 
     @staticmethod
     fn serialize_as_array() -> Bool:
         return False
 
 
-__extension Bool(JsonSerializable):
+__extension IntLiteral(JsonSerializable):
     fn write_json(self, mut writer: Some[Writer]):
-        writer.write("true" if self else "false")
+        writer.write(self)
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return False
+
+
+__extension FloatLiteral(JsonSerializable):
+    fn write_json(self, mut writer: Some[Writer]):
+        writer.write(self)
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return False
+
+
+# ===============================================
+# Pointers
+# ===============================================
+
+
+__extension ArcPointer(JsonSerializable):
+    fn write_json(self, mut writer: Some[Writer]):
+        serialize(self[], writer)
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return False
+
+
+__extension OwnedPointer(JsonSerializable):
+    fn write_json(self, mut writer: Some[Writer]):
+        serialize(self[], writer)
+
+    @staticmethod
+    fn serialize_as_array() -> Bool:
+        return False
+
+
+# ===============================================
+# Collections
+# ===============================================
+
+
+__extension Optional(JsonSerializable):
+    fn write_json(self, mut writer: Some[Writer]):
+        if self:
+            serialize(self.value(), writer)
+        else:
+            writer.write("null")
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -187,18 +243,33 @@ __extension Dict(JsonSerializable):
         return False
 
 
-__extension IntLiteral(JsonSerializable):
+__extension Tuple(JsonSerializable):
     fn write_json(self, mut writer: Some[Writer]):
-        writer.write(self)
+        writer.write("[")
+
+        @parameter
+        for i in range(Self.__len__()):
+            serialize(self[i], writer)
+
+            if i != Self.__len__() - 1:
+                writer.write(",")
+        writer.write("]")
 
     @staticmethod
     fn serialize_as_array() -> Bool:
-        return False
+        return True
 
 
-__extension FloatLiteral(JsonSerializable):
+__extension Set(JsonSerializable):
     fn write_json(self, mut writer: Some[Writer]):
-        writer.write(self)
+        writer.write("[")
+
+        for i, item in enumerate(self):
+            serialize(item, writer)
+
+            if i != len(self) - 1:
+                writer.write(",")
+        writer.write("]")
 
     @staticmethod
     fn serialize_as_array() -> Bool:
