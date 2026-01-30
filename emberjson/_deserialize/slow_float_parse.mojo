@@ -203,9 +203,11 @@ fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
 
     comptime MAX_SHIFT = 60
     comptime NUM_POWERS = 19
-    var POWERS = StackArray[UInt8, NUM_POWERS](
+
+    # fmt: off
+    var POWERS: StackArray[UInt8, NUM_POWERS] = [
         0, 3, 6, 9, 13, 16, 19, 23, 26, 29, 33, 36, 39, 43, 46, 49, 53, 56, 59
-    )
+    ]
 
     var exp2: Int32 = 0
 
@@ -329,7 +331,7 @@ fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
         answer.decimal_point += select(neg_exp, -exp_number, exp_number)
 
 
-comptime number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
+comptime number_of_digits_decimal_left_shift_table: StackArray[UInt16, 65] = [
     0x0000,
     0x0800,
     0x0801,
@@ -395,11 +397,11 @@ comptime number_of_digits_decimal_left_shift_table = StackArray[UInt16, 65](
     0x051C,
     0x051C,
     0x051C,
-)
+]
 
-comptime number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
+comptime number_of_digits_decimal_left_shift_table_powers_of_5: StackArray[
     UInt8, 0x051C
-](
+] = [
     5,
     2,
     5,
@@ -1708,4 +1710,4 @@ comptime number_of_digits_decimal_left_shift_table_powers_of_5 = StackArray[
     6,
     2,
     5,
-)
+]

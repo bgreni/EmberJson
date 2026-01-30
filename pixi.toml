@@ -1,11 +1,11 @@
 [workspace]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max/"]
+channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
-version = "0.3.0"
+version = "0.3.1"
 license = "MIT"
 license-file = "LICENSE"
 homepage = "https://github.com/bgreni/EmberJson"
@@ -27,7 +27,7 @@ fuzz = "mojo -D ASSERT=all --disable-warnings fuzz.mojo"
 gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 
 [dependencies]
-mojo = ">=0.26.1, <0.27"
+mojo = ">=0.26.2.0.dev2026020205,<0.27"
 
 
 [package]
@@ -38,11 +38,11 @@ version = "0.3.0"
 backend = { name = "pixi-build-mojo", version = "0.1.*" }
 
 [package.host-dependencies]
-mojo-compiler = ">=0.26.1, <0.27"
+mojo-compiler = ">=0.26.2.0.dev2026020205,<0.27"
 
 [package.build-dependencies]
-mojo-compiler = ">=0.26.1, <0.27"
+mojo-compiler = ">=0.26.2.0.dev2026020205,<0.27"
 
 [package.run-dependencies]
-mojo-compiler = ">=0.26.1, <0.27"
+mojo-compiler = ">=0.26.2.0.dev2026020205,<0.27"
 
