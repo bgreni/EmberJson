@@ -12,6 +12,7 @@ from sys.info import bit_width_of
 from .teju import write_f64
 from os import abort
 from python import PythonObject
+from ._pointer import resolve_pointer, PointerIndex
 
 
 @fieldwise_init
@@ -412,3 +413,6 @@ struct Value(JsonValue):
             return self.array().to_python_object()
         else:
             abort("Unreachable: to_python_object")
+
+    fn pointer(ref self, path: PointerIndex) raises -> ref [self] Value:
+        return resolve_pointer(self, path)

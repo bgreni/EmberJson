@@ -1,8 +1,10 @@
 from utils import Variant
+from ._pointer import resolve_pointer, PointerIndex
 from .object import Object
 from .array import Array
 from .traits import JsonValue, PrettyPrintable
 from .utils import write, ByteView
+from memory import UnsafePointer
 from sys.intrinsics import unlikely
 from ._deserialize import Parser
 from os import abort
@@ -212,7 +214,7 @@ struct JSON(JsonValue, Sized):
         Args:
             writer: The writer to write to.
             indent: If an int denotes the number of space characters to use,
-                    if a string then use the given string to indent.
+            if a string then use the given string to indent.
             curr_depth: The current depth into the json document, controls the
                     current level of indendation.
         """
@@ -271,3 +273,28 @@ struct JSON(JsonValue, Sized):
     @staticmethod
     fn from_json(mut json: Parser, out s: Self) raises:
         s = json.parse()
+
+    fn pointer(
+        ref self, path: PointerIndex
+    ) raises -> ref [self.object(), self.array()] Value:
+        if self.is_object():
+            return resolve_pointer(self.object(), path)
+        return resolve_pointer(self.array(), path)
+
+    fn __getattr__(ref self, var name: String) raises -> ref [self.object(), self.array(), self.object()._data] Value:
+        if name.startswith("/"):
+            return self.pointer(name)
+        else:
+            if self.is_object():
+                return self.object()[name]
+            else:
+                raise Error("Cannot use getattr on JSON Array")
+
+    fn __setattr__(mut self, var name: String, var value: Value) raises:
+        if name.startswith("/"):
+            self.pointer(name) = value^
+        else:
+            if self.is_object():
+                self.object()[name] = value^
+            else:
+                raise Error("Cannot use setattr on JSON Array")

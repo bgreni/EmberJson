@@ -503,7 +503,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     @always_inline
     fn write_float(
         self,
-        out v: Value,
+        out v: Float64,
         negative: Bool,
         i: UInt64,
         start_digits: CheckedPointer,
@@ -730,6 +730,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn expect_float[
         type: DType = DType.float64
     ](mut self) raises -> Scalar[type]:
+        __comptime_assert (
+            type.is_floating_point()
+        ), "Expected float, found non-float type: " + String(type)
+
         var neg = self.data[] == `-`
         var p = self.data + Int(neg or self.data[] == `+`)
 
@@ -787,20 +791,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
             exponent += select(neg_exp, -exp_number, exp_number)
 
-        var f: Float64
-        # Inline write_float logic for float return
-        if unlikely(
-            digit_count > 19
-            and significant_digits(self.data.p, digit_count) > 19
-        ):
-            f = from_chars_slow(self.data)
-        elif unlikely(exponent < smallest_power or exponent > largest_power):
-            if likely(exponent < smallest_power or i == 0):
-                f = select(neg, -0.0, 0.0)
-            else:
-                raise Error("Invalid number: inf")
-        else:
-            f = self.compute_float64(exponent, i, neg)
+        var f = self.write_float(neg, i, start_digits, digit_count, exponent)
 
         self.data = p
 
