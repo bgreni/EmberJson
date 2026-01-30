@@ -76,11 +76,10 @@ fn main() raises:
     print("Running fuzzy tests...")
     var iters = 100
 
-    var rng = Rng(seed=Int(perf_counter_ns()))
-
     @parameter
     fn test_parse(s: String) raises:
-        var j: JSON
+        var rng = Rng(seed=Int(perf_counter_ns()))
+        var j: JSON = {}
         if iters % 4 == 0:
             var start = rng.rand_int(min=0, max=len(s))
             var end = rng.rand_int(min=start, max=len(s))
@@ -91,7 +90,6 @@ fn main() raises:
                 # Main thing is we don't want this to crash.
                 # But don't enforce failure on the off chance this slicing happens to
                 # produce valid json.
-                j = JSON()
                 pass
         else:
             j = parse(s)

@@ -59,12 +59,8 @@ fn main() raises:
 
 ### Working with JSON
 
-`JSON` is the top level type for a document. It can contain either
-an `Object` or `Array`.
-
-`Value` is used to wrap the various possible primitives that an object or
-array can contain, which are `Int`, `Float64`, `String`, `Bool`, `Object`,
-`Array`, and `Null`.
+`Value` is the unified type for any JSON value. It can represent
+an `Object`, `Array`, `String`, `Int`, `Float64`, `Bool`, or `Null`.
 
 ```mojo
 from emberjson import *
@@ -167,3 +163,46 @@ fn main():
     print(serialize(Coordinate(1.0, 2.0)))  # prints [1.0,2.0]
     print(serialize(MyInt(1)))  # prints 1
 ```
+
+### JSON Pointer
+
+EmberJSON supports [RFC 6901](https://tools.ietf.org/html/rfc6901) JSON Pointer for traversing documents with a string path.
+
+The `pointer()` method works on `JSON` documents or `Value` types and returns a **reference** to the target value, allowing in-place modification.
+
+```mojo
+var j = JSON(parse_string='{"foo": ["bar", "baz"]}')
+
+# Access nested values
+print(j.pointer("/foo/1").string())  # prints "baz"
+
+# Modify values in-place
+j.pointer("/foo/1") = "modified"
+print(j.pointer("/foo/1").string())  # prints "modified"
+
+# RFC 6901 Escaping (~1 for /, ~0 for ~) covers special characters
+var j2 = JSON(parse_string='{"a/b": 1, "m~n": 2}')
+print(j2.pointer("/a~1b").int()) # prints 1
+print(j2.pointer("/m~0n").int()) # prints 2
+```
+
+#### Syntactic Sugar
+
+You can also use Python-style dot access for object keys, or backtick-identifiers for full paths:
+
+```mojo
+# Dot access for standard identifiers
+print(j.foo)  # Equivalent to j.pointer("/foo")
+
+# Backtick syntax for full pointer paths
+print(j.`/foo/1`.string())  # Equivalent to j.pointer("/foo/1")
+
+# In-place modification via backticks
+j.`/foo/1` = "updated"
+print(j.`/foo/1`.string())  # prints "updated"
+
+# Chained access for nest objects
+j = {"foo": {"bar": [1, 2, 3]}}
+print(j.foo.bar[1])  # prints "2"
+```
+

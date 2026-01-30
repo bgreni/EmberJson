@@ -1,7 +1,7 @@
+from .value import Value, Null
 from .json import JSON
 from .array import Array
 from .object import Object
-from .value import Value, Null
 from .utils import write, write_pretty
 from ._deserialize import (
     Parser,
@@ -14,6 +14,7 @@ from ._deserialize import (
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
 from ._serialize import JsonSerializable, serialize
+from ._pointer import PointerIndex
 
 
 @always_inline

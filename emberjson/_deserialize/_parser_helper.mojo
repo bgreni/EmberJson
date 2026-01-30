@@ -162,6 +162,9 @@ fn handle_unicode_codepoint(
         raise Error("Bad unicode codepoint")
     var c1 = hex_to_u32(p)
     p += 4
+
+    if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
+        raise Error("Invalid unicode: lone surrogate")
     # NOTE: incredibly, this is part of the JSON standard (thanks javascript...)
     # ECMA-404 2nd Edition / December 2017. Section 9:
     # To escape a code point that is not in the Basic Multilingual Plane, the
@@ -196,7 +199,7 @@ fn handle_unicode_codepoint(
 fn copy_to_string[
     ignore_unicode: Bool = False
 ](
-    out s: String, start: BytePtr, end: BytePtr, found_unicode: Bool = True
+    out s: String, start: BytePtr, end: BytePtr, found_escaped: Bool = True
 ) raises:
     var length = ptr_dist(start, end)
 
@@ -235,23 +238,23 @@ fn copy_to_string[
                     elif c == `\\`:  # \
                         l.append(Codepoint(`\\`))
                         p += 1
-                    elif c == `/`:
+                    elif c == `/`:  # /
                         l.append(Codepoint(`/`))
                         p += 1
-                    elif c == `b`:
-                        l.append(Codepoint(`\b`))
+                    elif c == `b`:  # b
+                        l.append(Codepoint(0x08))
                         p += 1
-                    elif c == `f`:
-                        l.append(Codepoint(`\f`))
+                    elif c == `f`:  # f
+                        l.append(Codepoint(0x0C))
                         p += 1
-                    elif c == `n`:
-                        l.append(Codepoint(`\n`))
+                    elif c == `n`:  # n
+                        l.append(Codepoint(0x0A))
                         p += 1
-                    elif c == `r`:
-                        l.append(Codepoint(`\r`))
+                    elif c == `r`:  # r
+                        l.append(Codepoint(0x0D))
                         p += 1
-                    elif c == `t`:
-                        l.append(Codepoint(`\t`))
+                    elif c == `t`:  # t
+                        l.append(Codepoint(0x09))
                         p += 1
                     else:
                         raise Error("Invalid escape sequence")
@@ -259,7 +262,7 @@ fn copy_to_string[
 
     @parameter
     if not ignore_unicode:
-        if found_unicode:
+        if found_escaped:
             return decode_escaped()
         else:
             return String(StringSlice(ptr=start, length=length))

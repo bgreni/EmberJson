@@ -2,7 +2,6 @@ from emberjson import (
     parse,
     to_string,
     write_pretty,
-    JSON,
     Value,
     Parser,
     minify,
@@ -41,14 +40,6 @@ fn run[
 ](mut m: Bench, data: String) raises:
     m.bench_with_input[String, func](
         BenchId(name), data, [get_gbs_measure(data)]
-    )
-
-
-fn run[
-    func: fn (mut Bencher, JSON) raises capturing, name: String
-](mut m: Bench, data: JSON) raises:
-    m.bench_with_input[JSON, func](
-        BenchId(name), data, [get_gbs_measure(String(data))]
     )
 
 
@@ -147,19 +138,19 @@ fn main() raises:
         m, '"some example string of short length, not all that long really"'
     )
 
-    run[benchmark_json_stringify, "StringifyLarge"](m, parse(large_array))
-    run[benchmark_json_stringify, "StringifyCanada"](m, parse(canada))
+    run[benchmark_value_stringify, "StringifyLarge"](m, parse(large_array))
+    run[benchmark_value_stringify, "StringifyCanada"](m, parse(canada))
     var pcanada = Parser(canada)
     run[benchmark_reflection_serialize, "StringifyCanadaWithReflection"](
         m, deserialize[Canada](pcanada^)
     )
-    run[benchmark_json_stringify, "StringifyTwitter"](m, parse(twitter))
+    run[benchmark_value_stringify, "StringifyTwitter"](m, parse(twitter))
 
     var pcat = Parser(catalog)
     run[benchmark_reflection_serialize, "StringifyCitmCatalogWithReflection"](
         m, deserialize[CatalogData](pcat^)
     )
-    run[benchmark_json_stringify, "StringifyCitmCatalog"](m, parse(catalog))
+    run[benchmark_value_stringify, "StringifyCitmCatalog"](m, parse(catalog))
 
     run[benchmark_value_stringify, "StringifyBool"](m, False)
     run[benchmark_value_stringify, "StringifyNull"](m, Null())
@@ -193,7 +184,7 @@ fn benchmark_reflection_serialize[
 
 
 @parameter
-fn benchmark_pretty_print(mut b: Bencher, s: JSON) raises:
+fn benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     @always_inline
     @parameter
     fn do():
@@ -231,17 +222,6 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @parameter
     fn do():
         var a = String(v)
-        keep(a)
-
-    b.iter[do]()
-
-
-@parameter
-fn benchmark_json_stringify(mut b: Bencher, json: JSON) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        var a = String(json)
         keep(a)
 
     b.iter[do]()

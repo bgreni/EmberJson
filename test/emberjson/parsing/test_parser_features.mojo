@@ -1,5 +1,5 @@
 from emberjson import parse, try_parse, ParseOptions
-from testing import assert_true, assert_equal, TestSuite
+from testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
 def test_compile_time():
@@ -190,6 +190,20 @@ def test_unicode_parsing():
 """
     _ = parse(s)
     _ = parse[ParseOptions(ignore_unicode=True)](s)
+
+
+def test_lone_surrogate_error():
+    # Lone low surrogate (invalid)
+    with assert_raises():
+        _ = parse('"\\uDC00"')
+
+    # Lone high surrogate (invalid)
+    with assert_raises():
+        _ = parse('"\\uD800"')
+
+    # Valid surrogate pair (should pass)
+    var j = parse('"\\uD83D\\uDD25"')  # Pair for 🔥
+    assert_equal(j.string(), "🔥")
 
 
 def main():
