@@ -21,49 +21,48 @@ def test_rfc6901():
     )
     var j = JSON(parse_string=json_str)
 
-    with assert_raises():
-        _ = j.pointer("")  # Cannot get ref to root JSON wrapper
+    assert_equal(j.get("").object()["foo"].array()[0].string(), "bar")
 
-    assert_equal(j.pointer("/foo").array()[0].string(), "bar")
-    assert_equal(j.pointer("/foo/0").string(), "bar")
-    assert_equal(j.pointer("/").int(), 0)
-    assert_equal(j.pointer("/a~1b").int(), 1)
-    assert_equal(j.pointer("/c%d").int(), 2)
-    assert_equal(j.pointer("/e^f").int(), 3)
-    assert_equal(j.pointer("/g|h").int(), 4)
-    assert_equal(j.pointer("/i\\j").int(), 5)
-    assert_equal(j.pointer('/k"l').int(), 6)
-    assert_equal(j.pointer("/ ").int(), 7)
-    assert_equal(j.pointer("/m~0n").int(), 8)
-    assert_equal(j.pointer("/0123").int(), 9)
+    assert_equal(j.get("/foo").array()[0].string(), "bar")
+    assert_equal(j.get("/foo/0").string(), "bar")
+    assert_equal(j.get("/").int(), 0)
+    assert_equal(j.get("/a~1b").int(), 1)
+    assert_equal(j.get("/c%d").int(), 2)
+    assert_equal(j.get("/e^f").int(), 3)
+    assert_equal(j.get("/g|h").int(), 4)
+    assert_equal(j.get("/i\\j").int(), 5)
+    assert_equal(j.get('/k"l').int(), 6)
+    assert_equal(j.get("/ ").int(), 7)
+    assert_equal(j.get("/m~0n").int(), 8)
+    assert_equal(j.get("/0123").int(), 9)
 
 
 def test_errors():
     var j = JSON(parse_string='{"a": 1}')
 
     with assert_raises():
-        _ = j.pointer("a")  # No leading /
+        _ = j.get("a")  # No leading /
 
     with assert_raises():
-        _ = j.pointer("/b")  # Missing key
+        _ = j.get("/b")  # Missing key
 
     with assert_raises():
-        _ = j.pointer("/a/0")  # Traversing primitive
+        _ = j.get("/a/0")  # Traversing primitive
 
 
 def test_array_idx():
     var j = JSON(parse_string="[10, 20]")
-    assert_equal(j.pointer("/0").int(), 10)
-    assert_equal(j.pointer("/1").int(), 20)
+    assert_equal(j.get("/0").int(), 10)
+    assert_equal(j.get("/1").int(), 20)
 
     with assert_raises():
-        _ = j.pointer("/2")  # OOB
+        _ = j.get("/2")  # OOB
 
     with assert_raises():
-        _ = j.pointer("/-1")  # Negative
+        _ = j.get("/-1")  # Negative
 
     with assert_raises():
-        _ = j.pointer("/01")  # Leading zero
+        _ = j.get("/01")  # Leading zero
 
 
 def test_explicit_pointer_index():
@@ -71,12 +70,12 @@ def test_explicit_pointer_index():
     var ptr = PointerIndex("/foo/1")
 
     var j = JSON(parse_string='{"foo": ["bar", "baz"]}')
-    ref val = j.pointer(ptr)
+    ref val = j.get(ptr)
     assert_equal(val.string(), "baz")
 
     comptime ptr2 = PointerIndex.try_from_string("/foo/0")
     __comptime_assert ptr2 is not None
-    assert_equal(j.pointer(materialize[ptr2]().value()).string(), "bar")
+    assert_equal(j.get(materialize[ptr2]().value()).string(), "bar")
 
 
 def test_getattr_method():
@@ -96,6 +95,45 @@ def test_getattr_method():
     # adding a new key
     j.baz = False
     assert_equal(j.baz, False)
+
+
+def test_unicode_keys():
+    var j = JSON(
+        parse_string='{"🔥": "fire", "🚀": "rocket", "key with spaces": 1}'
+    )
+    assert_equal(j.get("/🔥").string(), "fire")
+    assert_equal(j.`🔥`.string(), "fire")
+    assert_equal(j.get("/🚀").string(), "rocket")
+    assert_equal(j.get("/key with spaces").int(), 1)
+    assert_equal(j.`key with spaces`.int(), 1)
+
+
+def test_value_sugar():
+    # Test __getattr__ chaining on Value with mixed arrays/objects
+    var j = JSON(
+        parse_string=(
+            '{"users": [{"name": "alice", "id": 1}, {"name": "bob", "id": 2}]}'
+        )
+    )
+
+    # Read chain: JSON -> Value(Array) -> Value(Object) -> Value(String)
+    # j.users returns ref Value(Array)
+    # [0] returns ref Value(Object)
+    # .name returns ref Value(String)
+    assert_equal(j.users[0].name.string(), "alice")
+    assert_equal(j.users[1].id.int(), 2)
+
+    # Write chain
+    j.users[0].name = "Alice Cooper"
+    assert_equal(j.users[0].name.string(), "Alice Cooper")
+
+    # Mixed with backtick syntax on intermediate Value
+    # j.users[1] is a Value, we can use backticks on it
+    assert_equal(j.users[1].`/name`.string(), "bob")
+
+    # Write using backticks on intermediate Value
+    j.users[1].`name` = "Bob Dylan"
+    assert_equal(j.users[1].name.string(), "Bob Dylan")
 
 
 def main():

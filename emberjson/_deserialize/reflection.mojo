@@ -34,8 +34,12 @@ fn try_deserialize[T: _Base](var p: Parser) -> Optional[T]:
         return None
 
 
-fn deserialize[T: _Base](var p: Parser, out s: T) raises:
-    s = _deserialize_impl[T](p)
+fn deserialize[T: _Base](s: String, out res: T) raises:
+    res = deserialize[T](Parser(s))
+
+
+fn deserialize[T: _Base](var p: Parser, out res: T) raises:
+    res = _deserialize_impl[T](p)
 
 
 @always_inline

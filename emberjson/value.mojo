@@ -1,6 +1,11 @@
 from .object import Object
 from .array import Array
-from .utils import will_overflow, constrain_json_type, write_escaped_string
+from .utils import (
+    will_overflow,
+    constrain_json_type,
+    write_escaped_string,
+    ByteView,
+)
 from utils import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
@@ -64,7 +69,9 @@ struct Null(JsonValue):
         s = json.parse_null()
 
 
-struct Value(JsonValue):
+struct Value(JsonValue, Sized):
+    """Top level JSON object, representing any valid JSON value."""
+
     comptime Type = Variant[
         Int64, UInt64, Float64, String, Bool, Object, Array, Null
     ]
@@ -83,14 +90,6 @@ struct Value(JsonValue):
     @always_inline
     fn __init__(out self, var v: Self.Type):
         self._data = v^
-
-    @implicit
-    fn __init__(out self, var j: JSON):
-        # TODO: Avoid copies
-        if j.is_object():
-            self._data = j.object().copy()
-        else:
-            self._data = j.array().copy()
 
     @implicit
     @always_inline
@@ -149,9 +148,30 @@ struct Value(JsonValue):
         self._data = v^
 
     @always_inline
-    fn __init__(out self: Value, *, parse_string: String) raises:
+    fn __init__(out self, *, parse_string: String) raises:
+        """Parse JSON document from a string.
+
+        Args:
+            parse_string: The string to parse.
+
+        Raises:
+            If the string represents an invalid JSON document.
+        """
         var p = Parser(parse_string)
-        self = p.parse_value()
+        self = p.parse()
+
+    @always_inline
+    fn __init__(out self, *, parse_bytes: ByteView[mut=False]) raises:
+        """Parse JSON document from bytes.
+
+        Args:
+            parse_bytes: The bytes to parse.
+
+        Raises:
+            If the bytes represent an invalid JSON document.
+        """
+        var parser = Parser(parse_bytes)
+        self = parser.parse()
 
     @implicit
     @always_inline
@@ -217,19 +237,35 @@ struct Value(JsonValue):
             return True
         abort("Unreachable: __eq__")
 
-    fn __getitem__(
-        self, ind: Some[Indexer]
-    ) raises -> ref [origin_of(self.array()._data)] Value:
+    fn __len__(self) -> Int:
+        if self.is_array():
+            return len(self.array())
+        if self.is_object():
+            return len(self.object())
+        if self.is_string():
+            return len(self.string())
+        return -1
+
+    fn __contains__(self, v: Value) raises -> Bool:
+        if self.is_array():
+            return v in self.array().copy()
+        if not v.isa[String]():
+            raise Error("expected string key")
+        return v.string() in self.object().copy()
+
+    fn __getitem__(ref self, ind: Some[Indexer]) raises -> ref [self] Value:
         if not self.is_array():
             raise Error("Expected numerical index for array")
-        return self.array()[ind]
+        return UnsafePointer(to=self.array()[ind]).unsafe_origin_cast[
+            origin_of(self)
+        ]()[]
 
-    fn __getitem__(
-        self, key: String
-    ) raises -> ref [origin_of(self.object()._data)] Value:
+    fn __getitem__(ref self, key: String) raises -> ref [self] Value:
         if not self.is_object():
             raise Error("Expected string key for object")
-        return self.object()[key]
+        return UnsafePointer(to=self.object()[key]).unsafe_origin_cast[
+            origin_of(self)
+        ]()[]
 
     @always_inline
     fn __ne__(self, other: Self) -> Bool:
@@ -414,5 +450,25 @@ struct Value(JsonValue):
         else:
             abort("Unreachable: to_python_object")
 
-    fn pointer(ref self, path: PointerIndex) raises -> ref [self] Value:
+    fn get(ref self, path: PointerIndex) raises -> ref [self] Value:
         return resolve_pointer(self, path)
+
+    fn __getattr__(ref self, var name: String) raises -> ref [self] Value:
+        if name.startswith("/"):
+            return self.get(name)
+        else:
+            if self.is_object():
+                return UnsafePointer(to=self.object()[name]).unsafe_origin_cast[
+                    origin_of(self)
+                ]()[]
+            else:
+                raise Error("Cannot use getattr on JSON Array")
+
+    fn __setattr__(mut self, var name: String, var value: Value) raises:
+        if name.startswith("/"):
+            self.get(name) = value^
+        else:
+            if self.is_object():
+                self.object()[name] = value^
+            else:
+                raise Error("Cannot use setattr on JSON Array")

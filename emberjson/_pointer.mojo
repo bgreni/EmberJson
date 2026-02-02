@@ -5,6 +5,7 @@ from std.utils import Variant
 from .object import Object
 from .array import Array
 from memory import UnsafePointer
+from sys.intrinsics import unlikely
 
 
 fn parse_int(s: String) raises -> Int:
@@ -21,12 +22,12 @@ fn parse_int(s: String) raises -> Int:
     return res
 
 
-fn unescape(token: String) -> String:
+fn unescape(token: StringSlice) -> String:
     # RFC 6901 Escaping:
     # ~1 -> /
     # ~0 -> ~
     if "~" not in token:
-        return token
+        return String(token)
 
     var out = String()
     var i = 0
@@ -69,13 +70,13 @@ struct PointerIndex(Copyable, Movable):
         var raw_tokens = path.split("/")
         # Skip first empty element (before first /)
         for i in range(1, len(raw_tokens)):
-            var raw = unescape(String(raw_tokens[i]))
+            var raw = unescape(raw_tokens[i])
 
             # Try parse int
             try:
                 var idx = parse_int(raw)
                 # Validation rules RFC 6901
-                if idx < 0:
+                if unlikely(idx < 0):
                     # Negative shouldn't happen from parse_int unless overflow logic wrapped?
                     # parse_int logic I wrote doesn't handle - sign, so it's always positive.
                     pass
@@ -109,7 +110,7 @@ fn resolve_pointer(
 fn resolve_pointer(
     ref root: Object, ptr: PointerIndex
 ) raises -> ref [root] Value:
-    if len(ptr.tokens) == 0:
+    if unlikely(len(ptr.tokens) == 0):
         # Cannot return reference to Object as Value, because Object is not Value.
         raise Error("Cannot return reference to root Object as Value")
     return _resolve_ref(root, ptr.tokens, 0)
@@ -118,7 +119,7 @@ fn resolve_pointer(
 fn resolve_pointer(
     ref root: Array, ptr: PointerIndex
 ) raises -> ref [root] Value:
-    if len(ptr.tokens) == 0:
+    if unlikely(len(ptr.tokens) == 0):
         # Cannot return reference to Array as Value.
         raise Error("Cannot return reference to root Array as Value")
     return _resolve_ref(root, ptr.tokens, 0)
@@ -131,17 +132,15 @@ fn _resolve_ref(
         return val
 
     if val.is_object():
-        var ptr = UnsafePointer(to=val.object())
-        var new_ptr = UnsafePointer[Object, origin_of(val)](
-            unsafe_from_address=Int(ptr)
-        )
-        return _resolve_ref(new_ptr[], tokens, idx)
+        var ptr = UnsafePointer[Object](to=val.object()).unsafe_origin_cast[
+            origin_of(val)
+        ]()
+        return _resolve_ref(ptr[], tokens, idx)
     elif val.is_array():
-        var ptr = UnsafePointer(to=val.array())
-        var new_ptr = UnsafePointer[Array, origin_of(val)](
-            unsafe_from_address=Int(ptr)
-        )
-        return _resolve_ref(new_ptr[], tokens, idx)
+        var ptr = UnsafePointer[Array](to=val.array()).unsafe_origin_cast[
+            origin_of(val)
+        ]()
+        return _resolve_ref(ptr[], tokens, idx)
     else:
         var token = tokens[idx]
         if token.isa[String]():
@@ -158,7 +157,7 @@ fn _resolve_ref(
 fn _resolve_ref(
     ref obj: Object, tokens: List[PointerToken], idx: Int
 ) raises -> ref [obj] Value:
-    if idx >= len(tokens):
+    if unlikely(idx >= len(tokens)):
         # Unreachable from resolve_pointer(Object) because of empty check,
         # but prevents returning a non-existent Value ref.
         raise Error("Cannot resolve reference to Object root")
@@ -177,11 +176,10 @@ fn _resolve_ref(
         # obj[key] returns ref [obj._data] Value
         # We need ref [obj] Value.
         # Since obj owns _data, the lifetime of _data is at least as long as obj.
-        var ptr = UnsafePointer(to=obj[key])
-        var val_ref = UnsafePointer[Value, origin_of(obj)](
-            unsafe_from_address=Int(ptr)
-        )
-        return _resolve_ref(val_ref[], tokens, idx + 1)
+        var ptr = UnsafePointer(to=obj[key]).unsafe_origin_cast[
+            origin_of(obj)
+        ]()
+        return _resolve_ref(ptr[], tokens, idx + 1)
 
     raise Error("Key not found: " + key)
 
@@ -189,7 +187,7 @@ fn _resolve_ref(
 fn _resolve_ref(
     ref arr: Array, tokens: List[PointerToken], idx: Int
 ) raises -> ref [arr] Value:
-    if idx >= len(tokens):
+    if unlikely(idx >= len(tokens)):
         raise Error("Cannot resolve reference to Array root")
 
     var token = tokens[idx]
@@ -200,11 +198,8 @@ fn _resolve_ref(
         raise Error("Invalid array index: " + token[String])
 
     var arr_len = len(arr)
-    if i >= arr_len:
+    if unlikely(i >= arr_len):
         raise Error("Index out of bounds")
 
-    var ptr = UnsafePointer(to=arr[i])
-    var val_ref = UnsafePointer[Value, origin_of(arr)](
-        unsafe_from_address=Int(ptr)
-    )
-    return _resolve_ref(val_ref[], tokens, idx + 1)
+    var ptr = UnsafePointer(to=arr[i]).unsafe_origin_cast[origin_of(arr)]()
+    return _resolve_ref(ptr[], tokens, idx + 1)

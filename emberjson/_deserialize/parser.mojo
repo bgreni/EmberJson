@@ -159,15 +159,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn pos(self) -> Int:
         return self.size - (self.size - self.data.dist())
 
-    fn parse(mut self, out json: JSON) raises:
+    fn parse(mut self, out json: Value) raises:
         self.skip_whitespace()
-        var b = self.data[]
-        if b == `[`:
-            json = self.parse_array()
-        elif b == `{`:
-            json = self.parse_object()
-        else:
-            raise Error("Invalid json")
+        json = self.parse_value()
 
         self.skip_whitespace()
         if unlikely(self.has_more()):
@@ -298,13 +292,13 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             raise Error("Invalid json value")
 
     fn find(mut self, start: CheckedPointer, out s: String) raises:
-        var found_unicode = False
+        var found_escaped = False
         while True:
             var block = StringBlock.find(self.data)
             if block.has_quote_first():
                 self.data += block.quote_index()
                 return copy_to_string[Self.options.ignore_unicode](
-                    start.p, self.data.p, found_unicode
+                    start.p, self.data.p, found_escaped
                 )
             elif unlikely(self.data.p > self.data.end):
                 # We got EOF before finding the end quote, so obviously this
@@ -324,7 +318,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             self.data += block.bs_index()
 
             # We found a backslash, so we need to unescape
-            found_unicode = True
+            found_escaped = True
             while True:
                 self.data += 1
                 if self.data[] == `u`:
@@ -342,11 +336,11 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     break
 
     fn read_serial(mut self, start: CheckedPointer, out s: String) raises:
-        var found_unicode = False
+        var found_escaped = False
         while likely(self.has_more()):
             if self.data[] == `"`:
                 s = copy_to_string[Self.options.ignore_unicode](
-                    start.p, self.data.p, found_unicode
+                    start.p, self.data.p, found_escaped
                 )
                 self.data += 1
                 return
@@ -359,7 +353,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                         to_string(self.data[]),
                     )
                 # We found a backslash, so we need to unescape
-                found_unicode = True
+                found_escaped = True
             comptime control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
             if unlikely(self.data[] in control_chars):
                 raise Error(

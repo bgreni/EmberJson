@@ -1,4 +1,5 @@
 from emberjson import parse, Array, Object, Value, Null, JSON
+from emberjson.utils import write_escaped_string
 from utils.numerics import isinf
 from time import monotonic
 from testing import assert_equal
@@ -6,6 +7,7 @@ from testing.prop.strategy import Strategy, Rng
 from testing.prop import PropTest, PropTestConfig
 from benchmark import keep
 from time import perf_counter_ns
+from sys.param_env import is_defined
 
 
 @fieldwise_init
@@ -54,7 +56,7 @@ struct JsonStringStrategy(Movable, Strategy):
 
     fn gen_array(self, mut rng: Rng, depth: Int) raises -> Array:
         var arr = Array()
-        var l = rng.rand_int(min=0, max=200 // min(depth, 1))
+        var l = rng.rand_int(min=0, max=20 // max(depth, 1))
         arr.reserve(l)
         for _ in range(l):
             arr.append(self.gen_value(rng, depth))
@@ -62,7 +64,7 @@ struct JsonStringStrategy(Movable, Strategy):
 
     fn gen_object(self, mut rng: Rng, depth: Int) raises -> Object:
         var ob = Object()
-        var l = rng.rand_int(min=0, max=200 // min(depth, 1))
+        var l = rng.rand_int(min=0, max=20 // max(depth, 1))
         for _ in range(l):
             ob[self.gen_string(rng)] = self.gen_value(rng, depth)
         return ob^
@@ -73,29 +75,39 @@ fn coin_flip(mut rng: Rng) raises -> Bool:
 
 
 fn main() raises:
-    print("Running fuzzy tests...")
-    var iters = 100
-
     @parameter
-    fn test_parse(s: String) raises:
+    if is_defined["GEN_JSONL"]():
         var rng = Rng(seed=Int(perf_counter_ns()))
-        var j: JSON = {}
-        if iters % 4 == 0:
-            var start = rng.rand_int(min=0, max=len(s))
-            var end = rng.rand_int(min=start, max=len(s))
-            var corrupted = s[start:end]
-            try:
-                j = parse(corrupted)
-            except:
-                # Main thing is we don't want this to crash.
-                # But don't enforce failure on the off chance this slicing happens to
-                # produce valid json.
-                pass
-        else:
-            j = parse(s)
-        iters -= 1
-        keep(j)
+        var strat = JsonStringStrategy()
 
-    var test = PropTest(config=PropTestConfig(runs=iters))
-    test.test[test_parse](JsonStringStrategy())
-    print("Test passed!")
+        with open("./bench_data/big_lines_complex.jsonl", "w") as f:
+            for i in range(1_000):
+                f.write(strat.value(rng), "\n")
+
+    else:
+        print("Running fuzzy tests...")
+        var iters = 100
+
+        @parameter
+        fn test_parse(s: String) raises:
+            var rng = Rng(seed=Int(perf_counter_ns()))
+            var j: JSON = {}
+            if iters % 4 == 0:
+                var start = rng.rand_int(min=0, max=len(s))
+                var end = rng.rand_int(min=start, max=len(s))
+                var corrupted = s[start:end]
+                try:
+                    j = parse(corrupted)
+                except:
+                    # Main thing is we don't want this to crash.
+                    # But don't enforce failure on the off chance this slicing happens to
+                    # produce valid json.
+                    pass
+            else:
+                j = parse(s)
+            iters -= 1
+            keep(j)
+
+        var test = PropTest(config=PropTestConfig(runs=iters))
+        test.test[test_parse](JsonStringStrategy())
+        print("Test passed!")
