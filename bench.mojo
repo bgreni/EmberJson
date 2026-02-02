@@ -9,8 +9,9 @@ from emberjson import (
     Null,
     deserialize,
     serialize,
+    read_lines,
 )
-from benchmark import (
+from std.benchmark import (
     Bench,
     BenchId,
     ThroughputMeasure,
@@ -19,6 +20,264 @@ from benchmark import (
     BenchConfig,
     keep,
 )
+from python import Python, PythonObject
+from std.sys import argv
+from std.pathlib import Path
+
+comptime BenchResults = Dict[String, Float64]
+
+
+fn main() raises:
+    var config = BenchConfig()
+    config.verbose_timing = True
+    config.flush_denormals = True
+    config.show_progress = True
+    var m = Bench(config^)
+    run_benchchecks(m)
+
+
+fn run_benchmarks(mut m: Bench) raises:
+    var args = argv()
+    var print_relative = False
+    var overwrite = False
+
+    for i in range(len(args)):
+        if args[i] == "--print-relative":
+            print_relative = True
+        if args[i] == "--overwrite":
+            overwrite = True
+
+    var report_str: String
+    if print_relative or overwrite:
+        report_str = capture_report(m)
+        print(report_str)
+    else:
+        m.dump_report()
+        return
+
+    var new_results = parse_report(report_str)
+
+    if print_relative:
+        var old_content: String = ""
+        try:
+            with open("bench_result.txt", "r") as f:
+                old_content = f.read()
+        except:
+            print("Could not read bench_result.txt for comparison")
+        var old_results = parse_report(old_content)
+        print_relative_performance(old_results^, new_results^)
+
+    if overwrite:
+        write_report(report_str)
+
+
+fn capture_report(mut m: Bench) raises -> String:
+    var os = Python.import_module("os")
+    var sys_py = Python.import_module("sys")
+    var io = Python.import_module("io")
+
+    # Create pipe
+    var r_w = os.pipe()  # Returns (r, w) tuple
+    var r = r_w[0]
+    var w = r_w[1]
+
+    var stdout_fd = sys_py.stdout.fileno()
+    var saved_stdout = os.dup(stdout_fd)
+
+    # Redirect stdout to pipe
+    _ = os.dup2(w, stdout_fd)
+
+    m.dump_report()
+
+    # Flush and restore
+    _ = sys_py.stdout.flush()
+    _ = os.dup2(saved_stdout, stdout_fd)
+    _ = os.close(w)
+
+    # Read from pipe
+    var file_obj = os.fdopen(r)
+    var content = file_obj.read()
+
+    return String(content)
+
+
+fn parse_report(report: String) raises -> BenchResults:
+    var lines = report.split("\n")
+    var results = BenchResults()
+
+    # Find header index
+    var header_idx = -1
+    var col_idx = -1
+    for i in range(len(lines)):
+        if "DataMovement (GB/s)" in lines[i]:
+            header_idx = i
+            var parts = lines[i].split("|")
+            for j in range(len(parts)):
+                if "DataMovement (GB/s)" in parts[j]:
+                    col_idx = j
+            break
+
+    if header_idx == -1 or col_idx == -1:
+        return results^
+
+    for i in range(header_idx + 1, len(lines)):
+        var line = lines[i]
+        if not line or line.strip().startswith("-"):
+            continue
+        var parts = line.split("|")
+        if len(parts) > col_idx:
+            var name = parts[1].strip()
+            var val_str = parts[col_idx].strip()
+            try:
+                # Try direct Float64 parsing from string
+                var val_flt = Float64(val_str)
+                results[String(name)] = val_flt
+            except:
+                pass
+
+    return results^
+
+
+fn print_relative_performance(
+    var old_results: BenchResults,
+    var new_results: BenchResults,
+) raises:
+    print("")
+    print("Relative Performance (GB/s vs bench_result.txt)")
+    print(
+        "---------------------------------------------------------------------------------------------------------"
+    )
+    print(
+        "| Benchmark Name                                | Old (GB/s) | New"
+        " (GB/s) | Diff       | Speedup     |"
+    )
+    print(
+        "|-----------------------------------------------|------------|------------|------------|-------------|"
+    )
+
+    for item in new_results.items():
+        var name = item.key
+        var new_val = item.value
+
+        var name_pad = name
+        while len(name_pad) < 45:
+            name_pad = name_pad + " "
+
+        if name in old_results:
+            var old_val = old_results[name]
+            var diff_pct = (new_val - old_val) / old_val * 100.0
+            var speedup = new_val / old_val
+
+            var sign = "+" if diff_pct >= 0 else ""
+            var diff_str = String(sign + String(diff_pct)[0:5] + "%")
+            var speedup_str = String(String(speedup)[0:4] + "x")
+            var old_str = String(String(old_val)[0:6])
+            var new_str = String(String(new_val)[0:6])
+
+            # Pad output manually (inefficient but works without formatting lib)
+            var pad_len = 10
+            while len(old_str) < pad_len:
+                old_str = old_str + " "
+            while len(new_str) < pad_len:
+                new_str = new_str + " "
+            while len(diff_str) < pad_len:
+                diff_str = diff_str + " "
+            while len(speedup_str) < 11:
+                speedup_str = speedup_str + " "
+
+            print(
+                "| "
+                + name_pad
+                + " | "
+                + old_str
+                + " | "
+                + new_str
+                + " | "
+                + diff_str
+                + " | "
+                + speedup_str
+                + " |"
+            )
+        else:
+            print(
+                "| "
+                + name_pad
+                + " | N/A        | "
+                + String(new_val)[0:6]
+                + "     | N/A        | N/A         |"
+            )
+
+    print(
+        "---------------------------------------------------------------------------------------------------------"
+    )
+    print("")
+
+
+fn write_report(report: String) raises:
+    var header = String("Run on unknown system")
+    try:
+        var platform = Python.import_module("platform")
+        var system = String(platform.system())
+
+        var cpu_info = String("")
+        if system == "Darwin":
+            var subprocess = Python.import_module("subprocess")
+            # Try to get MacOS CPU brand string
+            try:
+                var cmd = Python.evaluate(
+                    "['sysctl', '-n', 'machdep.cpu.brand_string']"
+                )
+                var res = subprocess.check_output(cmd).decode("utf-8").strip()
+                cpu_info = String(res)
+
+                var cmd_cores = Python.evaluate(
+                    "['sysctl', '-n', 'hw.physicalcpu']"
+                )
+                var cores = (
+                    subprocess.check_output(cmd_cores).decode("utf-8").strip()
+                )
+
+                var cmd_mem = Python.evaluate("['sysctl', '-n', 'hw.memsize']")
+                var mem_bytes = (
+                    subprocess.check_output(cmd_mem).decode("utf-8").strip()
+                )
+                # Use Python to format bytes to GB
+                var mem_gb_py = Python.evaluate(
+                    "'{:.2f}'.format(" + String(mem_bytes) + "/(1024**3))"
+                )
+                var mem_gb = String(mem_gb_py)
+
+                cpu_info = (
+                    cpu_info
+                    + "\nCores: "
+                    + String(cores)
+                    + "\nMemory: "
+                    + mem_gb
+                    + " GB"
+                )
+            except:
+                pass
+
+        if len(cpu_info) == 0:
+            cpu_info = (
+                String(platform.machine()) + " " + String(platform.processor())
+            )
+
+        header = (
+            "Run on "
+            + String(system)
+            + " "
+            + String(platform.release())
+            + "\nCPU: "
+            + cpu_info
+        )
+    except:
+        pass
+
+    var content = header + "\n\n" + report
+    with open("bench_result.txt", "w") as f:
+        f.write(content)
+    print("Updated bench_result.txt")
 
 
 fn get_data(file: String) -> String:
@@ -66,13 +325,22 @@ fn run[
     )
 
 
-fn main() raises:
-    var config = BenchConfig()
-    config.verbose_timing = True
-    config.flush_denormals = True
-    config.show_progress = True
-    var m = Bench(config^)
+fn run[
+    func: fn (mut Bencher, Path) raises capturing, name: String
+](mut m: Bench, path: Path) raises:
+    var size: Int
+    with open(path, "r") as f:
+        var data = f.read()
+        size = data.byte_length()
 
+    m.bench_with_input[Path, benchmark_jsonl_parse](
+        BenchId("ParseLargeJsonl"),
+        path,
+        [ThroughputMeasure(BenchMetric.bytes, size)],
+    )
+
+
+fn run_benchchecks(mut m: Bench) raises:
     var canada = get_data("canada.json")
     var catalog = get_data("citm_catalog.json")
     var twitter = get_data("twitter.json")
@@ -80,27 +348,6 @@ fn main() raises:
     var data: String
     with open("./bench_data/users_1k.json", "r") as f:
         data = f.read()
-
-    @parameter
-    fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
-        @always_inline
-        @parameter
-        fn do() raises:
-            var p = Parser[options = ParseOptions(ignore_unicode=True)](s)
-            var v = p.parse()
-            keep(v)
-
-        b.iter[do]()
-
-    @parameter
-    fn benchmark_minify(mut b: Bencher, s: String) raises:
-        @always_inline
-        @parameter
-        fn do() raises:
-            var v = minify(s)
-            keep(v)
-
-        b.iter[do]()
 
     run[benchmark_json_parse, "ParseTwitter"](m, twitter)
     run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
@@ -114,6 +361,10 @@ fn main() raises:
         benchmark_deserialize_canada_with_reflection,
         "ParseCanadaWithReflection",
     ](m, canada)
+
+    run[benchmark_jsonl_parse, "ParseLargeJSONL"](
+        m, "./bench_data/big_lines_complex.jsonl"
+    )
 
     run[benchmark_json_parse, "ParseSmall"](m, small_data)
     run[benchmark_json_parse, "ParseMedium"](m, medium_array)
@@ -140,15 +391,13 @@ fn main() raises:
 
     run[benchmark_value_stringify, "StringifyLarge"](m, parse(large_array))
     run[benchmark_value_stringify, "StringifyCanada"](m, parse(canada))
-    var pcanada = Parser(canada)
     run[benchmark_reflection_serialize, "StringifyCanadaWithReflection"](
-        m, deserialize[Canada](pcanada^)
+        m, deserialize[Canada](canada)
     )
     run[benchmark_value_stringify, "StringifyTwitter"](m, parse(twitter))
 
-    var pcat = Parser(catalog)
     run[benchmark_reflection_serialize, "StringifyCitmCatalogWithReflection"](
-        m, deserialize[CatalogData](pcat^)
+        m, deserialize[CatalogData](catalog)
     )
     run[benchmark_value_stringify, "StringifyCitmCatalog"](m, parse(catalog))
 
@@ -167,7 +416,41 @@ fn main() raises:
     run[benchmark_pretty_print, "WritePrettyTwitter"](m, parse(twitter))
     run[benchmark_pretty_print, "WritePrettyCanada"](m, parse(canada))
 
-    m.dump_report()
+    run_benchmarks(m)
+
+
+@parameter
+fn benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
+    @always_inline
+    @parameter
+    fn do() raises:
+        var lines = read_lines(p).collect()
+        keep(lines)
+
+    b.iter[do]()
+
+
+@parameter
+fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
+    @always_inline
+    @parameter
+    fn do() raises:
+        var p = Parser[options = ParseOptions(ignore_unicode=True)](s)
+        var v = p.parse()
+        keep(v)
+
+    b.iter[do]()
+
+
+@parameter
+fn benchmark_minify(mut b: Bencher, s: String) raises:
+    @always_inline
+    @parameter
+    fn do() raises:
+        var v = minify(s)
+        keep(v)
+
+    b.iter[do]()
 
 
 @parameter

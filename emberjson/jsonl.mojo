@@ -1,7 +1,8 @@
 from pathlib import Path
 from .json import JSON
-from memory import ArcPointer, memset
+from memory import ArcPointer, memset, Span, memcpy
 from .constants import `\n`, `\r`
+from std.os import PathLike
 
 
 struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
@@ -60,32 +61,41 @@ struct JSONLinesIter(Iterator):
         self.read_buf = _ReadBuffer()
 
     fn __next__(mut self, out j: JSON) raises StopIteration:
+        var line: List[Byte]
         try:
-            var line = self._read_until_newline()
-            if not line:
-                raise StopIteration()
-            j = JSON(parse_bytes=line.as_bytes())
-        except:
+            line = self._read_until_newline()
+        except e:
+            raise StopIteration()
+
+        try:
+            j = JSON(parse_bytes=Span(ptr=line.unsafe_ptr(), length=len(line)))
+        except e:
             raise StopIteration()
 
     fn __iter__(var self) -> Self:
         return self^
 
-    fn _read_until_newline(mut self) raises -> String:
+    fn collect(deinit self, out l: List[Value]) raises:
+        l = List[Value]()
+        while True:
+            try:
+                l.append(self.__next__())
+            except StopIteration:
+                break
+
+    fn _read_until_newline(mut self) raises -> List[Byte]:
         ref file = self.f
 
-        var line = String()
-
-        @parameter
-        fn consume_line(ind: Int) raises -> String:
-            line += StringSlice(from_utf8=self.read_buf.buf)[0:ind]
-            self.read_buf.clear(ind + 1)
-
-            return line
+        var line = List[Byte]()
 
         var newline_ind = self.read_buf.index(`\n`)
         if newline_ind != -1:
-            return consume_line(newline_ind)
+            var p = self.read_buf.ptr()
+            var old_len = len(line)
+            line.resize(old_len + newline_ind, 0)
+            memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=newline_ind)
+            self.read_buf.clear(newline_ind + 1)
+            return line^
 
         while True:
             buf_span = Span(
@@ -97,22 +107,35 @@ struct JSONLinesIter(Iterator):
 
             if read <= 0:
                 if len(self.read_buf) != 0:
-                    line += StringSlice(from_utf8=self.read_buf.buf)[
-                        0 : len(self.read_buf)
-                    ]
+                    var p = self.read_buf.ptr()
+                    var old_len = len(line)
+                    var count = len(self.read_buf)
+                    line.resize(old_len + count, 0)
+                    memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=count)
                     self.read_buf.clear()
-                return line
+                return line^
 
             newline_ind = self.read_buf.index(`\n`)
 
             if newline_ind != -1:
-                return consume_line(newline_ind)
+                var p = self.read_buf.ptr()
+                var old_len = len(line)
+                line.resize(old_len + newline_ind, 0)
+                memcpy(
+                    dest=line.unsafe_ptr() + old_len, src=p, count=newline_ind
+                )
+                self.read_buf.clear(newline_ind + 1)
+                return line^
             else:
-                line += StringSlice(from_utf8=self.read_buf.buf)
+                var p = self.read_buf.ptr()
+                var old_len = len(line)
+                var count = len(self.read_buf)
+                line.resize(old_len + count, 0)
+                memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=count)
                 self.read_buf.clear()
 
 
-fn read_lines(p: Path) raises -> JSONLinesIter:
+fn read_lines(p: Some[PathLike]) raises -> JSONLinesIter:
     return JSONLinesIter(open(p, "r"))
 
 

@@ -21,48 +21,48 @@ def test_rfc6901():
     )
     var j = JSON(parse_string=json_str)
 
-    assert_equal(j.pointer("").object()["foo"].array()[0].string(), "bar")
+    assert_equal(j.get("").object()["foo"].array()[0].string(), "bar")
 
-    assert_equal(j.pointer("/foo").array()[0].string(), "bar")
-    assert_equal(j.pointer("/foo/0").string(), "bar")
-    assert_equal(j.pointer("/").int(), 0)
-    assert_equal(j.pointer("/a~1b").int(), 1)
-    assert_equal(j.pointer("/c%d").int(), 2)
-    assert_equal(j.pointer("/e^f").int(), 3)
-    assert_equal(j.pointer("/g|h").int(), 4)
-    assert_equal(j.pointer("/i\\j").int(), 5)
-    assert_equal(j.pointer('/k"l').int(), 6)
-    assert_equal(j.pointer("/ ").int(), 7)
-    assert_equal(j.pointer("/m~0n").int(), 8)
-    assert_equal(j.pointer("/0123").int(), 9)
+    assert_equal(j.get("/foo").array()[0].string(), "bar")
+    assert_equal(j.get("/foo/0").string(), "bar")
+    assert_equal(j.get("/").int(), 0)
+    assert_equal(j.get("/a~1b").int(), 1)
+    assert_equal(j.get("/c%d").int(), 2)
+    assert_equal(j.get("/e^f").int(), 3)
+    assert_equal(j.get("/g|h").int(), 4)
+    assert_equal(j.get("/i\\j").int(), 5)
+    assert_equal(j.get('/k"l').int(), 6)
+    assert_equal(j.get("/ ").int(), 7)
+    assert_equal(j.get("/m~0n").int(), 8)
+    assert_equal(j.get("/0123").int(), 9)
 
 
 def test_errors():
     var j = JSON(parse_string='{"a": 1}')
 
     with assert_raises():
-        _ = j.pointer("a")  # No leading /
+        _ = j.get("a")  # No leading /
 
     with assert_raises():
-        _ = j.pointer("/b")  # Missing key
+        _ = j.get("/b")  # Missing key
 
     with assert_raises():
-        _ = j.pointer("/a/0")  # Traversing primitive
+        _ = j.get("/a/0")  # Traversing primitive
 
 
 def test_array_idx():
     var j = JSON(parse_string="[10, 20]")
-    assert_equal(j.pointer("/0").int(), 10)
-    assert_equal(j.pointer("/1").int(), 20)
+    assert_equal(j.get("/0").int(), 10)
+    assert_equal(j.get("/1").int(), 20)
 
     with assert_raises():
-        _ = j.pointer("/2")  # OOB
+        _ = j.get("/2")  # OOB
 
     with assert_raises():
-        _ = j.pointer("/-1")  # Negative
+        _ = j.get("/-1")  # Negative
 
     with assert_raises():
-        _ = j.pointer("/01")  # Leading zero
+        _ = j.get("/01")  # Leading zero
 
 
 def test_explicit_pointer_index():
@@ -70,12 +70,12 @@ def test_explicit_pointer_index():
     var ptr = PointerIndex("/foo/1")
 
     var j = JSON(parse_string='{"foo": ["bar", "baz"]}')
-    ref val = j.pointer(ptr)
+    ref val = j.get(ptr)
     assert_equal(val.string(), "baz")
 
     comptime ptr2 = PointerIndex.try_from_string("/foo/0")
     __comptime_assert ptr2 is not None
-    assert_equal(j.pointer(materialize[ptr2]().value()).string(), "bar")
+    assert_equal(j.get(materialize[ptr2]().value()).string(), "bar")
 
 
 def test_getattr_method():
@@ -101,10 +101,10 @@ def test_unicode_keys():
     var j = JSON(
         parse_string='{"🔥": "fire", "🚀": "rocket", "key with spaces": 1}'
     )
-    assert_equal(j.pointer("/🔥").string(), "fire")
+    assert_equal(j.get("/🔥").string(), "fire")
     assert_equal(j.`🔥`.string(), "fire")
-    assert_equal(j.pointer("/🚀").string(), "rocket")
-    assert_equal(j.pointer("/key with spaces").int(), 1)
+    assert_equal(j.get("/🚀").string(), "rocket")
+    assert_equal(j.get("/key with spaces").int(), 1)
     assert_equal(j.`key with spaces`.int(), 1)
 
 

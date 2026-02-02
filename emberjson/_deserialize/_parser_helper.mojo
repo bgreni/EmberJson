@@ -1,6 +1,7 @@
 from emberjson.utils import BytePtr, CheckedPointer, select
 from memory import UnsafePointer
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
+from memory import memcpy
 from emberjson.constants import (
     `0`,
     `9`,
@@ -152,7 +153,7 @@ fn hex_to_u32(p: BytePtr) -> UInt32:
 
 
 fn handle_unicode_codepoint(
-    mut p: BytePtr, mut dest: String, end: BytePtr
+    mut p: BytePtr, mut dest: List[UInt8], end: BytePtr
 ) raises:
     # TODO: is this check necessary or just being paranoid?
     # because theoretically no string can be built with "\u" only
@@ -192,22 +193,34 @@ fn handle_unicode_codepoint(
 
     if unlikely(c1 > 0x10FFFF):
         raise Error("Invalid unicode")
-    dest.append(Codepoint(unsafe_unchecked_codepoint=c1))
+
+    if c1 < 0x80:
+        dest.append(UInt8(c1))
+    elif c1 < 0x800:
+        dest.append(UInt8(0xC0 | (c1 >> 6)))
+        dest.append(UInt8(0x80 | (c1 & 0x3F)))
+    elif c1 < 0x10000:
+        dest.append(UInt8(0xE0 | (c1 >> 12)))
+        dest.append(UInt8(0x80 | ((c1 >> 6) & 0x3F)))
+        dest.append(UInt8(0x80 | (c1 & 0x3F)))
+    else:
+        dest.append(UInt8(0xF0 | (c1 >> 18)))
+        dest.append(UInt8(0x80 | ((c1 >> 12) & 0x3F)))
+        dest.append(UInt8(0x80 | ((c1 >> 6) & 0x3F)))
+        dest.append(UInt8(0x80 | (c1 & 0x3F)))
 
 
 @always_inline
 fn copy_to_string[
     ignore_unicode: Bool = False
-](
-    out s: String, start: BytePtr, end: BytePtr, found_escaped: Bool = True
-) raises:
+](start: BytePtr, end: BytePtr, found_escaped: Bool = True) raises -> String:
     var length = ptr_dist(start, end)
 
     @parameter
-    fn decode_escaped(out res: String) raises:
+    fn decode_escaped() raises -> String:
         # This will usually slightly overallocate if the string contains
         # escaped unicode
-        var l = String(capacity=length)
+        var dest = List[UInt8](capacity=length)
         var p = start
 
         while p < end:
@@ -218,10 +231,13 @@ fn copy_to_string[
 
             # Bulk copy non-escaped chunk
             if p > chunk_start:
-                l.write(
-                    StringSlice(
-                        ptr=chunk_start, length=ptr_dist(chunk_start, p)
-                    )
+                var chunk_len = ptr_dist(chunk_start, p)
+                var old_size = len(dest)
+                dest.resize(old_size + chunk_len, 0)
+                memcpy(
+                    dest=dest.unsafe_ptr() + old_size,
+                    src=chunk_start,
+                    count=chunk_len,
                 )
 
             # If we hit backslash, handle escape
@@ -229,36 +245,36 @@ fn copy_to_string[
                 p += 1  # skip backslash
                 if p < end:
                     var c = p[0]
-                    if c == `u`:  # u
+                    if c == `u`:
                         p += 1
-                        handle_unicode_codepoint(p, l, end)
-                    elif c == `"`:  # "
-                        l.append(Codepoint(`"`))
+                        handle_unicode_codepoint(p, dest, end)
+                    elif c == `"`:
+                        dest.append(`"`)
                         p += 1
-                    elif c == `\\`:  # \
-                        l.append(Codepoint(`\\`))
+                    elif c == `\\`:
+                        dest.append(`\\`)
                         p += 1
-                    elif c == `/`:  # /
-                        l.append(Codepoint(`/`))
+                    elif c == `/`:
+                        dest.append(`/`)
                         p += 1
-                    elif c == `b`:  # b
-                        l.append(Codepoint(0x08))
+                    elif c == `b`:
+                        dest.append(`\b`)
                         p += 1
-                    elif c == `f`:  # f
-                        l.append(Codepoint(0x0C))
+                    elif c == `f`:
+                        dest.append(`\f`)
                         p += 1
-                    elif c == `n`:  # n
-                        l.append(Codepoint(0x0A))
+                    elif c == `n`:
+                        dest.append(`\n`)
                         p += 1
-                    elif c == `r`:  # r
-                        l.append(Codepoint(0x0D))
+                    elif c == `r`:
+                        dest.append(`\r`)
                         p += 1
-                    elif c == `t`:  # t
-                        l.append(Codepoint(0x09))
+                    elif c == `t`:
+                        dest.append(`\t`)
                         p += 1
                     else:
                         raise Error("Invalid escape sequence")
-        res = l^
+        return String(unsafe_from_utf8=dest^)
 
     @parameter
     if not ignore_unicode:

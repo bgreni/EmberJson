@@ -15,12 +15,16 @@ repository = "https://github.com/bgreni/EmberJson"
 build = { cmd = "mojo package emberjson -o emberjson.mojopkg" }
 format = { cmd = "mojo format -l 80 ." }
 test = { cmd = "python run_tests.py" }
-bench = { cmd = "mojo build bench.mojo && ./bench && rm bench" }
+build_bench = "mojo build bench.mojo"
+bench = { cmd = "./bench && rm bench", depends-on=["build_bench"] }
+bench_compare = { cmd = "./bench --print-relative && rm bench", depends-on=["build_bench"] }
+bench_write_results = { cmd = "./bench --overwrite && rm bench", depends-on=["build_bench"] }
 update_and_build = { cmd = "pixi update && pixi run test && pixi run build" }
 precommit = { depends-on = ["format", "test", "test_python_compat", "fuzz"] }
-update_and_test = "pixi update && pixi run test && pixi run bench"
+update_and_test = "pixi update && pixi run test && pixi run bench_compare"
 test_python_compat = "python python_compat.py"
 fuzz = "mojo -D ASSERT=all --disable-warnings fuzz.mojo"
+gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 
 [dependencies]
 mojo = ">=0.26.1, <0.27"

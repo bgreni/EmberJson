@@ -450,12 +450,12 @@ struct Value(JsonValue, Sized):
         else:
             abort("Unreachable: to_python_object")
 
-    fn pointer(ref self, path: PointerIndex) raises -> ref [self] Value:
+    fn get(ref self, path: PointerIndex) raises -> ref [self] Value:
         return resolve_pointer(self, path)
 
     fn __getattr__(ref self, var name: String) raises -> ref [self] Value:
         if name.startswith("/"):
-            return self.pointer(name)
+            return self.get(name)
         else:
             if self.is_object():
                 return UnsafePointer(to=self.object()[name]).unsafe_origin_cast[
@@ -466,7 +466,7 @@ struct Value(JsonValue, Sized):
 
     fn __setattr__(mut self, var name: String, var value: Value) raises:
         if name.startswith("/"):
-            self.pointer(name) = value^
+            self.get(name) = value^
         else:
             if self.is_object():
                 self.object()[name] = value^
