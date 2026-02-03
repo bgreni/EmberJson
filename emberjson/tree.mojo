@@ -61,8 +61,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
 
 
 @fieldwise_init
-@register_passable("trivial")
-struct _TreeIter(Copyable, Movable, Sized):
+struct _TreeIter(Sized, TrivialRegisterType):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int
@@ -72,7 +71,7 @@ struct _TreeIter(Copyable, Movable, Sized):
         return self
 
     @always_inline
-    fn __next__(mut self) raises StopIteration -> ref [self.curr[]] TreeNode:
+    fn __next__(mut self) raises StopIteration -> ref[self.curr[]] TreeNode:
         if self.seen >= self.total:
             raise StopIteration()
         self.seen += 1
@@ -86,8 +85,7 @@ struct _TreeIter(Copyable, Movable, Sized):
 
 
 @fieldwise_init
-@register_passable("trivial")
-struct _TreeKeyIter(Copyable, Movable, Sized):
+struct _TreeKeyIter(Sized, TrivialRegisterType):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int
@@ -97,7 +95,7 @@ struct _TreeKeyIter(Copyable, Movable, Sized):
         return self
 
     @always_inline
-    fn __next__(mut self) raises StopIteration -> ref [self.curr[].key] String:
+    fn __next__(mut self) raises StopIteration -> ref[self.curr[].key] String:
         if self.seen >= self.total:
             raise StopIteration()
         self.seen += 1
@@ -111,8 +109,7 @@ struct _TreeKeyIter(Copyable, Movable, Sized):
 
 
 @fieldwise_init
-@register_passable("trivial")
-struct _TreeValueIter(Copyable, Movable, Sized):
+struct _TreeValueIter(Copyable, Movable, Sized, TrivialRegisterType):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int
@@ -122,7 +119,7 @@ struct _TreeValueIter(Copyable, Movable, Sized):
         return self
 
     @always_inline
-    fn __next__(mut self) raises StopIteration -> ref [self.curr[].data] Value:
+    fn __next__(mut self) raises StopIteration -> ref[self.curr[].data] Value:
         if self.seen >= self.total:
             raise StopIteration()
         self.seen += 1
@@ -235,7 +232,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
     fn find(self, key: String) -> Self.NodePtr:
         return _find(self.root, key)
 
-    fn __getitem__(ref self, key: String) raises -> ref [self] Value:
+    fn __getitem__(ref self, key: String) raises -> ref[self] Value:
         var node = self.find(key)
         if not node:
             raise Error("Missing key error: ", key)
@@ -274,7 +271,7 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
 ########################################################################
 
 
-fn for_each[visit: fn (TreeNodePtr)](node: TreeNodePtr):
+fn for_each[visit: fn(TreeNodePtr)](node: TreeNodePtr):
     if not node:
         return
     for_each[visit](node[].left)

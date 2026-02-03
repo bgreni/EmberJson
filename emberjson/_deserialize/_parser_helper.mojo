@@ -82,8 +82,8 @@ fn ptr_dist(start: BytePtr, end: BytePtr) -> Int:
     return Int(end) - Int(start)
 
 
-@register_passable("trivial")
-struct StringBlock:
+@fieldwise_init
+struct StringBlock(TrivialRegisterType):
     comptime BitMask = SIMD[DType.bool, SIMD8_WIDTH]
 
     var bs_bits: Bits_T

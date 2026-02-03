@@ -106,8 +106,7 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
 
 
 @fieldwise_init
-@register_passable("trivial")
-struct Fields(Copyable):
+struct Fields(TrivialRegisterType):
     var mantissa: UInt64
     var exponent: Int32
 

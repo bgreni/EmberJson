@@ -5,9 +5,8 @@ from ._deserialize import Parser
 from python import PythonObject, Python
 
 
-@register_passable("trivial")
 struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
-    Copyable, Movable, Sized
+    Copyable, Sized, TrivialRegisterType
 ):
     var index: Int
     var src: Pointer[Array, Self.origin]
