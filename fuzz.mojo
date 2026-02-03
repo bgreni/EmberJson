@@ -51,7 +51,8 @@ struct JsonStringStrategy(Movable, Strategy):
             raise Error("Invalid choice")
 
     fn gen_string(self, mut rng: Rng) raises -> String:
-        var strat = String.strategy(unicode=coin_flip(rng))
+        # TODO: Fix string strategy
+        var strat = String.strategy(unicode=False, only_printable=True)
         return strat.value(rng)
 
     fn gen_array(self, mut rng: Rng, depth: Int) raises -> Array:
@@ -81,7 +82,7 @@ fn main() raises:
         var strat = JsonStringStrategy()
 
         with open("./bench_data/big_lines_complex.jsonl", "w") as f:
-            for i in range(1_000):
+            for _ in range(1_000):
                 f.write(strat.value(rng), "\n")
 
     else:

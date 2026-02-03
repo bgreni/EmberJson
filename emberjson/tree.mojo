@@ -109,7 +109,7 @@ struct _TreeKeyIter(Sized, TrivialRegisterType):
 
 
 @fieldwise_init
-struct _TreeValueIter(Copyable, Movable, Sized, TrivialRegisterType):
+struct _TreeValueIter(Sized, TrivialRegisterType):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int

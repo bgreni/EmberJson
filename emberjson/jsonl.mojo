@@ -3,6 +3,9 @@ from .json import JSON
 from memory import ArcPointer, memset, Span, memcpy
 from .constants import `\n`, `\r`
 from std.os import PathLike
+from .simd import SIMD8_WIDTH
+from std.bit import count_leading_zeros
+from memory.unsafe import pack_bits
 
 
 struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
@@ -14,7 +17,8 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
         self.buf = InlineArray[Byte, Self.BUFFER_SIZE](fill=0)
         self.length = 0
 
-    fn ptr(mut self) -> UnsafePointer[Byte, origin = origin_of(self.buf)]:
+    @always_inline
+    fn ptr(ref self) -> UnsafePointer[Byte, origin = origin_of(self.buf)]:
         return self.buf.unsafe_ptr()
 
     fn index(self, b: Byte) -> Int:
@@ -27,8 +31,11 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
     fn clear(mut self, n: Int):
         self.length -= n
 
-        for i in range(0, self.length):
-            self.buf[i] = self.buf[i + n]
+        memcpy(
+            dest=self.ptr(),
+            src=self.ptr() + n,
+            count=self.length,
+        )
 
         memset(self.ptr() + self.length, 0, Self.BUFFER_SIZE - self.length)
 
@@ -37,12 +44,10 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
         self.length = 0
 
     fn __str__(self) -> String:
-        return String(
-            unsafe_from_utf8=Span(ptr=self.buf.unsafe_ptr(), length=self.length)
-        )
+        return String(unsafe_from_utf8=Span(ptr=self.ptr(), length=self.length))
 
     fn write_to(self, mut writer: Some[Writer]):
-        writer.write(String(self))
+        writer.write(StringSlice(ptr=self.ptr(), length=self.length))
 
     fn __len__(self) -> Int:
         return self.length
