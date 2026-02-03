@@ -24,7 +24,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
     fn __iter__(self) -> Self:
         return self
 
-    fn __next__(mut self) raises StopIteration -> ref [self.src[]._data] Value:
+    fn __next__(mut self) raises StopIteration -> ref[self.src[]._data] Value:
         if self.index >= len(self):
             raise StopIteration()
 
@@ -77,7 +77,7 @@ struct Array(JsonValue, Sized):
         self = p.parse_array()
 
     @always_inline
-    fn __getitem__(ref self, ind: Some[Indexer]) -> ref [self._data] Value:
+    fn __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data] Value:
         return self._data[ind]
 
     @always_inline

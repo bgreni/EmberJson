@@ -1,5 +1,5 @@
 from emberjson import JSON, Value, PointerIndex
-from testing import assert_equal, assert_raises, assert_true, TestSuite
+from std.testing import assert_equal, assert_raises, assert_true, TestSuite
 
 
 def test_rfc6901():

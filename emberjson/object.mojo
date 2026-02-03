@@ -60,7 +60,7 @@ struct Object(JsonValue, Sized):
         self._data[key^] = item^
 
     @always_inline
-    fn __getitem__(ref self, key: String) raises -> ref [self._data] Value:
+    fn __getitem__(ref self, key: String) raises -> ref[self._data] Value:
         return self._data.__getitem__(key)
 
     @always_inline

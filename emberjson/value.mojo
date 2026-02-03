@@ -253,14 +253,14 @@ struct Value(JsonValue, Sized):
             raise Error("expected string key")
         return v.string() in self.object().copy()
 
-    fn __getitem__(ref self, ind: Some[Indexer]) raises -> ref [self] Value:
+    fn __getitem__(ref self, ind: Some[Indexer]) raises -> ref[self] Value:
         if not self.is_array():
             raise Error("Expected numerical index for array")
         return UnsafePointer(to=self.array()[ind]).unsafe_origin_cast[
             origin_of(self)
         ]()[]
 
-    fn __getitem__(ref self, key: String) raises -> ref [self] Value:
+    fn __getitem__(ref self, key: String) raises -> ref[self] Value:
         if not self.is_object():
             raise Error("Expected string key for object")
         return UnsafePointer(to=self.object()[key]).unsafe_origin_cast[
@@ -328,7 +328,7 @@ struct Value(JsonValue, Sized):
         return self.isa[Null]()
 
     @always_inline
-    fn get[T: Movable & Copyable](ref self) -> ref [self._data] T:
+    fn get[T: Movable & Copyable](ref self) -> ref[self._data] T:
         constrain_json_type[T]()
         return self._data[T]
 
@@ -351,7 +351,7 @@ struct Value(JsonValue, Sized):
         return Null()
 
     @always_inline
-    fn string(ref self) -> ref [self._data] String:
+    fn string(ref self) -> ref[self._data] String:
         return self.get[String]()
 
     @always_inline
@@ -363,11 +363,11 @@ struct Value(JsonValue, Sized):
         return self.get[Bool]()
 
     @always_inline
-    fn object(ref self) -> ref [self._data] Object:
+    fn object(ref self) -> ref[self._data] Object:
         return self.get[Object]()
 
     @always_inline
-    fn array(ref self) -> ref [self._data] Array:
+    fn array(ref self) -> ref[self._data] Array:
         return self.get[Array]()
 
     fn write_to(self, mut writer: Some[Writer]):
@@ -450,10 +450,10 @@ struct Value(JsonValue, Sized):
         else:
             abort("Unreachable: to_python_object")
 
-    fn get(ref self, path: PointerIndex) raises -> ref [self] Value:
+    fn get(ref self, path: PointerIndex) raises -> ref[self] Value:
         return resolve_pointer(self, path)
 
-    fn __getattr__(ref self, var name: String) raises -> ref [self] Value:
+    fn __getattr__(ref self, var name: String) raises -> ref[self] Value:
         if name.startswith("/"):
             return self.get(name)
         else:
