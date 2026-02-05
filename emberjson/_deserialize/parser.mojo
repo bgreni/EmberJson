@@ -71,6 +71,42 @@ from emberjson.constants import (
     `1`,
 )
 
+
+trait Deserializer(ImplicitlyDestructible):
+    fn peek(self) raises -> Byte:
+        ...
+
+    fn expect(mut self, b: Byte) raises:
+        ...
+
+    fn read_string(mut self) raises -> String:
+        ...
+
+    fn expect_integer[
+        type: DType = DType.int64
+    ](mut self) raises -> Scalar[type]:
+        ...
+
+    fn expect_unsigned_integer[
+        type: DType = DType.uint64
+    ](mut self) raises -> Scalar[type]:
+        ...
+
+    fn expect_float[
+        type: DType = DType.float64
+    ](mut self) raises -> Scalar[type]:
+        ...
+
+    fn expect_bool(mut self) raises -> Bool:
+        ...
+
+    fn expect_null(mut self) raises:
+        ...
+
+    fn skip_whitespace(mut self) raises:
+        ...
+
+
 #######################################################
 # Certain parts inspired/taken from SonicCPP and simdjon
 # https://github.com/bytedance/sonic-cpp
@@ -96,7 +132,9 @@ comptime IntegerParseResult[origin: ImmutOrigin] = Tuple[
 ]
 
 
-struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
+struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
+    Deserializer
+):
     var data: CheckedPointer[Self.origin]
     var size: Int
 
@@ -642,7 +680,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn expect_integer[
         type: DType = DType.int64
     ](mut self) raises -> Scalar[type]:
-        __comptime_assert (
+        comptime assert (
             type.is_signed()
         ), "Expected signed integer, found unsigned type: " + String(type)
 
@@ -688,7 +726,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn expect_unsigned_integer[
         type: DType = DType.uint64
     ](mut self) raises -> Scalar[type]:
-        __comptime_assert (
+        comptime assert (
             type.is_unsigned()
         ), "Expected unsigned integer, found signed type: " + String(type)
 
@@ -724,7 +762,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn expect_float[
         type: DType = DType.float64
     ](mut self) raises -> Scalar[type]:
-        __comptime_assert (
+        comptime assert (
             type.is_floating_point()
         ), "Expected float, found non-float type: " + String(type)
 

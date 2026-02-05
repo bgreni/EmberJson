@@ -91,6 +91,9 @@ struct PointerIndex(Copyable, Movable):
                 # Not a valid int, treat as String
                 self.tokens.append(PointerToken(raw))
 
+    fn __init__(out self, var tokens: List[PointerToken]):
+        self.tokens = tokens^
+
     @staticmethod
     fn try_from_string(path: String) -> Optional[Self]:
         try:
@@ -101,7 +104,7 @@ struct PointerIndex(Copyable, Movable):
 
 fn resolve_pointer(
     ref root: Value, ptr: PointerIndex
-) raises -> ref [root] Value:
+) raises -> ref[root] Value:
     if len(ptr.tokens) == 0:
         return root
     return _resolve_ref(root, ptr.tokens, 0)
@@ -109,7 +112,7 @@ fn resolve_pointer(
 
 fn resolve_pointer(
     ref root: Object, ptr: PointerIndex
-) raises -> ref [root] Value:
+) raises -> ref[root] Value:
     if unlikely(len(ptr.tokens) == 0):
         # Cannot return reference to Object as Value, because Object is not Value.
         raise Error("Cannot return reference to root Object as Value")
@@ -118,7 +121,7 @@ fn resolve_pointer(
 
 fn resolve_pointer(
     ref root: Array, ptr: PointerIndex
-) raises -> ref [root] Value:
+) raises -> ref[root] Value:
     if unlikely(len(ptr.tokens) == 0):
         # Cannot return reference to Array as Value.
         raise Error("Cannot return reference to root Array as Value")
@@ -127,7 +130,7 @@ fn resolve_pointer(
 
 fn _resolve_ref(
     ref val: Value, tokens: List[PointerToken], idx: Int
-) raises -> ref [val] Value:
+) raises -> ref[val] Value:
     if idx >= len(tokens):
         return val
 
@@ -156,7 +159,7 @@ fn _resolve_ref(
 
 fn _resolve_ref(
     ref obj: Object, tokens: List[PointerToken], idx: Int
-) raises -> ref [obj] Value:
+) raises -> ref[obj] Value:
     if unlikely(idx >= len(tokens)):
         # Unreachable from resolve_pointer(Object) because of empty check,
         # but prevents returning a non-existent Value ref.
@@ -186,7 +189,7 @@ fn _resolve_ref(
 
 fn _resolve_ref(
     ref arr: Array, tokens: List[PointerToken], idx: Int
-) raises -> ref [arr] Value:
+) raises -> ref[arr] Value:
     if unlikely(idx >= len(tokens)):
         raise Error("Cannot resolve reference to Array root")
 

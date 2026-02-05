@@ -74,7 +74,7 @@ def test_explicit_pointer_index():
     assert_equal(val.string(), "baz")
 
     comptime ptr2 = PointerIndex.try_from_string("/foo/0")
-    __comptime_assert ptr2 is not None
+    comptime assert ptr2 is not None
     assert_equal(j.get(materialize[ptr2]().value()).string(), "bar")
 
 

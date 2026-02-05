@@ -10,8 +10,134 @@ from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
 
 
+trait Serializer(Writer):
+    fn begin_object(mut self):
+        self.write("{")
+
+    fn end_object(mut self):
+        self.write("}")
+
+    fn begin_array(mut self):
+        self.write("[")
+
+    fn end_array(mut self):
+        self.write("]")
+
+    fn write_key(mut self, key: String):
+        self.write('"', key, '":')
+
+    fn write_item(mut self, value: Some[AnyType], add_comma: Bool):
+        serialize(value, self)
+        if add_comma:
+            self.write(",")
+
+    fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
+        serialize(value, self)
+
+        @parameter
+        if add_comma:
+            self.write(",")
+
+
+__extension String(Serializer):
+    fn begin_object(mut self):
+        self.write("{")
+
+    fn end_object(mut self):
+        self.write("}")
+
+    fn begin_array(mut self):
+        self.write("[")
+
+    fn end_array(mut self):
+        self.write("]")
+
+    fn write_key(mut self, key: String):
+        self.write('"', key, '":')
+
+    fn write_item(mut self, value: Some[AnyType], add_comma: Bool):
+        serialize(value, self)
+        if add_comma:
+            self.write(",")
+
+    fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
+        serialize(value, self)
+
+        @parameter
+        if add_comma:
+            self.write(",")
+
+
+__extension _WriteBufferStack(Serializer):
+    fn begin_object(mut self):
+        self.write("{")
+
+    fn end_object(mut self):
+        self.write("}")
+
+    fn begin_array(mut self):
+        self.write("[")
+
+    fn end_array(mut self):
+        self.write("]")
+
+    fn write_key(mut self, key: String):
+        self.write('"', key, '":')
+
+    fn write_item(mut self, value: Some[AnyType], add_comma: Bool):
+        serialize(value, self)
+        if add_comma:
+            self.write(",")
+
+    fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
+        serialize(value, self)
+
+        @parameter
+        if add_comma:
+            self.write(",")
+
+
+@fieldwise_init
+struct PrettySerializer[indent: String = "    "](Serializer):
+    var _data: String
+
+    fn write_string(mut self, string: StringSlice):
+        self._data.write(string)
+
+    fn begin_object(mut self):
+        self.write("{\n")
+
+    fn end_object(mut self):
+        self.write("\n}")
+
+    fn begin_array(mut self):
+        self.write("[\n")
+
+    fn end_array(mut self):
+        self.write("\n]")
+
+    fn write_key(mut self, key: String):
+        self.write(Self.indent, '"', key, '": ')
+
+    fn write_item(mut self, value: Some[AnyType], add_comma: Bool):
+        self.write(Self.indent)
+        serialize(value, self)
+        if add_comma:
+            self.write(",")
+        self.write("\n")
+
+    fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
+        self.write(Self.indent)
+        serialize(value, self)
+
+        @parameter
+        if add_comma:
+            self.write(",")
+        self.write("\n")
+
+
 trait JsonSerializable:
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         comptime field_count = struct_field_count[Self]()
         comptime field_names = struct_field_names[Self]()
         comptime types = struct_field_types[Self]()
@@ -26,13 +152,10 @@ trait JsonSerializable:
             @parameter
             if not is_array:
                 comptime name = field_names[i]
-                writer.write('"', name, '":')
+                writer.write_key(name)
 
-            serialize(__struct_field_ref(i, self), writer)
-
-            @parameter
-            if i != field_count - 1:
-                writer.write(",")
+            comptime add_comma = i != field_count - 1
+            writer.write_item[add_comma](__struct_field_ref(i, self))
         writer.write(end)
 
     @staticmethod
@@ -49,8 +172,8 @@ fn serialize[
     stack_writer.flush()
 
 
-fn serialize[T: AnyType, //](value: T, mut writer: Some[Writer]):
-    __comptime_assert is_struct_type[T](), "Cannot serialize MLIR type"
+fn serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
+    comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
 
     @parameter
     if conforms_to(T, JsonSerializable):
@@ -60,20 +183,16 @@ fn serialize[T: AnyType, //](value: T, mut writer: Some[Writer]):
         comptime field_names = struct_field_names[T]()
         comptime types = struct_field_types[T]()
 
-        writer.write("{")
+        writer.begin_object()
 
         @parameter
         for i in range(field_count):
             comptime name = field_names[i]
-            writer.write('"', name, '":')
-            ref field = __struct_field_ref(i, value)
-            serialize(field, writer)
+            writer.write_key(name)
+            comptime add_comma = i != field_count - 1
+            writer.write_item[add_comma](__struct_field_ref(i, value))
 
-            @parameter
-            if i != field_count - 1:
-                writer.write(",")
-
-        writer.write("}")
+        writer.end_object()
 
 
 # ===============================================
@@ -82,7 +201,7 @@ fn serialize[T: AnyType, //](value: T, mut writer: Some[Writer]):
 
 
 __extension String(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write('"', self, '"')
 
     @staticmethod
@@ -91,7 +210,7 @@ __extension String(JsonSerializable):
 
 
 __extension Int(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     @staticmethod
@@ -100,10 +219,10 @@ __extension Int(JsonSerializable):
 
 
 __extension SIMD(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         @parameter
         if size > 1:
-            writer.write("[")
+            writer.begin_array()
 
         @parameter
         for i in range(size):
@@ -115,7 +234,7 @@ __extension SIMD(JsonSerializable):
 
         @parameter
         if size > 1:
-            writer.write("]")
+            writer.end_array()
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -123,7 +242,7 @@ __extension SIMD(JsonSerializable):
 
 
 __extension Bool(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write("true" if self else "false")
 
     @staticmethod
@@ -132,7 +251,7 @@ __extension Bool(JsonSerializable):
 
 
 __extension IntLiteral(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     @staticmethod
@@ -141,7 +260,7 @@ __extension IntLiteral(JsonSerializable):
 
 
 __extension FloatLiteral(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     @staticmethod
@@ -155,7 +274,7 @@ __extension FloatLiteral(JsonSerializable):
 
 
 __extension ArcPointer(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         serialize(self[], writer)
 
     @staticmethod
@@ -164,7 +283,7 @@ __extension ArcPointer(JsonSerializable):
 
 
 __extension OwnedPointer(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         serialize(self[], writer)
 
     @staticmethod
@@ -178,7 +297,7 @@ __extension OwnedPointer(JsonSerializable):
 
 
 __extension Optional(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         if self:
             serialize(self.value(), writer)
         else:
@@ -190,15 +309,14 @@ __extension Optional(JsonSerializable):
 
 
 __extension List(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
-        writer.write("[")
+    fn write_json(self, mut writer: Some[Serializer]):
+        writer.begin_array()
 
         for i in range(len(self)):
-            serialize(self[i], writer)
+            var add_comma = i != len(self) - 1
+            writer.write_item(self[i], add_comma)
 
-            if i != len(self) - 1:
-                writer.write(",")
-        writer.write("]")
+        writer.end_array()
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -206,15 +324,14 @@ __extension List(JsonSerializable):
 
 
 __extension InlineArray(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
-        writer.write("[")
+    fn write_json(self, mut writer: Some[Serializer]):
+        writer.begin_array()
 
         for i in range(Self.size):
-            serialize(self[i], writer)
+            var add_comma = i != Self.size - 1
+            writer.write_item(self[i], add_comma)
 
-            if i != Self.size - 1:
-                writer.write(",")
-        writer.write("]")
+        writer.end_array()
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -222,21 +339,18 @@ __extension InlineArray(JsonSerializable):
 
 
 __extension Dict(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
-        __comptime_assert _type_is_eq[
+    fn write_json(self, mut writer: Some[Serializer]):
+        comptime assert _type_is_eq[
             Self.K, String
         ](), "Dict must have string keys"
-        writer.write("{")
+        writer.begin_object()
         var i = 0
         for item in self.items():
-            serialize(item.key, writer)
-            writer.write(":")
-            serialize(item.value, writer)
-
-            if i != len(self) - 1:
-                writer.write(",")
+            writer.write_key(rebind[String](item.key))
+            var add_comma = i != len(self) - 1
+            writer.write_item(item.value, add_comma)
             i += 1
-        writer.write("}")
+        writer.end_object()
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -244,16 +358,15 @@ __extension Dict(JsonSerializable):
 
 
 __extension Tuple(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
-        writer.write("[")
+    fn write_json(self, mut writer: Some[Serializer]):
+        writer.begin_array()
 
         @parameter
         for i in range(Self.__len__()):
-            serialize(self[i], writer)
+            comptime add_comma = i != Self.__len__() - 1
+            writer.write_item[add_comma](self[i])
 
-            if i != Self.__len__() - 1:
-                writer.write(",")
-        writer.write("]")
+        writer.end_array()
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -261,15 +374,14 @@ __extension Tuple(JsonSerializable):
 
 
 __extension Set(JsonSerializable):
-    fn write_json(self, mut writer: Some[Writer]):
-        writer.write("[")
+    fn write_json(self, mut writer: Some[Serializer]):
+        writer.begin_array()
 
         for i, item in enumerate(self):
-            serialize(item, writer)
+            var add_comma = i != len(self) - 1
+            writer.write_item(item, add_comma)
 
-            if i != len(self) - 1:
-                writer.write(",")
-        writer.write("]")
+        writer.end_array()
 
     @staticmethod
     fn serialize_as_array() -> Bool:

@@ -246,6 +246,39 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
     fn __contains__(self, key: String) -> Bool:
         return Bool(self.find(key))
 
+    fn pop(mut self, key: String) raises:
+        var node = self.find(key)
+        if not node:
+            raise Error("KeyError: " + key)
+        self.remove(node)
+
+    fn remove(mut self, mut node: Self.NodePtr):
+        if not node[].left and not node[].right:
+            if not node[].parent:
+                self.root = Self.NodePtr()
+            elif node == node[].parent[].left:
+                node[].parent[].left = Self.NodePtr()
+            else:
+                node[].parent[].right = Self.NodePtr()
+        elif node[].left and node[].right:
+            var succ = _get_left_most(node[].right)
+            node[].steal_data(succ[])
+            self.remove(succ)
+            return
+        else:
+            var child = node[].left if node[].left else node[].right
+            if not node[].parent:
+                self.root = child
+            elif node == node[].parent[].left:
+                node[].parent[].left = child
+            else:
+                node[].parent[].right = child
+            child[].parent = node[].parent
+
+        node.destroy_pointee()
+        node.free()
+        self.size -= 1
+
     fn write_nodes(
         self, mut writer: Some[Writer], node: Self.NodePtr, mut written: Int
     ):

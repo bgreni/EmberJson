@@ -24,7 +24,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
         return self
 
     fn __next__(mut self) raises StopIteration -> ref[self.src[]._data] Value:
-        if self.index >= len(self):
+        if len(self) == 0:
             raise StopIteration()
 
         @parameter
@@ -160,6 +160,14 @@ struct Array(JsonValue, Sized):
     @always_inline
     fn append(mut self, var item: Value):
         self._data.append(item^)
+
+    @always_inline
+    fn insert(mut self, idx: Int, var item: Value):
+        self._data.insert(idx, item^)
+
+    @always_inline
+    fn pop(mut self, idx: Int) -> Value:
+        return self._data.pop(idx)
 
     fn to_list(self, out l: List[Value]):
         l = self._data.copy()

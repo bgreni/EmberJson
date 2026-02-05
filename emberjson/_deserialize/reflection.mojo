@@ -9,11 +9,12 @@ from std.builtin.rebind import downcast
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 
-from .parser import Parser
+from .parser import Parser, Deserializer
 from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`
 from std.sys.intrinsics import unlikely, _type_is_eq
 from emberjson.utils import to_string
 from ._parser_helper import NULL
+
 
 comptime non_struct_error = "Cannot deserialize non-struct type"
 
@@ -23,11 +24,15 @@ comptime _Base = ImplicitlyDestructible & Movable
 
 trait JsonDeserializable(_Base):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = _default_deserialize[Self](p)
 
 
-fn try_deserialize[T: _Base](var p: Parser) -> Optional[T]:
+fn try_deserialize[T: _Base](s: String) -> Optional[T]:
+    return try_deserialize[T](Parser(s))
+
+
+fn try_deserialize[T: _Base](var p: Some[Deserializer]) -> Optional[T]:
     try:
         return _deserialize_impl[T](p)
     except:
@@ -38,12 +43,12 @@ fn deserialize[T: _Base](s: String, out res: T) raises:
     res = deserialize[T](Parser(s))
 
 
-fn deserialize[T: _Base](var p: Parser, out res: T) raises:
+fn deserialize[T: _Base](var p: Some[Deserializer], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
 @always_inline
-fn _default_deserialize[T: _Base](mut p: Parser, out s: T) raises:
+fn _default_deserialize[T: _Base](mut p: Some[Deserializer], out s: T) raises:
     __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
 
     comptime field_count = struct_field_count[T]()
@@ -79,8 +84,8 @@ fn _default_deserialize[T: _Base](mut p: Parser, out s: T) raises:
     p.expect(`}`)
 
 
-fn _deserialize_impl[T: _Base](mut p: Parser, out s: T) raises:
-    __comptime_assert is_struct_type[T](), non_struct_error
+fn _deserialize_impl[T: _Base](mut p: Some[Deserializer], out s: T) raises:
+    comptime assert is_struct_type[T](), non_struct_error
 
     @parameter
     if conforms_to(T, JsonDeserializable):
@@ -96,30 +101,32 @@ fn _deserialize_impl[T: _Base](mut p: Parser, out s: T) raises:
 
 __extension String(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = p.read_string()
 
 
 __extension Int(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = Int(p.expect_integer())
 
 
 __extension Bool(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = p.expect_bool()
 
 
 __extension SIMD(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = Self()
 
         @parameter
         @always_inline
-        fn parse_simd_element(mut p: Parser) raises -> Scalar[Self.dtype]:
+        fn parse_simd_element(
+            mut p: Some[Deserializer],
+        ) raises -> Scalar[Self.dtype]:
             @parameter
             if Self.dtype.is_numeric():
 
@@ -155,7 +162,7 @@ __extension SIMD(JsonDeserializable):
 
 __extension IntLiteral(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = Self()
         var i = p.expect_integer()
         if i != s:
@@ -164,7 +171,7 @@ __extension IntLiteral(JsonDeserializable):
 
 __extension FloatLiteral(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = Self()
         var f = p.expect_float()
         if f != s:
@@ -178,13 +185,13 @@ __extension FloatLiteral(JsonDeserializable):
 
 __extension ArcPointer(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
 
 
 __extension OwnedPointer(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         s = rebind_var[Self](
             OwnedPointer(_deserialize_impl[downcast[Self.T, _Base]](p))
         )
@@ -197,8 +204,8 @@ __extension OwnedPointer(JsonDeserializable):
 
 __extension Optional(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
-        if p.data[] == `n`:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
+        if p.peek() == `n`:
             p.expect_null()
             s = None
         else:
@@ -211,7 +218,7 @@ __extension Optional(JsonDeserializable):
 
 __extension List(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         p.expect(`[`)
         s = Self()
 
@@ -229,8 +236,8 @@ __extension List(JsonDeserializable):
 
 __extension Dict(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
-        __comptime_assert _type_is_eq[
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
+        comptime assert _type_is_eq[
             Self.K, String
         ](), "Dict must have string keys"
         p.expect(`{`)
@@ -250,7 +257,7 @@ __extension Dict(JsonDeserializable):
 
 __extension Tuple(JsonDeserializable):
     @staticmethod
-    fn from_json(mut p: Parser, out s: Self) raises:
+    fn from_json(mut p: Some[Deserializer], out s: Self) raises:
         __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
         p.expect(`[`)
 
@@ -270,7 +277,7 @@ __extension Tuple(JsonDeserializable):
 
 __extension InlineArray(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
+    fn from_json(mut j: Some[Deserializer], out s: Self) raises:
         j.expect(`[`)
         s = Self(uninitialized=True)
 
@@ -289,7 +296,7 @@ __extension InlineArray(JsonDeserializable):
 
 __extension Set(JsonDeserializable):
     @staticmethod
-    fn from_json(mut j: Parser, out s: Self) raises:
+    fn from_json(mut j: Some[Deserializer], out s: Self) raises:
         j.expect(`[`)
         s = Self()
 

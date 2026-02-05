@@ -471,3 +471,17 @@ struct Value(JsonValue, Sized):
                 self.object()[name] = value^
             else:
                 raise Error("Cannot use setattr on JSON Array")
+
+    @always_inline
+    fn __setitem__(mut self, var key: String, var value: Value) raises:
+        if self.is_object():
+            self.object()[key] = value^
+        else:
+            raise Error("Value is not an object")
+
+    @always_inline
+    fn __setitem__(mut self, idx: Int, var value: Value) raises:
+        if self.is_array():
+            self.array()[idx] = value^
+        else:
+            raise Error("Value is not an Array")

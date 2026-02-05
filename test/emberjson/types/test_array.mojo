@@ -142,5 +142,18 @@ def test_stringify_array_generic():
     assert_equal(String(arr), '[123,"foo",false,null]')
 
 
+def test_iter_count():
+    var arr = Array(Value(1), Value(2), Value(3))
+    var count = 0
+    for _ in arr:
+        count += 1
+    assert_equal(count, 3)
+
+    count = 0
+    for _ in arr.reversed():
+        count += 1
+    assert_equal(count, 3)
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()
