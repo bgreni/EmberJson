@@ -1,11 +1,99 @@
 from .value import Value, Null
-from collections import Dict
+from collections import Dict, List
 from sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser
-from .tree import _TreeKeyIter, _TreeIter, _TreeValueIter, Tree
 from .utils import write_escaped_string
 from python import PythonObject, Python
+from os import abort
+from memory import UnsafePointer
+
+
+@fieldwise_init
+struct KeyValuePair(Copyable, Movable):
+    var key: String
+    var value: Value
+
+
+struct _ObjectIter[origin: Origin](Sized, TrivialRegisterType):
+    var src: Pointer[Object, Self.origin]
+    var idx: Int
+
+    @always_inline
+    fn __init__(out self, src: Pointer[Object, Self.origin]):
+        self.src = src
+        self.idx = 0
+
+    @always_inline
+    fn __iter__(self) -> Self:
+        return self
+
+    @always_inline
+    fn __next__(
+        mut self,
+    ) raises StopIteration -> ref[self.src[]._data] KeyValuePair:
+        if self.idx >= len(self.src[]):
+            raise StopIteration()
+        self.idx += 1
+        return self.src[]._data[self.idx - 1]
+
+    @always_inline
+    fn __len__(self) -> Int:
+        return len(self.src[]) - self.idx
+
+
+struct _ObjectKeyIter[origin: Origin](Sized, TrivialRegisterType):
+    var src: Pointer[Object, Self.origin]
+    var idx: Int
+
+    @always_inline
+    fn __init__(out self, src: Pointer[Object, Self.origin]):
+        self.src = src
+        self.idx = 0
+
+    @always_inline
+    fn __iter__(self) -> Self:
+        return self
+
+    @always_inline
+    fn __next__(
+        mut self,
+    ) raises StopIteration -> ref[self.src[]._data[0].key] String:
+        if self.idx >= len(self.src[]):
+            raise StopIteration()
+        self.idx += 1
+        return self.src[]._data[self.idx - 1].key
+
+    @always_inline
+    fn __len__(self) -> Int:
+        return len(self.src[]) - self.idx
+
+
+struct _ObjectValueIter[origin: Origin](Sized, TrivialRegisterType):
+    var src: Pointer[Object, Self.origin]
+    var idx: Int
+
+    @always_inline
+    fn __init__(out self, src: Pointer[Object, Self.origin]):
+        self.src = src
+        self.idx = 0
+
+    @always_inline
+    fn __iter__(self) -> Self:
+        return self
+
+    @always_inline
+    fn __next__(
+        mut self,
+    ) raises StopIteration -> ref[self.src[]._data[0].value] Value:
+        if self.idx >= len(self.src[]):
+            raise StopIteration()
+        self.idx += 1
+        return self.src[]._data[self.idx - 1].value
+
+    @always_inline
+    fn __len__(self) -> Int:
+        return len(self.src[]) - self.idx
 
 
 struct Object(JsonValue, Sized):
@@ -14,16 +102,16 @@ struct Object(JsonValue, Sized):
     a variant type of any valid JSON type.
     """
 
-    comptime Type = Tree
+    comptime Type = List[KeyValuePair]
     var _data: Self.Type
-
-    comptime ObjectIter = _TreeIter
-    comptime ObjectKeyIter = _TreeKeyIter
-    comptime ObjectValueIter = _TreeValueIter
 
     @always_inline
     fn __init__(out self):
         self._data = Self.Type()
+
+    @always_inline
+    fn __init__(out self, *, capacity: Int):
+        self._data = Self.Type(capacity=capacity)
 
     @always_inline
     @implicit
@@ -35,8 +123,7 @@ struct Object(JsonValue, Sized):
     fn __init__(out self, var d: Dict[String, Value]):
         self._data = Self.Type()
         for item in d.items():
-            # TODO: Avoid copies
-            self._data.insert(item.key, item.value.copy())
+            self._data.append(KeyValuePair(item.key, item.value.copy()))
 
     fn __init__(
         out self,
@@ -45,10 +132,9 @@ struct Object(JsonValue, Sized):
         __dict_literal__: (),
     ):
         debug_assert(len(keys) == len(values))
-        self._data = Self.Type()
+        self._data = Self.Type(capacity=len(keys))
         for i in range(len(keys)):
-            # TODO: Avoid copies
-            self._data.insert(keys[i], values[i].copy())
+            self._data.append(KeyValuePair(keys[i], values[i].copy()))
 
     @always_inline
     fn __init__(out self, *, parse_string: String) raises:
@@ -56,20 +142,44 @@ struct Object(JsonValue, Sized):
         self = p.parse_object()
 
     @always_inline
+    fn append_unchecked(mut self, var key: String, var item: Value):
+        """Appends a key-value pair without checking for duplicates.
+        Use this only during parsing or when you know the key is unique.
+        """
+        self._data.append(KeyValuePair(key^, item^))
+
     fn __setitem__(mut self, var key: String, var item: Value):
-        self._data[key^] = item^
+        """Sets a key-value pair.
+        If the key already exists, its value is updated.
+        If multiple existing keys match (due to append_unchecked), the LAST one is updated efficiently.
+        """
+        for i in range(len(self._data) - 1, -1, -1):
+            if self._data[i].key == key:
+                self._data[i].value = item^
+                return
+        self._data.append(KeyValuePair(key^, item^))
 
-    @always_inline
     fn pop(mut self, key: String) raises:
-        self._data.pop(key)
+        for i in range(len(self._data) - 1, -1, -1):
+            if self._data[i].key == key:
+                _ = self._data.pop(i)
+                return
+        raise Error("KeyError: " + key)
 
-    @always_inline
-    fn __getitem__(ref self, key: String) raises -> ref[self._data] Value:
-        return self._data.__getitem__(key)
+    fn __getitem__(
+        ref self, key: String
+    ) raises -> ref[self._data[0].value] Value:
+        for i in range(len(self._data) - 1, -1, -1):
+            if self._data[i].key == key:
+                return self._data[i].value
+        raise Error("KeyError: " + key)
 
     @always_inline
     fn __contains__(self, key: String) -> Bool:
-        return key in self._data
+        for i in range(len(self._data)):
+            if self._data[i].key == key:
+                return True
+        return False
 
     @always_inline
     fn __len__(self) -> Int:
@@ -79,11 +189,12 @@ struct Object(JsonValue, Sized):
         if len(self) != len(other):
             return False
 
-        for k in self._data.keys():
-            if k not in other:
+        # Iterate over keys because self.__iter__ returns keys
+        for key in self:
+            if key not in other:
                 return False
             try:
-                if self[k] != other[k]:
+                if self[key] != other[key]:
                     return False
             except:
                 return False
@@ -98,20 +209,20 @@ struct Object(JsonValue, Sized):
         return len(self) == 0
 
     @always_inline
-    fn keys(ref self) -> Self.ObjectKeyIter:
-        return self._data.keys()
+    fn keys(ref self) -> _ObjectKeyIter[origin_of(self)]:
+        return _ObjectKeyIter(Pointer(to=self))
 
     @always_inline
-    fn values(ref self) -> Self.ObjectValueIter:
-        return self._data.values()
+    fn values(ref self) -> _ObjectValueIter[origin_of(self)]:
+        return _ObjectValueIter(Pointer(to=self))
 
     @always_inline
-    fn __iter__(ref self) -> Self.ObjectKeyIter:
+    fn __iter__(ref self) -> _ObjectKeyIter[origin_of(self)]:
         return self.keys()
 
     @always_inline
-    fn items(ref self) -> Self.ObjectIter:
-        return self._data.items()
+    fn items(ref self) -> _ObjectIter[origin_of(self)]:
+        return _ObjectIter(Pointer(to=self))
 
     @always_inline
     fn write_json(self, mut writer: Some[Writer]):
@@ -133,7 +244,7 @@ struct Object(JsonValue, Sized):
                 writer.write(indent)
             write_escaped_string(item.key, writer)
             writer.write(": ")
-            item.data._pretty_to_as_element(writer, indent, curr_depth)
+            item.value._pretty_to_as_element(writer, indent, curr_depth)
             if done < len(self._data) - 1:
                 writer.write(",")
             writer.write("\n")
@@ -141,7 +252,14 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     fn write_to(self, mut writer: Some[Writer]):
-        writer.write(self._data)
+        writer.write("{")
+        for i in range(len(self._data)):
+            write_escaped_string(self._data[i].key, writer)
+            writer.write(":")
+            writer.write(self._data[i].value)
+            if i < len(self._data) - 1:
+                writer.write(",")
+        writer.write("}")
 
     @always_inline
     fn __str__(self) -> String:
@@ -155,13 +273,12 @@ struct Object(JsonValue, Sized):
     fn to_dict(self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
         for item in self.items():
-            # TODO: avoid copies
-            d[item.key] = item.data.copy()
+            d[item.key] = item.value.copy()
 
     fn to_python_object(self) raises -> PythonObject:
         var d = Python.dict()
         for item in self.items():
-            d[PythonObject(item.key)] = item.data.to_python_object()
+            d[PythonObject(item.key)] = item.value.to_python_object()
         return d
 
     @staticmethod

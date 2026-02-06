@@ -67,18 +67,19 @@ def test_pretty_print_object():
     ob = parse('{"key": 123, "k": [123, false, null]}')
 
     expected = """{
+    "key": 123,
     "k": [
         123,
         false,
         null
-    ],
-    "key": 123
+    ]
 }""".as_string_slice()
 
     assert_equal(expected, write_pretty(ob))
 
     ob = parse('{"key": 123, "k": [123, false, [1, 2, 3]]}')
     expected = """{
+    "key": 123,
     "k": [
         123,
         false,
@@ -87,8 +88,7 @@ def test_pretty_print_object():
             2,
             3
         ]
-    ],
-    "key": 123
+    ]
 }""".as_string_slice()
     assert_equal(expected, write_pretty(ob))
 

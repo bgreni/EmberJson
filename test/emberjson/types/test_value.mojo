@@ -237,8 +237,8 @@ def test_pretty():
 
     v = Value(parse_string='{"key": 123, "k2": null}')
     expected = """{
-    "k2": null,
-    "key": 123
+    "key": 123,
+    "k2": null
 }"""
 
     assert_equal(expected, write_pretty(v))

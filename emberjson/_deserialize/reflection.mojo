@@ -9,7 +9,8 @@ from std.builtin.rebind import downcast
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 
-from .parser import Parser, Deserializer
+from .parser import Parser
+from .traits import Deserializer
 from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`
 from std.sys.intrinsics import unlikely, _type_is_eq
 from emberjson.utils import to_string

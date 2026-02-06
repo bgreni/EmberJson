@@ -110,7 +110,7 @@ def test_write():
     var ob = Object()
     ob["foo"] = "stuff"
     ob["bar"] = 123
-    assert_equal(String(ob), '{"bar":123,"foo":"stuff"}')
+    assert_equal(String(ob), '{"foo":"stuff","bar":123}')
 
 
 def test_nested_object_copy():
@@ -120,7 +120,7 @@ def test_nested_object_copy():
     obj["id"] = "original_id"
     var copy = obj.copy()
     copy["id"] = "new_id"
-    assert_equal(String(copy.copy()), '{"id":"new_id","type":{}}')
+    assert_equal(String(copy.copy()), '{"type":{},"id":"new_id"}')
 
 
 def test_iter():
