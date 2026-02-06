@@ -141,26 +141,18 @@ struct Object(JsonValue, Sized):
         var p = Parser(parse_string)
         self = p.parse_object()
 
-    @always_inline
-    fn append_unchecked(mut self, var key: String, var item: Value):
-        """Appends a key-value pair without checking for duplicates.
-        Use this only during parsing or when you know the key is unique.
-        """
-        self._data.append(KeyValuePair(key^, item^))
-
     fn __setitem__(mut self, var key: String, var item: Value):
         """Sets a key-value pair.
         If the key already exists, its value is updated.
-        If multiple existing keys match (due to append_unchecked), the LAST one is updated efficiently.
         """
-        for i in range(len(self._data) - 1, -1, -1):
+        for i in range(len(self._data)):
             if self._data[i].key == key:
                 self._data[i].value = item^
                 return
         self._data.append(KeyValuePair(key^, item^))
 
     fn pop(mut self, key: String) raises:
-        for i in range(len(self._data) - 1, -1, -1):
+        for i in range(len(self._data)):
             if self._data[i].key == key:
                 _ = self._data.pop(i)
                 return
@@ -169,7 +161,7 @@ struct Object(JsonValue, Sized):
     fn __getitem__(
         ref self, key: String
     ) raises -> ref[self._data[0].value] Value:
-        for i in range(len(self._data) - 1, -1, -1):
+        for i in range(len(self._data)):
             if self._data[i].key == key:
                 return self._data[i].value
         raise Error("KeyError: " + key)

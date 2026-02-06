@@ -223,7 +223,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                     self.data += 1
                     self.skip_whitespace()
                     has_comma = True
-                obj.append_unchecked(ident^, v^)
+                obj[ident^] = v^
                 if self.data[] == `}`:
                     if has_comma:
                         raise Error("Illegal trailing comma")
