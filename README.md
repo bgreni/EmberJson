@@ -107,13 +107,13 @@ If you desire to customize the behavior, you can implement the `JsonSerializable
 
 #### Deserialization
 
-The target struct must implement the `Defaultable` and `Movable` traits.
+The target struct must implement the `Movable` trait.
 
 ```mojo
 from emberjson import deserialize, try_deserialize
 
 @fieldwise_init
-struct User(Movable, Defaultable):
+struct User(Movable):
     var id: Int
     var name: String
     var is_active: Bool
