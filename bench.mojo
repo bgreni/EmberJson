@@ -10,6 +10,7 @@ from emberjson import (
     deserialize,
     serialize,
     read_lines,
+    StrictOptions,
 )
 from std.benchmark import (
     Bench,
@@ -295,7 +296,7 @@ fn get_gbs_measure(input: String) raises -> ThroughputMeasure:
 
 
 fn run[
-    func: fn (mut Bencher, String) raises capturing, name: String
+    func: fn(mut Bencher, String) raises capturing, name: String
 ](mut m: Bench, data: String) raises:
     m.bench_with_input[String, func](
         BenchId(name), data, [get_gbs_measure(data)]
@@ -303,7 +304,21 @@ fn run[
 
 
 fn run[
-    func: fn (mut Bencher, Value) raises capturing, name: String
+    func: fn[strict: Bool = True](mut Bencher, String) raises capturing,
+    name: String,
+](mut m: Bench, data: String) raises:
+    @parameter
+    @always_inline
+    fn wrapper(mut b: Bencher, s: String) raises:
+        func(b, s)
+
+    m.bench_with_input[String, wrapper](
+        BenchId(name), data, [get_gbs_measure(data)]
+    )
+
+
+fn run[
+    func: fn(mut Bencher, Value) raises capturing, name: String
 ](mut m: Bench, data: Value) raises:
     m.bench_with_input[Value, func](
         BenchId(name), data, [get_gbs_measure(String(data))]
@@ -313,7 +328,7 @@ fn run[
 fn run[
     T: Movable,
     //,
-    func: fn[_T: Movable] (mut Bencher, _T) raises capturing,
+    func: fn[_T: Movable](mut Bencher, _T) raises capturing,
     name: String,
 ](mut m: Bench, data: T) raises:
     m.bench_with_input[T, func[T]](
@@ -326,7 +341,7 @@ fn run[
 
 
 fn run[
-    func: fn (mut Bencher, Path) raises capturing, name: String
+    func: fn(mut Bencher, Path) raises capturing, name: String
 ](mut m: Bench, path: Path) raises:
     var size: Int
     with open(path, "r") as f:
@@ -350,6 +365,9 @@ fn run_benchchecks(mut m: Bench) raises:
         data = f.read()
 
     run[benchmark_json_parse, "ParseTwitter"](m, twitter)
+    run[benchmark_json_parse[strict=False], "ParseTwitterNoStrictMode"](
+        m, twitter
+    )
     run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
     run[
         benchmark_deserialize_catalog_with_reflection,
@@ -489,11 +507,15 @@ fn benchmark_value_parse(mut b: Bencher, s: String) raises:
 
 
 @parameter
-fn benchmark_json_parse(mut b: Bencher, s: String) raises:
+fn benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        var a = parse(s)
+        var a = parse[
+            ParseOptions(
+                strict_mode=StrictOptions.STRICT if strict else StrictOptions.LENIENT
+            )
+        ](s)
         keep(a)
 
     b.iter[do]()

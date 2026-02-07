@@ -1,4 +1,12 @@
-from emberjson import parse, Parser, JSON, Object, Array
+from emberjson import (
+    parse,
+    Parser,
+    JSON,
+    Object,
+    Array,
+    ParseOptions,
+    StrictOptions,
+)
 from testing import assert_raises, assert_equal, assert_true, TestSuite
 
 
@@ -27,10 +35,20 @@ def test_empty_structures():
 
 
 def test_duplicate_keys():
-    # JSON standard says behavior is undefined, but practically last-one-wins is common
+    # first one wins
     var s = '{"a": 1, "a": 2}'
-    var json = parse(s)
-    assert_equal(json.object()["a"].int(), 2)
+    var json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](s)
+    assert_equal(json.object()["a"].int(), 1)
+    assert_equal(len(json.object()), 2)
+
+    with assert_raises():
+        _ = parse(s)
+
+    s = '{"a": 1, "b": 2, "a": "foo"}'
+    json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](s)
+    assert_equal(json.object()["a"].int(), 1)
+    assert_equal(json.object()["b"].int(), 2)
+    assert_equal(len(json.object()), 3)
 
 
 def test_trailing_commas():

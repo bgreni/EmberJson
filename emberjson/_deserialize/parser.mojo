@@ -82,7 +82,28 @@ from .traits import Deserializer
 #######################################################
 
 
-struct ParseOptions(Copyable, Movable):
+@fieldwise_init
+struct StrictOptions(Defaultable, TrivialRegisterType):
+    var _flags: Int
+
+    comptime STRICT = Self(0)
+
+    comptime ALLOW_TRAILING_COMMA = Self(1)
+    comptime ALLOW_DUPLICATE_KEYS = Self(1 << 1)
+
+    comptime LENIENT = Self.ALLOW_TRAILING_COMMA | Self.ALLOW_DUPLICATE_KEYS
+
+    fn __init__(out self):
+        self = Self.STRICT
+
+    fn __or__(self, other: Self) -> Self:
+        return Self(self._flags | other._flags)
+
+    fn __contains__(self, other: Self) -> Bool:
+        return self._flags & other._flags == other._flags
+
+
+struct ParseOptions(Copyable):
     """JSON parsing options.
 
     Fields:
@@ -90,9 +111,16 @@ struct ParseOptions(Copyable, Movable):
     """
 
     var ignore_unicode: Bool
+    var strict_mode: StrictOptions
 
-    fn __init__(out self, *, ignore_unicode: Bool = False):
+    fn __init__(
+        out self,
+        *,
+        ignore_unicode: Bool = False,
+        strict_mode: StrictOptions = StrictOptions.STRICT,
+    ):
         self.ignore_unicode = ignore_unicode
+        self.strict_mode = strict_mode
 
 
 comptime IntegerParseResult[origin: ImmutOrigin] = Tuple[
@@ -191,8 +219,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                     has_comma = True
                     self.skip_whitespace()
                 if self.data[] == `]`:
-                    if has_comma:
-                        raise Error("Illegal trailing comma")
+
+                    @parameter
+                    if (
+                        StrictOptions.ALLOW_TRAILING_COMMA
+                        not in Self.options.strict_mode
+                    ):
+                        if has_comma:
+                            raise Error("Illegal trailing comma")
                     break
                 elif unlikely(not has_comma):
                     raise Error("Expected ',' or ']'")
@@ -223,10 +257,27 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                     self.data += 1
                     self.skip_whitespace()
                     has_comma = True
-                obj[ident^] = v^
+
+                # In case of duplicate keys, first one wins
+                @parameter
+                if (
+                    not StrictOptions.ALLOW_DUPLICATE_KEYS
+                    in Self.options.strict_mode
+                ):
+                    if ident in obj:
+                        raise Error("Duplicate key: ", ident)
+
+                obj._add_unchecked(ident^, v^)
+
                 if self.data[] == `}`:
-                    if has_comma:
-                        raise Error("Illegal trailing comma")
+
+                    @parameter
+                    if (
+                        not StrictOptions.ALLOW_TRAILING_COMMA
+                        in Self.options.strict_mode
+                    ):
+                        if has_comma:
+                            raise Error("Illegal trailing comma")
                     break
                 elif not has_comma:
                     raise Error("Expected ',' or '}'")

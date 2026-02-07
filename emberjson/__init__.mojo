@@ -10,6 +10,7 @@ from ._deserialize import (
     deserialize,
     try_deserialize,
     JsonDeserializable,
+    StrictOptions,
 )
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue

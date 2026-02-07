@@ -7,10 +7,11 @@ from .utils import write_escaped_string
 from python import PythonObject, Python
 from os import abort
 from memory import UnsafePointer
+from hashlib.hasher import Hasher
 
 
 @fieldwise_init
-struct KeyValuePair(Copyable, Movable):
+struct KeyValuePair(Copyable, Hashable):
     var key: String
     var value: Value
 
@@ -140,6 +141,11 @@ struct Object(JsonValue, Sized):
     fn __init__(out self, *, parse_string: String) raises:
         var p = Parser(parse_string)
         self = p.parse_object()
+
+    @always_inline
+    fn _add_unchecked(mut self, var key: String, var item: Value):
+        """Can call this when we know the key doesn't exist."""
+        self._data.append(KeyValuePair(key^, item^))
 
     fn __setitem__(mut self, var key: String, var item: Value):
         """Sets a key-value pair.
