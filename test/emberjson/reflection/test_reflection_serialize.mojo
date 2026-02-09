@@ -1,5 +1,5 @@
 from testing import TestSuite, assert_equal
-from emberjson._serialize import serialize, JsonSerializable
+from emberjson._serialize import serialize, JsonSerializable, PrettySerializer
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 
@@ -252,6 +252,34 @@ def test_deep_recursion():
         serialize(n1^),
         '{"val":1,"children":[{"val":2,"children":[{"val":3,"children":[]}]}]}',
     )
+
+
+def test_pretty_serialize():
+    var f = Foo[45, 7.43](
+        1,
+        "something",
+        10,
+        Bar(20),
+        23,
+        [2.32, 5.345],
+        [32, 42, 353],
+        [False, True, True],
+        {"a key": 1234},
+        {},
+        {},
+        (1, 2, 3),
+        {1, 2, 3},
+        ArcPointer(1234),
+        OwnedPointer(4321),
+    )
+
+    var writer = PrettySerializer()
+    serialize(f, writer)
+    var serialized = writer._data
+
+    var expected = '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n        "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n        5.345\n    ],\n    "l": [\n        32,\n        42,\n        353\n    ],\n    "arr": [\n        false,\n        true,\n        true\n    ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n    "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n    ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n    "arc_ptr": 1234,\n    "owned_ptr": 4321\n}'
+
+    assert_equal(serialized, expected)
 
 
 def main():

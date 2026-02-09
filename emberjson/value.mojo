@@ -21,7 +21,7 @@ from ._pointer import resolve_pointer, PointerIndex
 
 
 @fieldwise_init
-struct Null(JsonValue, TrivialRegisterType):
+struct Null(JsonValue, TrivialRegisterPassable):
     """Represents "null" json value.
     Can be implicitly converted from `None`.
     """

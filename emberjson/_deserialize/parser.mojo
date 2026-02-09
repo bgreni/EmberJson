@@ -83,7 +83,7 @@ from .traits import Deserializer
 
 
 @fieldwise_init
-struct StrictOptions(Defaultable, TrivialRegisterType):
+struct StrictOptions(Defaultable, TrivialRegisterPassable):
     var _flags: Int
 
     comptime STRICT = Self(0)

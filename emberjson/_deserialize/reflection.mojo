@@ -62,23 +62,17 @@ fn _default_deserialize[T: _Base](mut p: Some[Deserializer], out s: T) raises:
     for i in range(field_count):
         var ident = p.read_string()
         p.expect(`:`)
-        var found = False
 
         @parameter
         for j in range(field_count):
             comptime name = field_names[j]
-            comptime name_hash = hash(name)
 
             if not seen[j] and ident == name:
-                found = True
                 seen[j] = True
                 ref field = __struct_field_ref(j, s)
                 comptime TField = downcast[type_of(field), _Base]
 
                 field = rebind_var[type_of(field)](_deserialize_impl[TField](p))
-
-        if not found:
-            raise Error("Unexpected field: " + ident)
 
         if i < field_count - 1:
             p.expect(`,`)

@@ -6,7 +6,7 @@ from python import PythonObject, Python
 
 
 struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
-    Copyable, Sized, TrivialRegisterType
+    Copyable, Sized, TrivialRegisterPassable
 ):
     var index: Int
     var src: Pointer[Array, Self.origin]

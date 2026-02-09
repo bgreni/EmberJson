@@ -171,7 +171,7 @@ struct Decimal(Copyable, Movable):
 
 
 @fieldwise_init
-struct AdjustedMantissa(TrivialRegisterType):
+struct AdjustedMantissa(TrivialRegisterPassable):
     var mantissa: UInt64
     var power2: Int
 

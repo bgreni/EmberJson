@@ -14,7 +14,7 @@ from ._deserialize import (
 )
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
-from ._serialize import JsonSerializable, serialize
+from ._serialize import JsonSerializable, serialize, PrettySerializer
 from ._pointer import PointerIndex
 
 

@@ -10,6 +10,8 @@ from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
 
 
+# TODO: When we have parametric traits, we can make this generic over some Writer type
+# Then the serializer dictates _what_ is written, and the Writer dictates _where_ it is written
 trait Serializer(Writer):
     fn begin_object(mut self):
         self.write("{")
@@ -98,36 +100,62 @@ __extension _WriteBufferStack(Serializer):
 
 
 @fieldwise_init
-struct PrettySerializer[indent: String = "    "](Serializer):
+struct PrettySerializer[indent: String = "    "](Defaultable, Serializer):
     var _data: String
+    var _skip_indent: Bool
+    var _depth: Int
+
+    fn __init__(out self):
+        self._data = ""
+        self._skip_indent = False
+        self._depth = 0
 
     fn write_string(mut self, string: StringSlice):
         self._data.write(string)
 
+    fn _write_indent(mut self):
+        for _ in range(self._depth):
+            self.write(Self.indent)
+
     fn begin_object(mut self):
         self.write("{\n")
+        self._depth += 1
 
     fn end_object(mut self):
-        self.write("\n}")
+        self._depth -= 1
+        self._write_indent()
+        self.write("}")
 
     fn begin_array(mut self):
         self.write("[\n")
+        self._depth += 1
 
     fn end_array(mut self):
-        self.write("\n]")
+        self._depth -= 1
+        self._write_indent()
+        self.write("]")
 
     fn write_key(mut self, key: String):
-        self.write(Self.indent, '"', key, '": ')
+        self._write_indent()
+        self.write('"', key, '": ')
+        self._skip_indent = True
 
     fn write_item(mut self, value: Some[AnyType], add_comma: Bool):
-        self.write(Self.indent)
+        if not self._skip_indent:
+            self._write_indent()
+
+        self._skip_indent = False
         serialize(value, self)
+
         if add_comma:
             self.write(",")
         self.write("\n")
 
     fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
-        self.write(Self.indent)
+        if not self._skip_indent:
+            self._write_indent()
+
+        self._skip_indent = False
         serialize(value, self)
 
         @parameter
@@ -142,9 +170,12 @@ trait JsonSerializable:
         comptime field_names = struct_field_names[Self]()
         comptime types = struct_field_types[Self]()
         comptime is_array = Self.serialize_as_array()
-        comptime open = "[" if is_array else "{"
-        comptime end = "]" if is_array else "}"
-        writer.write(open)
+
+        @parameter
+        if is_array:
+            writer.begin_array()
+        else:
+            writer.begin_object()
 
         @parameter
         for i in range(field_count):
@@ -156,17 +187,20 @@ trait JsonSerializable:
 
             comptime add_comma = i != field_count - 1
             writer.write_item[add_comma](__struct_field_ref(i, self))
-        writer.write(end)
+
+        @parameter
+        if is_array:
+            writer.end_array()
+        else:
+            writer.end_object()
 
     @staticmethod
     fn serialize_as_array() -> Bool:
         return False
 
 
-fn serialize[
-    T: AnyType, //, Out: Writer & Defaultable = String
-](value: T, out writer: Out):
-    writer = Out()
+fn serialize[T: AnyType, //](value: T, out writer: String):
+    writer = String()
     var stack_writer = _WriteBufferStack(writer)
     serialize(value, stack_writer)
     stack_writer.flush()
@@ -221,19 +255,20 @@ __extension Int(JsonSerializable):
 __extension SIMD(JsonSerializable):
     fn write_json(self, mut writer: Some[Serializer]):
         @parameter
-        if size > 1:
+        if size == 1:
+            writer.write(self)
+        else:
             writer.begin_array()
 
-        @parameter
-        for i in range(size):
-            writer.write(self[i])
-
             @parameter
-            if i != size - 1:
-                writer.write(",")
+            for i in range(size):
 
-        @parameter
-        if size > 1:
+                @parameter
+                if i != size - 1:
+                    writer.write_item[True](self[i])
+                else:
+                    writer.write_item[False](self[i])
+
             writer.end_array()
 
     @staticmethod

@@ -16,7 +16,7 @@ struct KeyValuePair(Copyable, Hashable):
     var value: Value
 
 
-struct _ObjectIter[origin: Origin](Sized, TrivialRegisterType):
+struct _ObjectIter[origin: Origin](Sized, TrivialRegisterPassable):
     var src: Pointer[Object, Self.origin]
     var idx: Int
 
@@ -43,7 +43,7 @@ struct _ObjectIter[origin: Origin](Sized, TrivialRegisterType):
         return len(self.src[]) - self.idx
 
 
-struct _ObjectKeyIter[origin: Origin](Sized, TrivialRegisterType):
+struct _ObjectKeyIter[origin: Origin](Sized, TrivialRegisterPassable):
     var src: Pointer[Object, Self.origin]
     var idx: Int
 
@@ -70,7 +70,7 @@ struct _ObjectKeyIter[origin: Origin](Sized, TrivialRegisterType):
         return len(self.src[]) - self.idx
 
 
-struct _ObjectValueIter[origin: Origin](Sized, TrivialRegisterType):
+struct _ObjectValueIter[origin: Origin](Sized, TrivialRegisterPassable):
     var src: Pointer[Object, Self.origin]
     var idx: Int
 

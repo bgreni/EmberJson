@@ -61,7 +61,7 @@ struct TreeNode(Copyable, Movable, Representable, Stringable, Writable):
 
 
 @fieldwise_init
-struct _TreeIter(Sized, TrivialRegisterType):
+struct _TreeIter(Sized, TrivialRegisterPassable):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int
@@ -85,7 +85,7 @@ struct _TreeIter(Sized, TrivialRegisterType):
 
 
 @fieldwise_init
-struct _TreeKeyIter(Sized, TrivialRegisterType):
+struct _TreeKeyIter(Sized, TrivialRegisterPassable):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int
@@ -109,7 +109,7 @@ struct _TreeKeyIter(Sized, TrivialRegisterType):
 
 
 @fieldwise_init
-struct _TreeValueIter(Sized, TrivialRegisterType):
+struct _TreeValueIter(Sized, TrivialRegisterPassable):
     var curr: TreeNodePtr
     var seen: Int
     var total: Int

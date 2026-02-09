@@ -26,7 +26,7 @@ fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
 
 
 @fieldwise_init
-struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterType):
+struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
     var p: BytePtr[Self.origin]
     var start: BytePtr[Self.origin]
     var end: BytePtr[Self.origin]
