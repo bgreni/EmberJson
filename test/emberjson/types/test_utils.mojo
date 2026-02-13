@@ -27,5 +27,12 @@ def test_write_escaped_string():
     assert_equal(write(Value(null_str)), r'"\u0000"')
 
 
+def test_write_unicode_string():
+    # Multi-byte UTF-8 (should not be escaped)
+    assert_equal(write(Value("Hello ☃")), r'"Hello ☃"')
+    # Emoji (should not be escaped)
+    assert_equal(write(Value("😊")), r'"😊"')
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -47,7 +47,7 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
         idx += 1
         if sig > 0:
             exp += 1
-    var leading_zeroes = abs_exp - idx
+    var leading_zeroes = abs_exp - Int32(idx)
 
     # Write in scientific notation if < 0.0001 or exp > 15
     if (exp < 0 and leading_zeroes > 3) or exp > 15:
@@ -89,7 +89,7 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
     else:
         var point_written = False
         for i in reversed(range(idx)):
-            if leading_zeroes < 1 and exp == idx - i - 2:
+            if leading_zeroes < 1 and exp == Int32(idx - i) - 2:
                 # No integer part so write leading 0
                 if i == idx - 1:
                     writer.write("0")
@@ -99,7 +99,7 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
 
         # If exp - idx + 1 > 0 it's a positive number with more 0's than the
         # sig
-        for _ in range(exp - idx + 1):
+        for _ in range(Int(exp) - idx + 1):
             writer.write("0")
         if not point_written:
             writer.write(".0")
@@ -117,7 +117,7 @@ fn teju(binary: Fields, out dec: Fields):
     var m = binary.mantissa
 
     if is_small_integer(m, e):
-        return remove_trailing_zeros(m >> Int(-e), 0)
+        return remove_trailing_zeros(m >> UInt64(-e), 0)
 
     var f = log10_pow2(e)
     var r = log10_pow2_residual(e)

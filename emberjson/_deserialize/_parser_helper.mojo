@@ -317,7 +317,7 @@ fn to_double(
     comptime `1 << 52` = 1 << 52
     mantissa &= ~(`1 << 52`)
     mantissa |= real_exponent << 52
-    mantissa |= Int(negative) << 63
+    mantissa |= UInt64(negative) << 63
     return bitcast[DType.float64](mantissa)
 
 

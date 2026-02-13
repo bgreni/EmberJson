@@ -301,7 +301,7 @@ fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
             while p[] == `0`:
                 p += 1
         consume_digits()
-        answer.decimal_point = ptr_dist(p.p, first_after_period.p)
+        answer.decimal_point = Int32(ptr_dist(p.p, first_after_period.p))
 
     if answer.num_digits > 0:
         var preverse = p - 1

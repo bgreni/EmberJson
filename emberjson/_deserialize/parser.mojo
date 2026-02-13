@@ -506,7 +506,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
         var upperbit: UInt64 = upper >> 63
         var mantissa: UInt64 = upper >> (upperbit + 9)
-        lz += Int(1 ^ upperbit)
+        lz += UInt64(1 ^ upperbit)
 
         comptime `152170 + 65536` = 152170 + 65536
         comptime `1024 + 63` = 1024 + 63
@@ -605,7 +605,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                 p += 8
             while parse_digit(p, i):
                 p += 1
-            exponent = ptr_dist(p.p, first_after_period.p)
+            exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
                 raise Error("Invalid number")
             digit_count = ptr_dist(start_digits.p, p.p)
@@ -812,7 +812,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                 p += 8
             while parse_digit(p, i):
                 p += 1
-            exponent = ptr_dist(p.p, first_after_period.p)
+            exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
                 raise Error("Invalid number")
             digit_count = ptr_dist(start_digits.p, p.p)
