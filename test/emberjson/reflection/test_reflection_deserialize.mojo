@@ -1,5 +1,12 @@
 from testing import TestSuite, assert_equal, assert_false, assert_true
-from emberjson._deserialize import deserialize, try_deserialize
+from emberjson._deserialize import (
+    deserialize,
+    try_deserialize,
+    LazyString,
+    Parser,
+    ParseOptions,
+    StrictOptions,
+)
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 
@@ -83,6 +90,8 @@ struct Bar(Defaultable, Movable):
 
 def test_out_of_order_keys():
     var bar = deserialize[Bar]('{"b": false, "a": 10}')
+    assert_equal(bar.a, 10)
+    assert_equal(bar.b, False)
 
 
 def test_ctime_deserialize():
@@ -132,6 +141,56 @@ def test_ctime_deserialize():
     assert_equal(foo.set, {1, 2, 3})
     assert_equal(foo.ap[], 42)
     assert_equal(foo.op[], 42)
+
+
+def test_lazy_string_simd():
+    # Test short string
+    var short = '"short"'
+    var p_short = Parser[
+        options = ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ](short)
+    var s_short = deserialize[LazyString[origin_of(short)]](p_short^)
+    assert_equal(s_short.get(), "short")
+
+    # Test long string (longer than SIMD width, usually 32 bytes)
+    var long_str = '"this is a very long string that should trigger the SIMD path in the parser logic 1234567890"'
+    var p_long = Parser[
+        options = ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ](long_str)
+    var s_long = deserialize[LazyString[origin_of(long_str)]](p_long^)
+    assert_equal(
+        s_long.get(),
+        (
+            "this is a very long string that should trigger the SIMD path in"
+            " the parser logic 1234567890"
+        ),
+    )
+
+    # Test escaped quotes
+    var escaped = '"has \\"escaped\\" quotes"'
+    var p_escaped = Parser[
+        options = ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ](escaped)
+    var s_escaped = deserialize[LazyString[origin_of(escaped)]](p_escaped^)
+    assert_equal(s_escaped.get(), 'has "escaped" quotes')
+
+    # Test escaped backslash
+    var backslash = '"has \\\\ backslash"'
+    var p_backslash = Parser[
+        options = ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ](backslash)
+    var s_backslash = deserialize[LazyString[origin_of(backslash)]](
+        p_backslash^
+    )
+    assert_equal(s_backslash.get(), "has \\ backslash")
+
+    # Mixed escapes
+    var mixed = '"foo \\" bar \\\\ baz"'
+    var p_mixed = Parser[
+        options = ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ](mixed)
+    var s_mixed = deserialize[LazyString[origin_of(mixed)]](p_mixed^)
+    assert_equal(s_mixed.get(), 'foo " bar \\ baz')
 
 
 def main():

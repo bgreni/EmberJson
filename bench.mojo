@@ -11,6 +11,7 @@ from emberjson import (
     serialize,
     read_lines,
     StrictOptions,
+    Lazy,
 )
 from std.benchmark import (
     Bench,
@@ -370,13 +371,20 @@ fn run_benchchecks(mut m: Bench) raises:
     )
     run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
     run[
-        benchmark_deserialize_catalog_with_reflection,
+        benchmark_deserialize_with_reflection[CatalogData],
         "ParseCitmCatalogWithReflection",
+    ](m, catalog)
+
+    run[
+        benchmark_deserialize_with_reflection[
+            LazyCatalogData[origin_of(catalog)]
+        ],
+        "ParseCitmCatalogWithReflectionLazy",
     ](m, catalog)
 
     run[benchmark_json_parse, "ParseCanada"](m, canada)
     run[
-        benchmark_deserialize_canada_with_reflection,
+        benchmark_deserialize_with_reflection[Canada],
         "ParseCanadaWithReflection",
     ](m, canada)
 
@@ -532,6 +540,9 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     b.iter[do]()
 
 
+comptime LazyCatalogData[origin: ImmutOrigin] = Lazy[CatalogData, origin]
+
+
 struct CatalogData(Movable):
     var areaNames: Dict[String, String]
     var audienceSubCategoryNames: Dict[String, String]
@@ -585,20 +596,6 @@ struct Price(Copyable):
     var seatCategoryId: Int
 
 
-@parameter
-fn benchmark_deserialize_catalog_with_reflection(
-    mut b: Bencher, s: String
-) raises:
-    @always_inline
-    @parameter
-    fn do() raises:
-        var parser = Parser(s)
-        var a = deserialize[CatalogData](parser^)
-        keep(a)
-
-    b.iter[do]()
-
-
 struct Canada(Movable):
     var type: String
     var features: List[Feature]
@@ -620,14 +617,14 @@ struct Properties(Copyable):
 
 
 @parameter
-fn benchmark_deserialize_canada_with_reflection(
-    mut b: Bencher, s: String
-) raises:
+fn benchmark_deserialize_with_reflection[
+    T: Movable & ImplicitlyDestructible
+](mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
         var parser = Parser(s)
-        var a = deserialize[Canada](parser^)
+        var a = deserialize[T](parser^)
         keep(a)
 
     b.iter[do]()

@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, "")
 
-from emberjson_python import parse, minify
+from emberjson_python import parse, minify, Value
 from time import perf_counter
 import json
 

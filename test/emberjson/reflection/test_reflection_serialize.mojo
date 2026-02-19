@@ -164,11 +164,11 @@ struct DeepNode(Copyable):
     var val: Int
     var children: List[DeepNode]
 
-    fn __copyinit__(out self, other: Self):
-        self.val = other.val
-        self.children = List[DeepNode](capacity=len(other.children))
-        for i in range(len(other.children)):
-            self.children.append(other.children[i].copy())
+    fn __copyinit__(out self, copy: Self):
+        self.val = copy.val
+        self.children = List[DeepNode](capacity=len(copy.children))
+        for i in range(len(copy.children)):
+            self.children.append(copy.children[i].copy())
 
 
 def test_nested_structs():

@@ -11,6 +11,8 @@ from ._deserialize import (
     try_deserialize,
     JsonDeserializable,
     StrictOptions,
+    LazyString,
+    Lazy,
 )
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue

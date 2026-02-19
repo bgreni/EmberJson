@@ -315,5 +315,83 @@ def test_reject_comment():
         _ = parse(s)
 
 
+def test_expect_object_bytes():
+    var s = String('{"a": 1, "b": {"c": 2}}')
+    var p = Parser(s)
+    var span = p.expect_object_bytes()
+    var start = span.unsafe_ptr()
+    var span_len = len(span)
+    # Correct length is full string
+    assert_equal(span_len, len(s))
+
+    # Nested check
+    var s2 = String('{"a": 1}trailing')
+    var p2 = Parser(s2)
+    var span2 = p2.expect_object_bytes()
+    assert_equal(len(span2), len('{"a": 1}'))
+
+
+
+def test_expect_integer_bytes():
+    var json = String("12345, -67890, 1234567890123456789, -9876543210987654321")
+    var p = Parser(json)
+    var span1 = p.expect_integer_bytes()
+    assert_equal(len(span1), 5)
+    # 12345
+
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span2 = p.expect_integer_bytes()
+    assert_equal(len(span2), 6)
+    # -67890
+    
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span3 = p.expect_integer_bytes()
+    assert_equal(len(span3), 19)
+    # 1234567890123456789
+
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span4 = p.expect_integer_bytes()
+    assert_equal(len(span4), 20)
+    # -9876543210987654321
+
+
+def test_expect_float_bytes():
+    var json = String("123.45, -6.7e-8, 1.2E+3, 1234567890.123456789e-123, -0.000000000000000000001")
+    var p = Parser(json)
+
+    var span1 = p.expect_float_bytes()
+    assert_equal(len(span1), 6)  # 123.45
+
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span2 = p.expect_float_bytes()
+    assert_equal(len(span2), 7)  # -6.7e-8
+
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span3 = p.expect_float_bytes()
+    assert_equal(len(span3), 6)  # 1.2E+3
+    
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span4 = p.expect_float_bytes()
+    assert_equal(len(span4), 25)  # 1234567890.123456789e-123
+
+    p.expect(44)  # ,
+    p.skip_whitespace()
+
+    var span5 = p.expect_float_bytes()
+    assert_equal(len(span5), 24)  # -0.000000000000000000001
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

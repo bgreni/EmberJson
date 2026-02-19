@@ -36,6 +36,7 @@ from ._parser_helper import (
     largest_power,
     is_exp_char,
     pack_into_integer,
+    isdigit,
 )
 from memory.unsafe import bitcast
 from bit import count_leading_zeros
@@ -82,14 +83,17 @@ from .traits import Deserializer
 #######################################################
 
 
-@fieldwise_init
 struct StrictOptions(Defaultable, TrivialRegisterPassable):
     var _flags: Int
 
-    comptime STRICT = Self(0)
+    @always_inline
+    fn __init__(out self, val: Int):
+        self._flags = val
 
-    comptime ALLOW_TRAILING_COMMA = Self(1)
-    comptime ALLOW_DUPLICATE_KEYS = Self(1 << 1)
+    comptime STRICT = StrictOptions(0)
+
+    comptime ALLOW_TRAILING_COMMA = StrictOptions(1)
+    comptime ALLOW_DUPLICATE_KEYS = StrictOptions(1 << 1)
 
     comptime LENIENT = Self.ALLOW_TRAILING_COMMA | Self.ALLOW_DUPLICATE_KEYS
 
@@ -875,6 +879,191 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
     @always_inline
     fn peek(self) raises -> Byte:
         return self.data[]
+
+    fn expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        self.data += 1
+        var start = self.data
+
+        while self.can_load_chunk():
+            var block = StringBlock.find(self.data)
+            if block.has_quote_first():
+                self.data += block.quote_index()
+                var res = Span(
+                    ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                )
+                self.data += 1
+                return res
+
+            if unlikely(block.has_unescaped()):
+                raise Error("Control characters must be escaped")
+
+            if not block.has_backslash():
+                self.data += SIMD8_WIDTH
+                continue
+
+            self.data += block.bs_index()
+            # Found backslash
+            self.data += 1
+            if self.data[] == `u`:
+                self.data += 5
+            else:
+                self.data += 1
+
+        while self.has_more():
+            var c = self.data[]
+            if c == `"`:
+                var res = Span(
+                    ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                )
+                self.data += 1
+                return res
+            elif c == `\\`:
+                self.data += 1
+                if unlikely(not self.has_more()):
+                    raise Error("Unexpected EOF")
+
+                var esc = self.data[]
+                if esc == `u`:
+                    self.data += 5
+                else:
+                    self.data += 1
+            elif c < 0x20:
+                raise Error("Control characters must be escaped")
+            else:
+                self.data += 1
+
+        raise Error("Unexpected EOF")
+
+    fn _expect_structural_bytes[
+        open: Byte, close: Byte
+    ](mut self) raises -> Span[Byte, Self.origin]:
+        var start = self.data
+        if unlikely(self.data[] != open):
+            raise Error(
+                "Invalid JSON, Expected: ",
+                to_string(open),
+                ", Received: ",
+                to_string(self.data[]),
+            )
+        self.data += 1
+        var depth = 1
+
+        while self.has_more():
+            while self.can_load_chunk() and not is_compile_time():
+                var chunk = self.load_chunk()
+                var relevant = chunk.eq(`"`) | chunk.eq(open) | chunk.eq(close)
+                var mask = pack_into_integer(relevant)
+
+                if mask == 0:
+                    self.data += SIMD8_WIDTH
+                else:
+                    var offset = count_trailing_zeros(mask)
+                    self.data += offset
+                    var c = self.data[]
+                    if c == `"`:
+                        _ = self.expect_string_bytes()
+                    elif c == open:
+                        depth += 1
+                        self.data += 1
+                    elif c == close:
+                        depth -= 1
+                        self.data += 1
+                        if depth == 0:
+                            return Span(
+                                ptr=start.p,
+                                length=ptr_dist(start.p, self.data.p),
+                            )
+                    # Break to reload chunk if needed or continue loop
+                    break
+
+            if unlikely(not self.has_more()):
+                break
+
+            var c = self.data[]
+            if c == `"`:
+                _ = self.expect_string_bytes()
+            elif c == open:
+                depth += 1
+                self.data += 1
+            elif c == close:
+                depth -= 1
+                self.data += 1
+                if depth == 0:
+                    return Span(
+                        ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                    )
+            else:
+                self.data += 1
+
+        raise Error("Unexpected EOF while parsing structure")
+
+    fn expect_integer_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        var start = self.data
+        if self.data[] == 45:  # '-'
+            self.data += 1
+
+        while self.can_load_chunk() and not is_compile_time():
+            var chunk = self.load_chunk()
+            var is_digit = chunk.ge(48) & chunk.le(57)  # '0' to '9'
+            var invalid = ~is_digit
+            var mask = pack_into_integer(invalid)
+            if mask == 0:
+                self.data += SIMD8_WIDTH
+            else:
+                var offset = count_trailing_zeros(mask)
+                self.data += offset
+                return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
+
+        while self.has_more():
+            var c = self.data[]
+            if not isdigit(c):
+                break
+            self.data += 1
+
+        return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
+
+    fn expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        var start = self.data
+        if self.data[] == 45:  # '-'
+            self.data += 1
+
+        while self.can_load_chunk() and not is_compile_time():
+            var chunk = self.load_chunk()
+            var is_digit = chunk.ge(48) & chunk.le(57)
+            var is_dot = chunk.eq(46)  # '.'
+            var is_e = chunk.eq(101) | chunk.eq(69)  # 'e', 'E'
+            var is_sign = chunk.eq(43) | chunk.eq(45)  # '+', '-'
+            var valid = is_digit | is_dot | is_e | is_sign
+            var invalid = ~valid
+            var mask = pack_into_integer(invalid)
+            if mask == 0:
+                self.data += SIMD8_WIDTH
+            else:
+                var offset = count_trailing_zeros(mask)
+                self.data += offset
+                return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
+
+        while self.has_more():
+            var c = self.data[]
+            var valid_char = (
+                isdigit(c)
+                or c == 46
+                or c == 101
+                or c == 69
+                or c == 43
+                or c == 45
+            )
+            if not valid_char:
+                break
+            self.data += 1
+
+        return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
+
+    fn expect_object_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        return self._expect_structural_bytes[`{`, `}`]()
+
+    fn expect_array_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        return self._expect_structural_bytes[`[`, `]`]()
 
 
 fn minify(s: String, out out_str: String) raises:

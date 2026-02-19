@@ -26,7 +26,14 @@ if __name__ == "__main__":
                 print(ret.stderr)
             s = ret.stdout
             print(s)
-            count += int(s.split(" ")[1])
+            split = s.split(" ")
+
+            if len(split) < 2:
+                raise Exception(
+                    "Failed to parse test count from output: " + file
+                )
+
+            count += int(split[1])
 
     if len(failed) != 0:
         print("Failed tests", *failed, sep="\n")
