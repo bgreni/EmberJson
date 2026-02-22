@@ -13,6 +13,11 @@ from ._deserialize import (
     StrictOptions,
     LazyString,
     Lazy,
+    LazyObject,
+    LazyArray,
+    LazyInt,
+    LazyUInt,
+    LazyFloat,
 )
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
@@ -65,9 +70,7 @@ fn to_string[*, pretty: Bool = False](out s: String, j: JSON):
     Returns:
         The String representation of the JSON object.
     """
-
-    @parameter
-    if pretty:
+    comptime if pretty:
         s = write_pretty(j)
     else:
         s = write(j)

@@ -2,8 +2,7 @@ from .utils import select
 
 
 fn do_write_int(v: Scalar, mut writer: Some[Writer], neg: Bool):
-    @parameter
-    if v.dtype.is_unsigned():
+    comptime if v.dtype.is_unsigned():
         if v >= 10:
             do_write_int(v / 10, writer, neg)
     else:
@@ -29,8 +28,7 @@ fn write_int(v: Scalar, mut writer: Some[Writer]):
     else:
         var neg: Bool
 
-        @parameter
-        if v.dtype.is_unsigned():
+        comptime if v.dtype.is_unsigned():
             neg = False
         else:
             neg = v < 0

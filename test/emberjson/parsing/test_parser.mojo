@@ -331,9 +331,10 @@ def test_expect_object_bytes():
     assert_equal(len(span2), len('{"a": 1}'))
 
 
-
 def test_expect_integer_bytes():
-    var json = String("12345, -67890, 1234567890123456789, -9876543210987654321")
+    var json = String(
+        "12345, -67890, 1234567890123456789, -9876543210987654321"
+    )
     var p = Parser(json)
     var span1 = p.expect_integer_bytes()
     assert_equal(len(span1), 5)
@@ -345,7 +346,7 @@ def test_expect_integer_bytes():
     var span2 = p.expect_integer_bytes()
     assert_equal(len(span2), 6)
     # -67890
-    
+
     p.expect(44)  # ,
     p.skip_whitespace()
 
@@ -362,7 +363,10 @@ def test_expect_integer_bytes():
 
 
 def test_expect_float_bytes():
-    var json = String("123.45, -6.7e-8, 1.2E+3, 1234567890.123456789e-123, -0.000000000000000000001")
+    var json = String(
+        "123.45, -6.7e-8, 1.2E+3, 1234567890.123456789e-123,"
+        " -0.000000000000000000001"
+    )
     var p = Parser(json)
 
     var span1 = p.expect_float_bytes()
@@ -379,7 +383,7 @@ def test_expect_float_bytes():
 
     var span3 = p.expect_float_bytes()
     assert_equal(len(span3), 6)  # 1.2E+3
-    
+
     p.expect(44)  # ,
     p.skip_whitespace()
 
@@ -391,6 +395,67 @@ def test_expect_float_bytes():
 
     var span5 = p.expect_float_bytes()
     assert_equal(len(span5), 24)  # -0.000000000000000000001
+
+
+def test_expect_value_bytes():
+    var json = String(
+        '{"a": 1}, [1, 2], "string", 12345, -12.34e5, true, false, null'
+    )
+    var p = Parser(json)
+
+    # Object
+    var span1 = p.expect_value_bytes()
+    assert_equal(len(span1), 8)
+    assert_equal(StringSlice(unsafe_from_utf8=span1), '{"a": 1}')
+
+    p.expect(44)  # ,
+
+    # Array
+    var span2 = p.expect_value_bytes()
+    assert_equal(len(span2), 6)
+    assert_equal(StringSlice(unsafe_from_utf8=span2), "[1, 2]")
+
+    p.expect(44)  # ,
+
+    # String
+    var span3 = p.expect_value_bytes()
+    assert_equal(len(span3), 8)
+    assert_equal(StringSlice(unsafe_from_utf8=span3), '"string"')
+
+    p.expect(44)  # ,
+
+    # Integer
+    var span4 = p.expect_value_bytes()
+    assert_equal(len(span4), 5)
+    assert_equal(StringSlice(unsafe_from_utf8=span4), "12345")
+
+    p.expect(44)  # ,
+
+    # Float
+    var span5 = p.expect_value_bytes()
+    assert_equal(len(span5), 8)
+    assert_equal(StringSlice(unsafe_from_utf8=span5), "-12.34e5")
+
+    p.expect(44)  # ,
+
+    # True
+    var span6 = p.expect_value_bytes()
+    assert_equal(len(span6), 4)
+    assert_equal(StringSlice(unsafe_from_utf8=span6), "true")
+
+    p.expect(44)  # ,
+
+    # False
+    var span7 = p.expect_value_bytes()
+    assert_equal(len(span7), 5)
+    assert_equal(StringSlice(unsafe_from_utf8=span7), "false")
+
+    p.expect(44)  # ,
+
+    # Null
+    var span8 = p.expect_value_bytes()
+    assert_equal(len(span8), 4)
+    assert_equal(StringSlice(unsafe_from_utf8=span8), "null")
 
 
 def main():

@@ -3,7 +3,14 @@ from .reflection import (
     deserialize,
     JsonDeserializable,
     try_deserialize,
-    LazyString,
-    Deserializer,
+)
+from .lazy import (
     Lazy,
+    LazyString,
+    LazyInt,
+    LazyUInt,
+    LazyFloat,
+    LazyObject,
+    LazyArray,
+    LazyValue,
 )

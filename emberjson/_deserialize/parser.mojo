@@ -67,13 +67,13 @@ from emberjson.constants import (
     `-`,
     `+`,
     `0`,
+    `9`,
     `.`,
     ` `,
     `1`,
+    `E`,
+    `e`,
 )
-
-
-from .traits import Deserializer
 
 
 #######################################################
@@ -83,7 +83,7 @@ from .traits import Deserializer
 #######################################################
 
 
-struct StrictOptions(Defaultable, TrivialRegisterPassable):
+struct StrictOptions(Defaultable, Equatable, TrivialRegisterPassable):
     var _flags: Int
 
     @always_inline
@@ -107,7 +107,7 @@ struct StrictOptions(Defaultable, TrivialRegisterPassable):
         return self._flags & other._flags == other._flags
 
 
-struct ParseOptions(Copyable):
+struct ParseOptions(Equatable, TrivialRegisterPassable):
     """JSON parsing options.
 
     Fields:
@@ -132,9 +132,7 @@ comptime IntegerParseResult[origin: ImmutOrigin] = Tuple[
 ]
 
 
-struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
-    Deserializer
-):
+struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer[Self.origin]
     var size: Int
 
@@ -197,6 +195,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
     fn pos(self) -> Int:
         return self.size - (self.size - self.data.dist())
 
+    @always_inline
+    fn peek(self) raises -> Byte:
+        return self.data[]
+
     fn parse(mut self, out json: Value) raises:
         self.skip_whitespace()
         json = self.parse_value()
@@ -223,9 +225,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                     has_comma = True
                     self.skip_whitespace()
                 if self.data[] == `]`:
-
-                    @parameter
-                    if (
+                    comptime if (
                         StrictOptions.ALLOW_TRAILING_COMMA
                         not in Self.options.strict_mode
                     ):
@@ -263,8 +263,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                     has_comma = True
 
                 # In case of duplicate keys, first one wins
-                @parameter
-                if (
+                comptime if (
                     not StrictOptions.ALLOW_DUPLICATE_KEYS
                     in Self.options.strict_mode
                 ):
@@ -274,9 +273,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
                 obj._add_unchecked(ident^, v^)
 
                 if self.data[] == `}`:
-
-                    @parameter
-                    if (
+                    comptime if (
                         not StrictOptions.ALLOW_TRAILING_COMMA
                         in Self.options.strict_mode
                     ):
@@ -720,8 +717,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
                 var res = Int64(~i + 1)
 
-                @parameter
-                if type != DType.int64:
+                comptime if type != DType.int64:
                     if res < Scalar[type].MIN.cast[DType.int64]():
                         raise Error("integer overflow")
                 self.data = p
@@ -735,8 +731,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
         var res = select(neg, Int64(~i + 1), Int64(i))
 
-        @parameter
-        if type != DType.int64:
+        comptime if type != DType.int64:
             comptime MIN = Int64(Scalar[type].MIN)
             comptime MAX = Int64(Scalar[type].MAX)
 
@@ -772,8 +767,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
         self.data = p
 
-        @parameter
-        if type != DType.uint64:
+        comptime if type != DType.uint64:
             comptime MAX = UInt64(Scalar[type].MAX)
 
             if unlikely(i > MAX):
@@ -850,8 +844,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
         self.data = p
 
-        @parameter
-        if type != DType.float64:
+        comptime if type != DType.float64:
             var casted = f.cast[type]()
             # Check if casting caused infinity where original wasn't
             if unlikely(not isinf(f) and isinf(casted)):
@@ -876,22 +869,43 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
             raise Error("Expected 'null', received: ", to_string(w))
         self.data += 4
 
-    @always_inline
-    fn peek(self) raises -> Byte:
-        return self.data[]
+    fn expect_value_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        self.skip_whitespace()
+        var b = self.data[]
+        if b == `"`:
+            return self.expect_string_bytes()
+        elif b == `{`:
+            return self.expect_object_bytes()
+        elif b == `[`:
+            return self.expect_array_bytes()
+        elif b == `t` or b == `n`:
+            var s = Span(ptr=self.data.p, length=4)
+            self.data += 4
+            return s
+        elif b == `f`:
+            var s = Span(ptr=self.data.p, length=5)
+            self.data += 5
+            return s
+        elif is_numerical_component(b):
+            return self.expect_float_bytes()
+        else:
+            raise Error("Invalid json value to skip")
+
+    fn skip_value(mut self) raises:
+        _ = self.expect_value_bytes()
 
     fn expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
-        self.data += 1
         var start = self.data
+        self.data += 1
 
         while self.can_load_chunk():
             var block = StringBlock.find(self.data)
             if block.has_quote_first():
                 self.data += block.quote_index()
+                self.data += 1
                 var res = Span(
                     ptr=start.p, length=ptr_dist(start.p, self.data.p)
                 )
-                self.data += 1
                 return res
 
             if unlikely(block.has_unescaped()):
@@ -912,10 +926,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
         while self.has_more():
             var c = self.data[]
             if c == `"`:
+                self.data += 1
                 var res = Span(
                     ptr=start.p, length=ptr_dist(start.p, self.data.p)
                 )
-                self.data += 1
                 return res
             elif c == `\\`:
                 self.data += 1
@@ -999,12 +1013,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
     fn expect_integer_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
-        if self.data[] == 45:  # '-'
+        if self.data[] == `-`:  # '-'
             self.data += 1
 
         while self.can_load_chunk() and not is_compile_time():
             var chunk = self.load_chunk()
-            var is_digit = chunk.ge(48) & chunk.le(57)  # '0' to '9'
+            var is_digit = chunk.ge(`0`) & chunk.le(`9`)  # '0' to '9'
             var invalid = ~is_digit
             var mask = pack_into_integer(invalid)
             if mask == 0:
@@ -1024,15 +1038,15 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
 
     fn expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
-        if self.data[] == 45:  # '-'
+        if self.data[] == `-`:  # '-'
             self.data += 1
 
         while self.can_load_chunk() and not is_compile_time():
             var chunk = self.load_chunk()
-            var is_digit = chunk.ge(48) & chunk.le(57)
-            var is_dot = chunk.eq(46)  # '.'
-            var is_e = chunk.eq(101) | chunk.eq(69)  # 'e', 'E'
-            var is_sign = chunk.eq(43) | chunk.eq(45)  # '+', '-'
+            var is_digit = chunk.ge(`0`) & chunk.le(`9`)
+            var is_dot = chunk.eq(`.`)  # '.'
+            var is_e = chunk.eq(`e`) | chunk.eq(`E`)  # 'e', 'E'
+            var is_sign = chunk.eq(`+`) | chunk.eq(`-`)  # '+', '-'
             var valid = is_digit | is_dot | is_e | is_sign
             var invalid = ~valid
             var mask = pack_into_integer(invalid)
@@ -1047,11 +1061,11 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()](
             var c = self.data[]
             var valid_char = (
                 isdigit(c)
-                or c == 46
-                or c == 101
-                or c == 69
-                or c == 43
-                or c == 45
+                or c == `.`
+                or c == `e`
+                or c == `E`
+                or c == `+`
+                or c == `-`
             )
             if not valid_char:
                 break

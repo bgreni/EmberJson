@@ -11,7 +11,7 @@ from emberjson import (
     serialize,
     read_lines,
     StrictOptions,
-    Lazy,
+    LazyObject,
 )
 from std.benchmark import (
     Bench,
@@ -540,7 +540,7 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     b.iter[do]()
 
 
-comptime LazyCatalogData[origin: ImmutOrigin] = Lazy[CatalogData, origin]
+comptime LazyCatalogData[origin: ImmutOrigin] = LazyObject[CatalogData, origin]
 
 
 struct CatalogData(Movable):

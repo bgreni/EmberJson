@@ -14,8 +14,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
     fn __init__(out self, src: Pointer[Array, Self.origin]):
         self.src = src
 
-        @parameter
-        if Self.forward:
+        comptime if Self.forward:
             self.index = 0
         else:
             self.index = len(self.src[])
@@ -27,8 +26,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
         if len(self) == 0:
             raise StopIteration()
 
-        @parameter
-        if Self.forward:
+        comptime if Self.forward:
             self.index += 1
             return self.src[][self.index - 1]
         else:
@@ -36,8 +34,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
             return self.src[][self.index]
 
     fn __len__(self) -> Int:
-        @parameter
-        if Self.forward:
+        comptime if Self.forward:
             return len(self.src[]) - self.index
         else:
             return self.index

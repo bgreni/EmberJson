@@ -76,8 +76,7 @@ fn coin_flip(mut rng: Rng) raises -> Bool:
 
 
 fn main() raises:
-    @parameter
-    if is_defined["GEN_JSONL"]():
+    comptime if is_defined["GEN_JSONL"]():
         var rng = Rng(seed=Int(perf_counter_ns()))
         var strat = JsonStringStrategy()
 

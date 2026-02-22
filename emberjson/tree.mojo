@@ -145,16 +145,16 @@ struct Tree(Copyable, Movable, Sized, Stringable, Writable):
         self.root = Self.NodePtr()
         self.size = 0
 
-    fn __copyinit__(out self, other: Self):
+    fn __init__(out self, copy: Self):
         self = Self()
-        for node in other:
+        for node in copy:
             self.insert(TreeNode.make_ptr(node.key, node.data.copy()))
 
-    fn __moveinit__(out self, deinit other: Self):
-        self.root = other.root
-        self.size = other.size
-        other.root = Self.NodePtr()
-        _ = other.root
+    fn __init__(out self, deinit take: Self):
+        self.root = take.root
+        self.size = take.size
+        take.root = Self.NodePtr()
+        _ = take.root
 
     @always_inline
     fn __iter__(self) -> _TreeIter:

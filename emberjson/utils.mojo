@@ -169,8 +169,7 @@ fn to_string(b: ByteView[_]) -> StringSlice[b.origin]:
 fn to_string(v: ByteVec, out s: String):
     s = String(capacity=v.size)
 
-    @parameter
-    for i in range(v.size):
+    comptime for i in range(v.size):
         s.append(Codepoint(v[i]))
 
 

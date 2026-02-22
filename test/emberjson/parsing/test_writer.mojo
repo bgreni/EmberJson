@@ -16,8 +16,7 @@ def test_minify():
 
 
 def test_minify_citm_catalog():
-    @parameter
-    if files_enabled():
+    comptime if files_enabled():
         with open("./bench_data/data/citm_catalog.json", "r") as formatted:
             with open(
                 "./bench_data/data/citm_catalog_minify.json", "r"

@@ -12,8 +12,7 @@ comptime dir = String("./bench_data/data/jsonchecker/")
 
 
 def expect_fail(datafile: String):
-    @parameter
-    if files_enabled():
+    comptime if files_enabled():
         with open(String(dir, datafile, ".json"), "r") as f:
             with assert_raises():
                 var v = parse(f.read())
@@ -21,8 +20,7 @@ def expect_fail(datafile: String):
 
 
 def expect_pass(datafile: String):
-    @parameter
-    if files_enabled():
+    comptime if files_enabled():
         with open(String(dir, datafile, ".json"), "r") as f:
             _ = parse(f.read())
 

@@ -11,7 +11,7 @@ from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
 from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
-from ._deserialize import Parser
+from ._deserialize import Parser, ParseOptions
 from .format_int import write_int
 from sys.info import bit_width_of
 from .teju import write_f64
@@ -171,6 +171,12 @@ struct Value(JsonValue, Sized):
         """
         var parser = Parser(parse_bytes)
         self = parser.parse()
+
+    @staticmethod
+    fn from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = p.parse()
 
     @implicit
     @always_inline

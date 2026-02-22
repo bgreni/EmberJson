@@ -36,8 +36,7 @@ trait Serializer(Writer):
     fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
         serialize(value, self)
 
-        @parameter
-        if add_comma:
+        comptime if add_comma:
             self.write(",")
 
 
@@ -65,8 +64,7 @@ __extension String(Serializer):
     fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
         serialize(value, self)
 
-        @parameter
-        if add_comma:
+        comptime if add_comma:
             self.write(",")
 
 
@@ -94,8 +92,7 @@ __extension _WriteBufferStack(Serializer):
     fn write_item[add_comma: Bool](mut self, value: Some[AnyType]):
         serialize(value, self)
 
-        @parameter
-        if add_comma:
+        comptime if add_comma:
             self.write(",")
 
 
@@ -158,41 +155,14 @@ struct PrettySerializer[indent: String = "    "](Defaultable, Serializer):
         self._skip_indent = False
         serialize(value, self)
 
-        @parameter
-        if add_comma:
+        comptime if add_comma:
             self.write(",")
         self.write("\n")
 
 
 trait JsonSerializable:
     fn write_json(self, mut writer: Some[Serializer]):
-        comptime field_count = struct_field_count[Self]()
-        comptime field_names = struct_field_names[Self]()
-        comptime types = struct_field_types[Self]()
-        comptime is_array = Self.serialize_as_array()
-
-        @parameter
-        if is_array:
-            writer.begin_array()
-        else:
-            writer.begin_object()
-
-        @parameter
-        for i in range(field_count):
-
-            @parameter
-            if not is_array:
-                comptime name = field_names[i]
-                writer.write_key(name)
-
-            comptime add_comma = i != field_count - 1
-            writer.write_item[add_comma](__struct_field_ref(i, self))
-
-        @parameter
-        if is_array:
-            writer.end_array()
-        else:
-            writer.end_object()
+        _default_serialize[Self.serialize_as_array()](self, writer)
 
     @staticmethod
     fn serialize_as_array() -> Bool:
@@ -206,27 +176,41 @@ fn serialize[T: AnyType, //](value: T, out writer: String):
     stack_writer.flush()
 
 
+fn _default_serialize[
+    T: AnyType, //, is_array: Bool = False
+](value: T, mut writer: Some[Serializer]):
+    comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
+
+    comptime field_count = struct_field_count[T]()
+    comptime field_names = struct_field_names[T]()
+    comptime types = struct_field_types[T]()
+
+    comptime if is_array:
+        writer.begin_array()
+    else:
+        writer.begin_object()
+
+    comptime for i in range(field_count):
+        comptime if not is_array:
+            comptime name = field_names[i]
+            writer.write_key(name)
+
+        comptime add_comma = i != field_count - 1
+        writer.write_item[add_comma](__struct_field_ref(i, value))
+
+    comptime if is_array:
+        writer.end_array()
+    else:
+        writer.end_object()
+
+
 fn serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
     comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
 
-    @parameter
-    if conforms_to(T, JsonSerializable):
+    comptime if conforms_to(T, JsonSerializable):
         trait_downcast[JsonSerializable](value).write_json(writer)
     else:
-        comptime field_count = struct_field_count[T]()
-        comptime field_names = struct_field_names[T]()
-        comptime types = struct_field_types[T]()
-
-        writer.begin_object()
-
-        @parameter
-        for i in range(field_count):
-            comptime name = field_names[i]
-            writer.write_key(name)
-            comptime add_comma = i != field_count - 1
-            writer.write_item[add_comma](__struct_field_ref(i, value))
-
-        writer.end_object()
+        _default_serialize(value, writer)
 
 
 # ===============================================
@@ -254,17 +238,13 @@ __extension Int(JsonSerializable):
 
 __extension SIMD(JsonSerializable):
     fn write_json(self, mut writer: Some[Serializer]):
-        @parameter
-        if size == 1:
+        comptime if size == 1:
             writer.write(self)
         else:
             writer.begin_array()
 
-            @parameter
-            for i in range(size):
-
-                @parameter
-                if i != size - 1:
+            comptime for i in range(size):
+                comptime if i != size - 1:
                     writer.write_item[True](self[i])
                 else:
                     writer.write_item[False](self[i])
@@ -396,8 +376,7 @@ __extension Tuple(JsonSerializable):
     fn write_json(self, mut writer: Some[Serializer]):
         writer.begin_array()
 
-        @parameter
-        for i in range(Self.__len__()):
+        comptime for i in range(Self.__len__()):
             comptime add_comma = i != Self.__len__() - 1
             writer.write_item[add_comma](self[i])
 

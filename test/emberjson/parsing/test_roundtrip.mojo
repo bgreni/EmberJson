@@ -9,8 +9,7 @@ fn files_enabled() -> Bool:
 
 
 def round_trip_test(filename: String):
-    @parameter
-    if files_enabled():
+    comptime if files_enabled():
         var d = String("./bench_data/data/roundtrip/")
         with open(String(d, filename, ".json"), "r") as f:
             var src = f.read()

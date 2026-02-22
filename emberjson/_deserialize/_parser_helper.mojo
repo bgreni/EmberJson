@@ -2,6 +2,7 @@ from emberjson.utils import BytePtr, CheckedPointer, select
 from memory import UnsafePointer
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
 from memory import memcpy
+from std.builtin.dtype import _uint_type_of_width
 from emberjson.constants import (
     `0`,
     `9`,
@@ -26,7 +27,7 @@ from emberjson.constants import (
     `t`,
     `/`,
 )
-from memory.unsafe import bitcast, pack_bits, _uint
+from memory.unsafe import bitcast, pack_bits
 from bit import count_trailing_zeros
 from sys.info import bit_width_of
 from sys.intrinsics import _type_is_eq, likely, unlikely
@@ -58,7 +59,7 @@ fn is_numerical_component(char: Byte) -> Bool:
     return isdigit(char) or char == `+` or char == `-`
 
 
-comptime Bits_T = Scalar[_uint(SIMD8_WIDTH)]
+comptime Bits_T = Scalar[_uint_type_of_width[SIMD8_WIDTH]()]
 
 
 @always_inline
@@ -276,8 +277,7 @@ fn copy_to_string[
                         raise Error("Invalid escape sequence")
         return String(unsafe_from_utf8=dest^)
 
-    @parameter
-    if not ignore_unicode:
+    comptime if not ignore_unicode:
         if found_escaped:
             return decode_escaped()
         else:
