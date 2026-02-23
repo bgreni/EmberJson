@@ -8,6 +8,8 @@ jobs:
     timeout-minutes: 30
     name: Package
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
         - name: Checkout code
           uses: actions/checkout@v4
