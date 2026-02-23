@@ -13,7 +13,7 @@ if __name__ == "__main__":
             p = os.path.join(root, file)
 
             ret = subprocess.run(
-                f"mojo -D ASSERT=all -I . --disable-warnings {p}",
+                f"mojo -D ASSERT=all -I . {p}",
                 shell=True,
                 capture_output=True,
                 text=True,

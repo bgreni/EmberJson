@@ -164,7 +164,7 @@ struct DeepNode(Copyable):
     var val: Int
     var children: List[DeepNode]
 
-    fn __init__(out self, copy: Self):
+    fn __init__(out self, *, copy: Self):
         self.val = copy.val
         self.children = List[DeepNode](capacity=len(copy.children))
         for i in range(len(copy.children)):

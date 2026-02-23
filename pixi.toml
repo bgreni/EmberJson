@@ -23,7 +23,7 @@ update_and_build = { cmd = "pixi update && pixi run test && pixi run build" }
 precommit = { depends-on = ["format", "test", "test_python_compat", "fuzz"] }
 update_and_test = "pixi update && pixi run test && pixi run bench_compare"
 test_python_compat = "python python_compat.py"
-fuzz = "mojo -D ASSERT=all --disable-warnings fuzz.mojo"
+fuzz = "mojo -D ASSERT=all fuzz.mojo"
 gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 
 [dependencies]

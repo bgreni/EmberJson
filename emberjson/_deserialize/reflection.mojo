@@ -56,6 +56,10 @@ fn deserialize[
     res = _deserialize_impl[T](p)
 
 
+fn __is_optional[T: AnyType]() -> Bool:
+    return get_base_type_name[T]() == "Optional"
+
+
 @always_inline
 fn _default_deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
@@ -64,6 +68,7 @@ fn _default_deserialize[
 
     comptime field_count = struct_field_count[T]()
     comptime field_names = struct_field_names[T]()
+    comptime field_types = struct_field_types[T]()
 
     p.expect(`{`)
 
@@ -74,15 +79,15 @@ fn _default_deserialize[
         p.expect(`:`)
 
         var matched = False
-        comptime for j in range(field_count):
-            comptime name = field_names[j]
+        comptime for i in range(field_count):
+            comptime name = field_names[i]
 
             if ident == name:
-                if unlikely(seen[j]):
+                if unlikely(seen[i]):
                     raise Error("Duplicate key: ", name)
-                seen[j] = True
+                seen[i] = True
                 matched = True
-                ref field = __struct_field_ref(j, s)
+                ref field = __struct_field_ref(i, s)
                 comptime TField = downcast[type_of(field), _Base]
 
                 field = rebind_var[type_of(field)](_deserialize_impl[TField](p))
@@ -94,10 +99,11 @@ fn _default_deserialize[
         if p.peek() != `}`:
             p.expect(`,`)
 
-    # TODO: Allow missing Optionals
-
-    if unlikely(not all(Span(seen))):
-        raise Error("Missing keys")
+    comptime for i in range(field_count):
+        comptime if not __is_optional[field_types[i]]():
+            if not seen[i]:
+                comptime name = field_names[i]
+                raise Error("Missing key: ", name)
 
     p.expect(`}`)
 

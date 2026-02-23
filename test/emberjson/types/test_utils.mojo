@@ -23,7 +23,7 @@ def test_write_escaped_string():
 
     # Null byte (should be \u0000)
     var null_str = String()
-    null_str.append_byte(0)
+    null_str.append(Codepoint(0))
     assert_equal(write(Value(null_str)), r'"\u0000"')
 
 
