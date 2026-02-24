@@ -11,7 +11,7 @@ from emberjson import (
     serialize,
     read_lines,
     StrictOptions,
-    LazyObject,
+    Lazy,
 )
 from std.benchmark import (
     Bench,
@@ -540,10 +540,10 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     b.iter[do]()
 
 
-comptime LazyCatalogData[origin: ImmutOrigin] = LazyObject[CatalogData, origin]
+comptime LazyCatalogData[origin: ImmutOrigin] = Lazy[CatalogData, origin]
 
 
-struct CatalogData(Movable):
+struct CatalogData(Defaultable, Movable):
     var areaNames: Dict[String, String]
     var audienceSubCategoryNames: Dict[String, String]
     var blockNames: Dict[String, String]
@@ -556,8 +556,21 @@ struct CatalogData(Movable):
     var topicSubTopics: Dict[String, List[Int]]
     var venueNames: Dict[String, String]
 
+    fn __init__(out self):
+        self.areaNames = Dict[String, String]()
+        self.audienceSubCategoryNames = Dict[String, String]()
+        self.blockNames = Dict[String, String]()
+        self.events = Dict[String, Event]()
+        self.performances = List[Performance]()
+        self.seatCategoryNames = Dict[String, String]()
+        self.subTopicNames = Dict[String, String]()
+        self.subjectNames = Dict[String, String]()
+        self.topicNames = Dict[String, String]()
+        self.topicSubTopics = Dict[String, List[Int]]()
+        self.venueNames = Dict[String, String]()
 
-struct Event(Copyable):
+
+struct Event(Copyable, Defaultable):
     var description: Optional[String]
     var id: Int
     var logo: Optional[String]
@@ -567,8 +580,18 @@ struct Event(Copyable):
     var subtitle: Optional[String]
     var topicIds: List[Int]
 
+    fn __init__(out self):
+        self.description = None
+        self.id = 0
+        self.logo = None
+        self.name = ""
+        self.subTopicIds = List[Int]()
+        self.subjectCode = None
+        self.subtitle = None
+        self.topicIds = List[Int]()
 
-struct Performance(Copyable):
+
+struct Performance(Copyable, Defaultable):
     var eventId: Int
     var id: Int
     var logo: Optional[String]
@@ -579,41 +602,81 @@ struct Performance(Copyable):
     var start: Int
     var venueCode: String
 
+    fn __init__(out self):
+        self.eventId = 0
+        self.id = 0
+        self.logo = None
+        self.name = None
+        self.prices = List[Price]()
+        self.seatCategories = List[SeatCategory]()
+        self.seatMapImage = None
+        self.start = 0
+        self.venueCode = ""
 
-struct SeatCategory(Copyable):
+
+struct SeatCategory(Copyable, Defaultable):
     var areas: List[Area]
     var seatCategoryId: Int
 
+    fn __init__(out self):
+        self.areas = List[Area]()
+        self.seatCategoryId = 0
 
-struct Area(Copyable):
+
+struct Area(Copyable, Defaultable):
     var areaId: Int
     var blockIds: List[Int]
 
+    fn __init__(out self):
+        self.areaId = 0
+        self.blockIds = List[Int]()
 
-struct Price(Copyable):
+
+struct Price(Copyable, Defaultable):
     var amount: Int
     var audienceSubCategoryId: Int
     var seatCategoryId: Int
 
+    fn __init__(out self):
+        self.amount = 0
+        self.audienceSubCategoryId = 0
+        self.seatCategoryId = 0
 
-struct Canada(Movable):
+
+struct Canada(Defaultable, Movable):
     var type: String
     var features: List[Feature]
 
+    fn __init__(out self):
+        self.type = ""
+        self.features = List[Feature]()
 
-struct Feature(Copyable):
+
+struct Feature(Copyable, Defaultable):
     var type: String
     var properties: Properties
     var geometry: Geometry
 
+    fn __init__(out self):
+        self.type = ""
+        self.properties = Properties()
+        self.geometry = Geometry()
 
-struct Geometry(Copyable):
+
+struct Geometry(Copyable, Defaultable):
     var type: String
     var coordinates: List[List[Tuple[Float64, Float64]]]
 
+    fn __init__(out self):
+        self.type = ""
+        self.coordinates = List[List[Tuple[Float64, Float64]]]()
 
-struct Properties(Copyable):
+
+struct Properties(Copyable, Defaultable):
     var name: String
+
+    fn __init__(out self):
+        self.name = ""
 
 
 @parameter

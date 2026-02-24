@@ -30,7 +30,11 @@ trait JsonDeserializable(_Base):
     fn from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
-        s = _default_deserialize[Self](p)
+        s = _default_deserialize[Self, Self.deserialize_as_array()](p)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 fn try_deserialize[T: _Base](s: String) -> Optional[T]:
@@ -60,52 +64,85 @@ fn __is_optional[T: AnyType]() -> Bool:
     return get_base_type_name[T]() == "Optional"
 
 
+fn __all_dtors_are_trivial[T: AnyType]() -> Bool:
+    comptime field_types = struct_field_types[T]()
+    comptime for i in range(struct_field_count[T]()):
+        comptime type = field_types[i]
+        if not downcast[type, ImplicitlyDestructible].__del__is_trivial:
+            return False
+    return True
+
+
 @always_inline
 fn _default_deserialize[
-    origin: ImmutOrigin, options: ParseOptions, //, T: _Base
+    origin: ImmutOrigin,
+    options: ParseOptions,
+    //,
+    T: _Base,
+    is_array: Bool,
 ](mut p: Parser[origin, options], out s: T) raises:
-    __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
+    comptime if conforms_to(T, Defaultable):
+        s = downcast[T, Defaultable]()
+    else:
+        # If we use mark_initialized with a struct that has something like a pointer
+        # field that doesn't become initialized it will cause a crash if parsing fails.
+        comptime assert __all_dtors_are_trivial[T](), (
+            "Cannot deserialize non-Defaultable struct containing fields with"
+            " non-trivial destructors"
+        )
+        __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
 
     comptime field_count = struct_field_count[T]()
     comptime field_names = struct_field_names[T]()
     comptime field_types = struct_field_types[T]()
 
-    p.expect(`{`)
-
-    var seen = InlineArray[Bool, field_count](fill=False)
-
-    while p.peek() != `}`:
-        var ident = p.read_string()
-        p.expect(`:`)
-
-        var matched = False
+    comptime if is_array:
+        p.expect(`[`)
         comptime for i in range(field_count):
-            comptime name = field_names[i]
+            ref field = __struct_field_ref(i, s)
+            comptime TField = downcast[type_of(field), _Base]
+            field = _deserialize_impl[TField](p)
+            p.skip_whitespace()
+            if i < field_count - 1:
+                p.expect(`,`)
+        p.expect(`]`)
+    else:
+        p.expect(`{`)
 
-            if ident == name:
-                if unlikely(seen[i]):
-                    raise Error("Duplicate key: ", name)
-                seen[i] = True
-                matched = True
-                ref field = __struct_field_ref(i, s)
-                comptime TField = downcast[type_of(field), _Base]
+        var seen = InlineArray[Bool, field_count](fill=False)
 
-                field = rebind_var[type_of(field)](_deserialize_impl[TField](p))
+        while p.peek() != `}`:
+            var ident = p.read_string()
+            p.expect(`:`)
 
-        if not matched:
-            p.skip_value()
-
-        p.skip_whitespace()
-        if p.peek() != `}`:
-            p.expect(`,`)
-
-    comptime for i in range(field_count):
-        comptime if not __is_optional[field_types[i]]():
-            if not seen[i]:
+            var matched = False
+            comptime for i in range(field_count):
                 comptime name = field_names[i]
-                raise Error("Missing key: ", name)
 
-    p.expect(`}`)
+                if ident == name:
+                    if unlikely(seen[i]):
+                        raise Error("Duplicate key: ", name)
+                    seen[i] = True
+                    matched = True
+                    ref field = __struct_field_ref(i, s)
+                    comptime TField = downcast[type_of(field), _Base]
+
+                    field = _deserialize_impl[TField](p)
+
+            if unlikely(not matched):
+                raise Error("Unexpected field: ", ident)
+
+            p.skip_whitespace()
+            if p.peek() != `}`:
+                p.expect(`,`)
+
+        comptime for i in range(field_count):
+            comptime if not __is_optional[field_types[i]]():
+                if not seen[i]:
+                    comptime name = field_names[i]
+                    raise Error("Missing key: ", name)
+
+        p.expect(`}`)
 
 
 fn _deserialize_impl[
@@ -114,9 +151,9 @@ fn _deserialize_impl[
     comptime assert is_struct_type[T](), non_struct_error
 
     comptime if conforms_to(T, JsonDeserializable):
-        s = rebind_var[T](downcast[T, JsonDeserializable].from_json(p))
+        s = downcast[T, JsonDeserializable].from_json(p)
     else:
-        s = _default_deserialize[T](p)
+        s = _default_deserialize[T, False](p)
 
 
 # ===============================================
@@ -131,6 +168,10 @@ __extension String(JsonDeserializable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.read_string()
 
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
+
 
 __extension Int(JsonDeserializable):
     @staticmethod
@@ -139,6 +180,10 @@ __extension Int(JsonDeserializable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Int(p.expect_integer())
 
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
+
 
 __extension Bool(JsonDeserializable):
     @staticmethod
@@ -146,6 +191,10 @@ __extension Bool(JsonDeserializable):
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.expect_bool()
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 __extension SIMD(JsonDeserializable):
@@ -183,6 +232,10 @@ __extension SIMD(JsonDeserializable):
         comptime if size > 1:
             p.expect(`]`)
 
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
+
 
 __extension IntLiteral(JsonDeserializable):
     @staticmethod
@@ -194,6 +247,10 @@ __extension IntLiteral(JsonDeserializable):
         if i != s:
             raise Error("Expected: ", s, ", Received: ", i)
 
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
+
 
 __extension FloatLiteral(JsonDeserializable):
     @staticmethod
@@ -204,6 +261,10 @@ __extension FloatLiteral(JsonDeserializable):
         var f = p.expect_float()
         if f != s:
             raise Error("Expected: ", s, ", Received: ", f)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 # ===============================================
@@ -218,6 +279,10 @@ __extension ArcPointer(JsonDeserializable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
 
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
+
 
 __extension OwnedPointer(JsonDeserializable):
     @staticmethod
@@ -227,6 +292,10 @@ __extension OwnedPointer(JsonDeserializable):
         s = rebind_var[Self](
             OwnedPointer(_deserialize_impl[downcast[Self.T, _Base]](p))
         )
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 # ===============================================
@@ -243,11 +312,11 @@ __extension Optional(JsonDeserializable):
             p.expect_null()
             s = None
         else:
-            s = Self(
-                rebind_var[Self.T](
-                    _deserialize_impl[downcast[Self.T, _Base]](p)
-                )
-            )
+            s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 __extension List(JsonDeserializable):
@@ -259,15 +328,15 @@ __extension List(JsonDeserializable):
         s = Self()
 
         while p.peek() != `]`:
-            s.append(
-                rebind_var[Self.T](
-                    _deserialize_impl[downcast[Self.T, _Base]](p)
-                )
-            )
+            s.append(_deserialize_impl[downcast[Self.T, _Base]](p))
             p.skip_whitespace()
             if p.peek() != `]`:
                 p.expect(`,`)
         p.expect(`]`)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 __extension Dict(JsonDeserializable):
@@ -284,16 +353,18 @@ __extension Dict(JsonDeserializable):
 
         while p.peek() != `}`:
             var ident = rebind_var[Self.K](
-                _deserialize_impl[downcast[Self.K, _Base]](p)
+                _deserialize_impl[downcast[Self.K, _Base & Movable]](p)
             )
             p.expect(`:`)
-            s[ident^] = rebind_var[Self.V](
-                _deserialize_impl[downcast[Self.V, _Base]](p)
-            )
+            s[ident^] = _deserialize_impl[downcast[Self.V, _Base]](p)
             p.skip_whitespace()
             if p.peek() != `}`:
                 p.expect(`,`)
         p.expect(`}`)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 __extension Tuple(JsonDeserializable):
@@ -306,15 +377,17 @@ __extension Tuple(JsonDeserializable):
 
         comptime for i in range(Self.__len__()):
             UnsafePointer(to=s[i]).init_pointee_move(
-                rebind_var[Self.element_types[i]](
-                    _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
-                )
+                _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
             )
 
             if i < Self.__len__() - 1:
                 p.expect(`,`)
 
         p.expect(`]`)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 __extension InlineArray(JsonDeserializable):
@@ -327,15 +400,17 @@ __extension InlineArray(JsonDeserializable):
 
         for i in range(size):
             UnsafePointer(to=s[i]).init_pointee_move(
-                rebind_var[Self.ElementType](
-                    _deserialize_impl[downcast[Self.ElementType, _Base]](j)
-                )
+                _deserialize_impl[downcast[Self.ElementType, _Base]](j)
             )
 
             if i != size - 1:
                 j.expect(`,`)
 
         j.expect(`]`)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False
 
 
 __extension Set(JsonDeserializable):
@@ -347,12 +422,12 @@ __extension Set(JsonDeserializable):
         s = Self()
 
         while j.peek() != `]`:
-            s.add(
-                rebind_var[Self.T](
-                    _deserialize_impl[downcast[Self.T, _Base]](j)
-                )
-            )
+            s.add(_deserialize_impl[downcast[Self.T, _Base]](j))
             j.skip_whitespace()
             if j.peek() != `]`:
                 j.expect(`,`)
         j.expect(`]`)
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return False

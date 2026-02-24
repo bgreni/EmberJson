@@ -15,7 +15,9 @@ from ..utils import StackArray, lut
 from emberjson.format_int import write_int
 
 
-# Mojo port of the Teju Jagua algorithm https://github.com/cassioneri/teju_jagua
+# Mojo port of the Teju Jagua algorithm by Cassio Neri.
+# Original implementation: https://github.com/cassioneri/teju_jagua
+# Licensed under the Apache License, Version 2.0.
 
 comptime MANTISSA_SIZE: UInt64 = 53
 comptime EXPONENT_MIN: Int32 = -1074

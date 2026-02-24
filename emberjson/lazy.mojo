@@ -1,7 +1,14 @@
-from .reflection import _Base, _deserialize_impl
-from .parser import Parser
+from ._deserialize.reflection import (
+    _Base,
+    deserialize,
+    JsonDeserializable,
+    _deserialize_impl,
+)
+from ._deserialize.parser import Parser
+from ._serialize import JsonSerializable, serialize, Serializer
 from std.hashlib import Hasher
 from std.sys.intrinsics import _type_is_eq
+from std.builtin.rebind import downcast
 
 
 fn _get_object_bytes[
@@ -47,15 +54,30 @@ fn _deserialize_bytes[
     return _deserialize_impl[T](p)
 
 
+comptime ReadBytesFn[origin: ImmutOrigin] = fn(
+    mut Parser[origin]
+) raises -> Span[Byte, origin]
+comptime ParseFn[T: _Base, origin: ImmutOrigin] = fn(
+    Span[Byte, origin]
+) raises -> T
+
+
+fn __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:
+    comptime if conforms_to(T, JsonDeserializable) and downcast[
+        T, JsonDeserializable
+    ].deserialize_as_array():
+        return _get_array_bytes[origin]
+    else:
+        return _get_object_bytes[origin]
+
+
 @fieldwise_init
 struct Lazy[
     T: _Base,
     origin: ImmutOrigin,
-    parse_value: fn(mut Parser[origin]) raises -> Span[Byte, origin],
-    extract_value: fn(Span[Byte, origin]) raises -> T = _deserialize_bytes[
-        T, origin
-    ],
-](Hashable, JsonDeserializable, TrivialRegisterPassable):
+    parse_value: ReadBytesFn[origin] = __pick_byte_expect[T, origin](),
+    extract_value: ParseFn[T, origin] = _deserialize_bytes[T, origin],
+](Hashable, JsonDeserializable, JsonSerializable, TrivialRegisterPassable):
     var _data: Span[Byte, Self.origin]
 
     @staticmethod
@@ -68,15 +90,18 @@ struct Lazy[
         ), "Lazy deserialization only works with default parse options"
         s = {Self.parse_value(rebind[Parser[Self.origin]](p))}
 
+    fn write_json(self, mut writer: Some[Serializer]):
+        writer.write(StringSlice(unsafe_from_utf8=self._data))
+
     fn get(self) raises -> Self.T:
         return Self.extract_value(self._data)
+
+    fn __eq__(self, other: Self) -> Bool:
+        return self._data == other._data
 
     fn __hash__(self, mut h: Some[Hasher]):
         comptime assert conforms_to(Self.T, Hashable)
         h.update(StringSlice(unsafe_from_utf8=self._data))
-
-    fn __eq__(self, other: Self) -> Bool:
-        return self._data == other._data
 
     fn unsafe_as_string_slice(
         self,
@@ -85,14 +110,6 @@ struct Lazy[
         comptime assert _type_is_eq[Self.T, String]()
         return StringSlice(unsafe_from_utf8=self._data[1:-1])
 
-
-comptime LazyObject[T: _Base, origin: ImmutOrigin] = Lazy[
-    T, origin, _get_object_bytes[origin]
-]
-
-comptime LazyArray[T: _Base, origin: ImmutOrigin] = Lazy[
-    T, origin, _get_array_bytes[origin]
-]
 
 comptime LazyString[origin: ImmutOrigin] = Lazy[
     String, origin, _get_string_bytes[origin]

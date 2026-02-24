@@ -1,21 +1,30 @@
-from testing import TestSuite, assert_equal, assert_false, assert_true
+from testing import (
+    TestSuite,
+    assert_equal,
+    assert_false,
+    assert_true,
+    assert_raises,
+)
 from emberjson._deserialize import (
     deserialize,
     try_deserialize,
+    Parser,
+    ParseOptions,
+    StrictOptions,
+)
+from emberjson import JsonDeserializable
+from emberjson.lazy import (
     LazyString,
     LazyInt,
     LazyUInt,
     LazyFloat,
     LazyValue,
-    Parser,
-    ParseOptions,
-    StrictOptions,
 )
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 
 
-struct Foo[I: IntLiteral, F: FloatLiteral](Movable):
+struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var a: String
     var i: Int
     var f: Float64
@@ -34,6 +43,26 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Movable):
     var set: Set[Int]
     var ap: ArcPointer[Int]
     var op: OwnedPointer[Int]
+
+    fn __init__(out self):
+        self.a = ""
+        self.i = 0
+        self.f = 0.0
+        self.i32 = 0
+        self.o = None
+        self.o2 = None
+        self.b = False
+        self.bs = False
+        self.li = []
+        self.tup = (0, 0, 0)
+        self.ina = [0.0, 0.0, 0.0]
+        self.d = {}
+        self.il = {}
+        self.fl = {}
+        self.vec = SIMD[DType.float32, 4](0.0, 0.0, 0.0, 0.0)
+        self.set = {}
+        self.ap = ArcPointer[Int](0)
+        self.op = OwnedPointer[Int](0)
 
 
 def test_deserialize():
@@ -123,6 +152,8 @@ def test_ctime_deserialize():
 }
 """
     )
+
+    comptime assert Bool(foo_ctime)
 
     var foo = materialize[foo_ctime.value()]()
 
@@ -271,9 +302,24 @@ def test_lazy_value():
     assert_true(l_bool.get().bool())
 
 
+struct Baz(Movable):
+    var a: Int
+    var b: Int
+
+
+def test_unexpected():
+    with assert_raises():
+        var b = deserialize[Baz]('{"c": 230}')
+
+
+# TODO: This will crash because using assume initialized and then throwing when the target struct
+# contains pointers is actually a bad idea it turns out. Will need to fix.
+# Will be less of an issue of Defaultable gets a compiler generated implementation at some point
+#
 def test_unexpected_keys():
-    var foo = deserialize[Foo[23, 234.23]](
-        """
+    with assert_raises():
+        var foo = deserialize[Foo[23, 234.23]](
+            """
 {
     "extra_string": "should be ignored",
     "a": "hello",
@@ -304,13 +350,46 @@ def test_unexpected_keys():
     "extra_bool": false
 }
 """
-    )
+        )
 
-    assert_equal(foo.a, "hello")
-    assert_equal(foo.i, 42)
-    assert_equal(foo.f, 3.14)
-    assert_equal(foo.b, True)
-    assert_equal(foo.ap[], 42)
+
+@fieldwise_init
+struct Point(JsonDeserializable):
+    var x: Int
+    var y: Int
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return True
+
+
+def test_point_array_reflection():
+    var json_str = "[1, 2]"
+    var p = deserialize[Point](json_str)
+    assert_equal(p.x, 1)
+    assert_equal(p.y, 2)
+
+
+@fieldwise_init
+struct NestedArray(Defaultable, JsonDeserializable):
+    var p: Point
+    var name: String
+
+    fn __init__(out self):
+        self.p = Point(0, 0)
+        self.name = ""
+
+    @staticmethod
+    fn deserialize_as_array() -> Bool:
+        return True
+
+
+def test_nested_array_reflection():
+    var json_str = '[[10, 20], "test"]'
+    var n = deserialize[NestedArray](json_str)
+    assert_equal(n.p.x, 10)
+    assert_equal(n.p.y, 20)
+    assert_equal(n.name, "test")
 
 
 def main():

@@ -65,12 +65,12 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
 
     @always_inline("nodebug")
     fn __add__(self, v: SIMD) -> Self:
-        constrained[v.dtype.is_integral()]()
+        comptime assert v.dtype.is_integral()
         return {self.p + v, self.start, self.end}
 
     @always_inline("nodebug")
     fn __iadd__(mut self, v: SIMD):
-        constrained[v.dtype.is_integral()]()
+        comptime assert v.dtype.is_integral()
         self.p += v
 
     @always_inline("nodebug")
@@ -198,7 +198,7 @@ fn constrain_json_type[T: Movable & Copyable]():
     ]() or _type_is_eq[
         T, Null
     ]()
-    constrained[valid, "Invalid type for JSON"]()
+    comptime assert valid, "Invalid type for JSON"
 
 
 fn write_escaped_string(s: String, mut writer: Some[Writer]):

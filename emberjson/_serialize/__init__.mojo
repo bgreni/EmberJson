@@ -1,1 +1,6 @@
-from .reflection import serialize, JsonSerializable, PrettySerializer
+from .reflection import (
+    serialize,
+    JsonSerializable,
+    PrettySerializer,
+    Serializer,
+)

@@ -22,7 +22,7 @@ fn write_int(v: Scalar, mut writer: Some[Writer]):
     """
     # TODO: Investigate if this is actually better than just writing to a
     # stack array and writing that to a string backwards
-    constrained[v.dtype.is_integral(), "Expected integral value"]()
+    comptime assert v.dtype.is_integral(), "Expected integral value"
     if v == 0:
         writer.write(0)
     else:

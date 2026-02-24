@@ -206,3 +206,8 @@ j = {"foo": {"bar": [1, 2, 3]}}
 print(j.foo.bar[1])  # prints "2"
 ```
 
+## Acknowledgments
+
+EmberJson uses the [Teju Jagua](https://github.com/cassioneri/teju_jagua) algorithm for efficient floating-point formatting, developed by Cassio Neri and licensed under the Apache License, Version 2.0.
+
+

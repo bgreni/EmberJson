@@ -1,3 +1,6 @@
+# Mojo port of the Teju Jagua algorithm by Cassio Neri.
+# Original implementation: https://github.com/cassioneri/teju_jagua
+# Licensed under the Apache License, Version 2.0.
 from ..utils import StackArray
 
 comptime Pair = SIMD[DType.uint64, 2]

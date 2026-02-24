@@ -11,18 +11,21 @@ from ._deserialize import (
     try_deserialize,
     JsonDeserializable,
     StrictOptions,
-    LazyString,
-    Lazy,
-    LazyObject,
-    LazyArray,
-    LazyInt,
-    LazyUInt,
-    LazyFloat,
 )
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
 from ._serialize import JsonSerializable, serialize, PrettySerializer
 from ._pointer import PointerIndex
+
+from .lazy import (
+    Lazy,
+    LazyString,
+    LazyInt,
+    LazyUInt,
+    LazyFloat,
+    Lazy,
+    LazyValue,
+)
 
 
 @always_inline
