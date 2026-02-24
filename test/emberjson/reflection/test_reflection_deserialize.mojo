@@ -312,10 +312,6 @@ def test_unexpected():
         var b = deserialize[Baz]('{"c": 230}')
 
 
-# TODO: This will crash because using assume initialized and then throwing when the target struct
-# contains pointers is actually a bad idea it turns out. Will need to fix.
-# Will be less of an issue of Defaultable gets a compiler generated implementation at some point
-#
 def test_unexpected_keys():
     with assert_raises():
         var foo = deserialize[Foo[23, 234.23]](
@@ -390,6 +386,19 @@ def test_nested_array_reflection():
     assert_equal(n.p.x, 10)
     assert_equal(n.p.y, 20)
     assert_equal(n.name, "test")
+
+
+@fieldwise_init
+struct OptionalTest(Movable):
+    var a: Int
+    var b: Optional[Int]
+
+
+def test_missing_optional():
+    var json_str = '{"a": 1}'
+    var o = deserialize[OptionalTest](json_str)
+    assert_equal(o.a, 1)
+    assert_true(o.b is None)
 
 
 def main():

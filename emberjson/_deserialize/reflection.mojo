@@ -109,7 +109,9 @@ fn _default_deserialize[
     else:
         p.expect(`{`)
 
-        var seen = InlineArray[Bool, field_count](fill=False)
+        # maybe an optimization since the InlineArray ctor uses a for loop
+        # but according to the IR this will just inline the computed values
+        var seen = materialize[InlineArray[Bool, field_count](fill=False)]()
 
         while p.peek() != `}`:
             var ident = p.read_string()
@@ -120,9 +122,10 @@ fn _default_deserialize[
                 comptime name = field_names[i]
 
                 if ident == name:
-                    if unlikely(seen[i]):
+                    ref seen_i = seen.unsafe_get(i)
+                    if unlikely(seen_i):
                         raise Error("Duplicate key: ", name)
-                    seen[i] = True
+                    seen_i = True
                     matched = True
                     ref field = __struct_field_ref(i, s)
                     comptime TField = downcast[type_of(field), _Base]
@@ -138,7 +141,7 @@ fn _default_deserialize[
 
         comptime for i in range(field_count):
             comptime if not __is_optional[field_types[i]]():
-                if not seen[i]:
+                if not seen.unsafe_get(i):
                     comptime name = field_names[i]
                     raise Error("Missing key: ", name)
 
