@@ -5,6 +5,10 @@ from emberjson.schema import (
     Secret,
     Clamp,
     Coerce,
+    CoerceInt,
+    CoerceUInt,
+    CoerceFloat,
+    CoerceString,
     Default,
     Transform,
 )
@@ -158,6 +162,70 @@ def test_coerce():
 
     var c3 = deserialize[Coerce[Int, coerce_int]]("true")
     assert_equal(c3[], 1)
+
+
+def test_coerce_int():
+    var c1 = deserialize[CoerceInt]('"123"')
+    assert_equal(c1[], 123)
+
+    var c2 = deserialize[CoerceInt]("123.45")
+    assert_equal(c2[], 123)
+
+    var c3 = deserialize[CoerceInt]("123")
+    assert_equal(c3[], 123)
+
+    var c4 = deserialize[CoerceInt]("0")
+    assert_equal(c4[], 0)
+
+    with assert_raises(contains="Value cannot be converted to an integer"):
+        _ = deserialize[CoerceInt]("null")
+
+
+def test_coerce_uint():
+    var c1 = deserialize[CoerceUInt]('"123"')
+    assert_equal(c1[], 123)
+
+    var c2 = deserialize[CoerceUInt]("123.45")
+    assert_equal(c2[], 123)
+
+    var c3 = deserialize[CoerceUInt]("123")
+    assert_equal(c3[], 123)
+
+    with assert_raises(
+        contains="Value cannot be converted to an unsigned integer"
+    ):
+        _ = deserialize[CoerceUInt]("null")
+
+
+def test_coerce_float():
+    var c1 = deserialize[CoerceFloat]('"123.45"')
+    assert_equal(c1[], 123.45)
+
+    var c2 = deserialize[CoerceFloat]("123")
+    assert_equal(c2[], 123.0)
+
+    var c3 = deserialize[CoerceFloat]("123.45")
+    assert_equal(c3[], 123.45)
+
+    with assert_raises(contains="Value cannot be converted to a float"):
+        _ = deserialize[CoerceFloat]("null")
+
+
+def test_coerce_string():
+    var c1 = deserialize[CoerceString]('"123"')
+    assert_equal(c1[], "123")
+
+    var c2 = deserialize[CoerceString]("123.45")
+    assert_equal(c2[], "123.45")
+
+    var c3 = deserialize[CoerceString]("123")
+    assert_equal(c3[], "123")
+
+    var c4 = deserialize[CoerceString]("0")
+    assert_equal(c4[], "0")
+
+    with assert_raises(contains="Value cannot be converted to a string"):
+        _ = deserialize[CoerceString]("null")
 
 
 struct TestDefault(Movable):

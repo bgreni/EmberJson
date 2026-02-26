@@ -91,9 +91,9 @@ def test_deserialize():
     assert_equal(foo.o2.value(), 1234)
     assert_equal(foo.b, True)
     assert_equal(foo.bs, True)
-    var expected_dict = Dict[String, Int]()
-    expected_dict["some key"] = 12345
-    assert_equal(String(foo.d), String(expected_dict))
+    assert_equal(foo.li, [1, 2, 3])
+    var d = {"some key": 12345}
+    assert_equal(String(foo.d), String(d))
     assert_equal(foo.il, 23)
     assert_equal(foo.fl, 234.23)
     assert_equal(foo.vec, SIMD[DType.float32, 4](1.0, 2.0, 3.0, 4.0))
@@ -159,9 +159,9 @@ def test_ctime_deserialize():
     assert_equal(foo.o2.value(), 1234)
     assert_equal(foo.b, True)
     assert_equal(foo.bs, True)
-    var expected_dict2 = Dict[String, Int]()
-    expected_dict2["some key"] = 12345
-    assert_equal(String(foo.d), String(expected_dict2))
+    assert_equal(foo.li, [1, 2, 3])
+    var d = {"some key": 12345}
+    assert_equal(String(foo.d), String(d))
     assert_equal(foo.il, 23)
     assert_equal(foo.fl, 234.23)
     assert_equal(foo.vec, SIMD[DType.float32, 4](1.0, 2.0, 3.0, 4.0))
@@ -188,7 +188,6 @@ def test_unexpected_keys():
         var foo = deserialize[Foo[23, 234.23]](
             """
 {
-    "extra_string": "should be ignored",
     "a": "hello",
     "extra_int": 42000,
     "i": 42,

@@ -37,6 +37,7 @@ trait JsonDeserializable(_Base):
         return False
 
 
+@always_inline
 fn try_deserialize[T: _Base](s: String) -> Optional[T]:
     return try_deserialize[T](Parser(s))
 
@@ -50,26 +51,31 @@ fn try_deserialize[
         return None
 
 
+@always_inline
 fn deserialize[T: _Base](s: String, out res: T) raises:
     res = deserialize[T](Parser(s))
 
 
+@always_inline
 fn deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
+@always_inline
 fn deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](var p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
+@always_inline
 fn __is_optional[T: AnyType]() -> Bool:
     return get_base_type_name[T]() == "Optional"
 
 
+@always_inline
 fn __is_default[T: AnyType]() -> Bool:
     return get_base_type_name[T]() == "Default"
 

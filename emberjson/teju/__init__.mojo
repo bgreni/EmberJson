@@ -12,7 +12,7 @@ from .helpers import (
 )
 from .tables import MULTIPLIERS
 from ..utils import StackArray, lut
-
+from emberjson.constants import `-`, `0`, `.`, `e`
 
 # Mojo port of the Teju Jagua algorithm by Cassio Neri.
 # Original implementation: https://github.com/cassioneri/teju_jagua
@@ -26,11 +26,23 @@ comptime STORAGE_INDEX_OFFSET = -324
 @always_inline
 fn write_f64(d: Float64, mut writer: Some[Writer]):
     comptime TOP_BIT = 1 << 63
+
+    var buffer = StackArray[Byte, 40](fill=0)
+    var buf_idx = 0
+
     if bitcast[DType.uint64](d) & TOP_BIT != 0:
-        writer.write("-")
+        buffer[buf_idx] = `-`
+        buf_idx += 1
 
     if d == 0.0:
-        writer.write("0.0")
+        buffer[buf_idx] = `0`
+        buf_idx += 1
+        buffer[buf_idx] = `.`
+        buf_idx += 1
+        buffer[buf_idx] = `0`
+        buf_idx += 1
+        var str_slice = StringSlice(ptr=buffer.unsafe_ptr(), length=buf_idx)
+        writer.write(str_slice)
         return
 
     var fields = teju(f64_to_binary(abs(d)))
@@ -40,52 +52,75 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
 
     var orig_sig = sig
     var abs_exp = abs(exp)
-    var digits = StackArray[UInt64, 21](fill=0)
+
+    var digits = StackArray[Byte, 21](fill=0)
+
     var idx = 0
     while sig > 0:
-        digits[idx] = sig % 10
-        sig //= 10
+        var q = div10(sig)
+        digits[idx] = Byte(sig - (q * 10))
+        sig = q
         idx += 1
         if sig > 0:
             exp += 1
+
     var leading_zeroes = abs_exp - Int32(idx)
 
     # Write in scientific notation if < 0.0001 or exp > 15
     if (exp < 0 and leading_zeroes > 3) or exp > 15:
         # Handle single digit case
         if orig_sig < 10:
-            writer.write(orig_sig)
+            buffer[buf_idx] = Byte(orig_sig) + `0`
+            buf_idx += 1
         else:
             # Write digit before decimal point
-            writer.write(digits[idx - 1])
-            writer.write(".")
+            buffer[buf_idx] = digits[idx - 1] + `0`
+            buf_idx += 1
+            buffer[buf_idx] = `.`
+            buf_idx += 1
+
         # Write digits after decimal point
         for i in reversed(range(idx - 1)):
-            writer.write(digits[i])
+            buffer[buf_idx] = digits[i] + `0`
+            buf_idx += 1
+
         # Write exponent
+        buffer[buf_idx] = `e`
+        buf_idx += 1
         if exp < 0:
-            writer.write("e-")
+            buffer[buf_idx] = `-`
+            buf_idx += 1
             exp = -exp
-        else:
-            writer.write("e")
+
         # Pad exponent with a 0 if less than two digits
         if exp < 10:
-            writer.write("0")
-        var exp_digits = StackArray[Int32, 10](fill=0)
+            buffer[buf_idx] = `0`
+            buf_idx += 1
+
+        var exp_digits = StackArray[Byte, 10](fill=0)
         var exp_idx = 0
         while exp > 0:
-            exp_digits[exp_idx] = exp % 10
-            exp //= 10
+            exp_digits[exp_idx] = Byte(exp % 10)
+            exp = Int32(div10(UInt64(exp)))
             exp_idx += 1
+
         for i in reversed(range(exp_idx)):
-            writer.write(exp_digits[i])
+            buffer[buf_idx] = exp_digits[i] + `0`
+            buf_idx += 1
+
     # If between 0 and 0.0001
     elif exp < 0 and leading_zeroes > 0:
-        writer.write("0.")
+        buffer[buf_idx] = `0`
+        buf_idx += 1
+        buffer[buf_idx] = `.`
+        buf_idx += 1
         for _ in range(leading_zeroes):
-            writer.write("0")
+            buffer[buf_idx] = `0`
+            buf_idx += 1
         for i in reversed(range(idx)):
-            writer.write(digits[i])
+            buffer[buf_idx] = digits[i] + `0`
+            buf_idx += 1
+
     # All other floats > 0.0001 with an exponent <= 15
     else:
         var point_written = False
@@ -93,17 +128,27 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
             if leading_zeroes < 1 and exp == Int32(idx - i) - 2:
                 # No integer part so write leading 0
                 if i == idx - 1:
-                    writer.write("0")
-                writer.write(".")
+                    buffer[buf_idx] = `0`
+                    buf_idx += 1
+                buffer[buf_idx] = `.`
+                buf_idx += 1
                 point_written = True
-            writer.write(digits[i])
+            buffer[buf_idx] = digits[i] + `0`
+            buf_idx += 1
 
         # If exp - idx + 1 > 0 it's a positive number with more 0's than the
         # sig
         for _ in range(Int(exp) - idx + 1):
-            writer.write("0")
+            buffer[buf_idx] = `0`
+            buf_idx += 1
         if not point_written:
-            writer.write(".0")
+            buffer[buf_idx] = `.`
+            buf_idx += 1
+            buffer[buf_idx] = `0`
+            buf_idx += 1
+
+    var str_slice = StringSlice(ptr=buffer.unsafe_ptr(), length=buf_idx)
+    writer.write(str_slice)
 
 
 @fieldwise_init

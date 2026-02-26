@@ -10,6 +10,10 @@ from emberjson import (
 )
 from emberjson._deserialize.reflection import _Base
 
+##########################################################
+# Value Validation
+##########################################################
+
 
 @fieldwise_init
 struct Validated[
@@ -84,6 +88,11 @@ struct OneOf[T: _Base & Equatable, *accepted: T](
         return self.value
 
 
+##########################################################
+# Secret
+##########################################################
+
+
 @fieldwise_init
 struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
     var value: Self.T
@@ -99,6 +108,11 @@ struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
 
     fn __getitem__(self) -> ref[self.value] Self.T:
         return self.value
+
+
+##########################################################
+# Clamp
+##########################################################
 
 
 @fieldwise_init
@@ -128,6 +142,11 @@ struct Clamp[T: _Base & Comparable, min: T, max: T](
         return self.value
 
 
+##########################################################
+# Coerce
+##########################################################
+
+
 @fieldwise_init
 struct Coerce[Target: _Base, func: fn(Value) raises -> Target](
     JsonDeserializable, JsonSerializable
@@ -145,6 +164,63 @@ struct Coerce[Target: _Base, func: fn(Value) raises -> Target](
 
     fn __getitem__(self) -> ref[self.value] Self.Target:
         return self.value
+
+
+fn __try_coerce_int(v: Value) raises -> Int64:
+    if v.is_int() or v.is_uint():
+        return v.int()
+    elif v.is_float():
+        return Int64(v.float())
+    elif v.is_string():
+        return deserialize[Int64](v.string())
+    else:
+        raise Error("Value cannot be converted to an integer")
+
+
+fn __try_coerce_uint(v: Value) raises -> UInt64:
+    if v.is_int() or v.is_uint():
+        return v.uint()
+    elif v.is_float():
+        return UInt64(v.float())
+    elif v.is_string():
+        return deserialize[UInt64](v.string())
+    else:
+        raise Error("Value cannot be converted to an unsigned integer")
+
+
+fn __try_coerce_float(v: Value) raises -> Float64:
+    if v.is_int() or v.is_uint():
+        return Float64(v.int())
+    elif v.is_float():
+        return v.float()
+    elif v.is_string():
+        return deserialize[Float64](v.string())
+    else:
+        raise Error("Value cannot be converted to a float")
+
+
+fn __try_coerce_string(v: Value) raises -> String:
+    if v.is_string():
+        return v.string()
+    elif v.is_int():
+        return String(v.int())
+    elif v.is_uint():
+        return String(v.uint())
+    elif v.is_float():
+        return String(v.float())
+    else:
+        raise Error("Value cannot be converted to a string")
+
+
+comptime CoerceInt = Coerce[Int64, __try_coerce_int]
+comptime CoerceUInt = Coerce[UInt64, __try_coerce_uint]
+comptime CoerceFloat = Coerce[Float64, __try_coerce_float]
+comptime CoerceString = Coerce[String, __try_coerce_string]
+
+
+##########################################################
+# Default
+##########################################################
 
 
 @fieldwise_init
@@ -171,6 +247,11 @@ struct Default[T: _Base, default: T](
 
     fn __getitem__(self) -> ref[self.value] Self.T:
         return self.value
+
+
+##########################################################
+# Transform
+##########################################################
 
 
 @fieldwise_init
