@@ -8,6 +8,7 @@ from std.collections import Set
 from sys.intrinsics import _type_is_eq
 from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
+from emberjson.teju import write_f64
 
 
 # TODO: When we have parametric traits, we can make this generic over some Writer type
@@ -239,7 +240,10 @@ __extension Int(JsonSerializable):
 __extension SIMD(JsonSerializable):
     fn write_json(self, mut writer: Some[Serializer]):
         comptime if size == 1:
-            writer.write(self)
+            comptime if Self.dtype == DType.float64:
+                write_f64(rebind[Float64](self), writer)
+            else:
+                writer.write(self)
         else:
             writer.begin_array()
 

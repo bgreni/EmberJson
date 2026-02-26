@@ -27,19 +27,19 @@ comptime STORAGE_INDEX_OFFSET = -324
 fn write_f64(d: Float64, mut writer: Some[Writer]):
     comptime TOP_BIT = 1 << 63
 
-    var buffer = StackArray[Byte, 40](fill=0)
+    var buffer = StackArray[Byte, 24](fill=0)
     var buf_idx = 0
 
     if bitcast[DType.uint64](d) & TOP_BIT != 0:
-        buffer[buf_idx] = `-`
+        buffer.unsafe_get(buf_idx) = `-`
         buf_idx += 1
 
     if d == 0.0:
-        buffer[buf_idx] = `0`
+        buffer.unsafe_get(buf_idx) = `0`
         buf_idx += 1
-        buffer[buf_idx] = `.`
+        buffer.unsafe_get(buf_idx) = `.`
         buf_idx += 1
-        buffer[buf_idx] = `0`
+        buffer.unsafe_get(buf_idx) = `0`
         buf_idx += 1
         var str_slice = StringSlice(ptr=buffer.unsafe_ptr(), length=buf_idx)
         writer.write(str_slice)
@@ -53,12 +53,12 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
     var orig_sig = sig
     var abs_exp = abs(exp)
 
-    var digits = StackArray[Byte, 21](fill=0)
+    var digits = StackArray[Byte, 17](fill=0)
 
     var idx = 0
     while sig > 0:
         var q = div10(sig)
-        digits[idx] = Byte(sig - (q * 10))
+        digits.unsafe_get(idx) = Byte(sig - (q * 10))
         sig = q
         idx += 1
         if sig > 0:
@@ -70,55 +70,55 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
     if (exp < 0 and leading_zeroes > 3) or exp > 15:
         # Handle single digit case
         if orig_sig < 10:
-            buffer[buf_idx] = Byte(orig_sig) + `0`
+            buffer.unsafe_get(buf_idx) = Byte(orig_sig) + `0`
             buf_idx += 1
         else:
             # Write digit before decimal point
-            buffer[buf_idx] = digits[idx - 1] + `0`
+            buffer.unsafe_get(buf_idx) = digits.unsafe_get(idx - 1) + `0`
             buf_idx += 1
-            buffer[buf_idx] = `.`
+            buffer.unsafe_get(buf_idx) = `.`
             buf_idx += 1
 
         # Write digits after decimal point
         for i in reversed(range(idx - 1)):
-            buffer[buf_idx] = digits[i] + `0`
+            buffer.unsafe_get(buf_idx) = digits.unsafe_get(i) + `0`
             buf_idx += 1
 
         # Write exponent
-        buffer[buf_idx] = `e`
+        buffer.unsafe_get(buf_idx) = `e`
         buf_idx += 1
         if exp < 0:
-            buffer[buf_idx] = `-`
+            buffer.unsafe_get(buf_idx) = `-`
             buf_idx += 1
             exp = -exp
 
         # Pad exponent with a 0 if less than two digits
         if exp < 10:
-            buffer[buf_idx] = `0`
+            buffer.unsafe_get(buf_idx) = `0`
             buf_idx += 1
 
-        var exp_digits = StackArray[Byte, 10](fill=0)
+        var exp_digits = StackArray[Byte, 3](fill=0)
         var exp_idx = 0
         while exp > 0:
-            exp_digits[exp_idx] = Byte(exp % 10)
+            exp_digits.unsafe_get(exp_idx) = Byte(exp % 10)
             exp = Int32(div10(UInt64(exp)))
             exp_idx += 1
 
         for i in reversed(range(exp_idx)):
-            buffer[buf_idx] = exp_digits[i] + `0`
+            buffer.unsafe_get(buf_idx) = exp_digits.unsafe_get(i) + `0`
             buf_idx += 1
 
     # If between 0 and 0.0001
     elif exp < 0 and leading_zeroes > 0:
-        buffer[buf_idx] = `0`
+        buffer.unsafe_get(buf_idx) = `0`
         buf_idx += 1
-        buffer[buf_idx] = `.`
+        buffer.unsafe_get(buf_idx) = `.`
         buf_idx += 1
         for _ in range(leading_zeroes):
-            buffer[buf_idx] = `0`
+            buffer.unsafe_get(buf_idx) = `0`
             buf_idx += 1
         for i in reversed(range(idx)):
-            buffer[buf_idx] = digits[i] + `0`
+            buffer.unsafe_get(buf_idx) = digits.unsafe_get(i) + `0`
             buf_idx += 1
 
     # All other floats > 0.0001 with an exponent <= 15
@@ -128,23 +128,23 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
             if leading_zeroes < 1 and exp == Int32(idx - i) - 2:
                 # No integer part so write leading 0
                 if i == idx - 1:
-                    buffer[buf_idx] = `0`
+                    buffer.unsafe_get(buf_idx) = `0`
                     buf_idx += 1
-                buffer[buf_idx] = `.`
+                buffer.unsafe_get(buf_idx) = `.`
                 buf_idx += 1
                 point_written = True
-            buffer[buf_idx] = digits[i] + `0`
+            buffer.unsafe_get(buf_idx) = digits.unsafe_get(i) + `0`
             buf_idx += 1
 
         # If exp - idx + 1 > 0 it's a positive number with more 0's than the
         # sig
         for _ in range(Int(exp) - idx + 1):
-            buffer[buf_idx] = `0`
+            buffer.unsafe_get(buf_idx) = `0`
             buf_idx += 1
         if not point_written:
-            buffer[buf_idx] = `.`
+            buffer.unsafe_get(buf_idx) = `.`
             buf_idx += 1
-            buffer[buf_idx] = `0`
+            buffer.unsafe_get(buf_idx) = `0`
             buf_idx += 1
 
     var str_slice = StringSlice(ptr=buffer.unsafe_ptr(), length=buf_idx)
