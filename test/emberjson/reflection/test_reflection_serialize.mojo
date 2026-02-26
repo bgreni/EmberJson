@@ -1,6 +1,5 @@
 from testing import TestSuite, assert_equal
 from emberjson._serialize import serialize, JsonSerializable, PrettySerializer
-from emberjson.lazy import LazyFloat
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 
@@ -281,11 +280,6 @@ def test_pretty_serialize():
     var expected = '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n        "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n        5.345\n    ],\n    "l": [\n        32,\n        42,\n        353\n    ],\n    "arr": [\n        false,\n        true,\n        true\n    ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n    "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n    ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n    "arc_ptr": 1234,\n    "owned_ptr": 4321\n}'
 
     assert_equal(serialized, expected)
-
-
-def test_lazy():
-    var s = "123.42"
-    var l = LazyFloat[origin_of(s)](s.as_bytes())
 
 
 def main():

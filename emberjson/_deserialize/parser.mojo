@@ -971,24 +971,31 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 if mask == 0:
                     self.data += SIMD8_WIDTH
                 else:
-                    var offset = count_trailing_zeros(mask)
-                    self.data += offset
-                    var c = self.data[]
-                    if c == `"`:
-                        _ = self.expect_string_bytes()
-                    elif c == open:
-                        depth += 1
-                        self.data += 1
-                    elif c == close:
-                        depth -= 1
-                        self.data += 1
-                        if depth == 0:
-                            return Span(
-                                ptr=start.p,
-                                length=ptr_dist(start.p, self.data.p),
-                            )
-                    # Break to reload chunk if needed or continue loop
-                    break
+                    var broke = False
+                    while mask != 0:
+                        var offset = count_trailing_zeros(mask)
+                        var c = self.data[Int(offset)]
+                        if c == `"`:
+                            self.data += Int(offset)
+                            _ = self.expect_string_bytes()
+                            broke = True
+                            break
+                        elif c == open:
+                            depth += 1
+                        elif c == close:
+                            depth -= 1
+                            if depth == 0:
+                                self.data += Int(offset) + 1
+                                return Span(
+                                    ptr=start.p,
+                                    length=ptr_dist(start.p, self.data.p),
+                                )
+                        mask &= mask - 1
+
+                    if not broke:
+                        self.data += SIMD8_WIDTH
+                    else:
+                        break
 
             if unlikely(not self.has_more()):
                 break

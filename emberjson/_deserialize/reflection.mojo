@@ -56,12 +56,22 @@ fn deserialize[T: _Base](s: String, out res: T) raises:
 
 fn deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
+](mut p: Parser[origin, options], out res: T) raises:
+    res = _deserialize_impl[T](p)
+
+
+fn deserialize[
+    origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](var p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
 fn __is_optional[T: AnyType]() -> Bool:
     return get_base_type_name[T]() == "Optional"
+
+
+fn __is_default[T: AnyType]() -> Bool:
+    return get_base_type_name[T]() == "Default"
 
 
 fn __all_dtors_are_trivial[T: AnyType]() -> Bool:
@@ -140,8 +150,13 @@ fn _default_deserialize[
                 p.expect(`,`)
 
         comptime for i in range(field_count):
-            comptime if not __is_optional[field_types[i]]():
-                if not seen.unsafe_get(i):
+            if not seen.unsafe_get(i):
+                comptime if __is_optional[field_types[i]]() or __is_default[
+                    field_types[i]
+                ]():
+                    ref field = __struct_field_ref(i, s)
+                    field = downcast[type_of(field), Defaultable]()
+                else:
                     comptime name = field_names[i]
                     raise Error("Missing key: ", name)
 

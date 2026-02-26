@@ -96,6 +96,9 @@ struct Lazy[
     fn get(self) raises -> Self.T:
         return Self.extract_value(self._data)
 
+    fn __getitem__(self) raises -> Self.T:
+        return self.get()
+
     fn __eq__(self, other: Self) -> Bool:
         return self._data == other._data
 
