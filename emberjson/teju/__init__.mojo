@@ -12,7 +12,6 @@ from .helpers import (
 )
 from .tables import MULTIPLIERS
 from ..utils import StackArray, lut
-from emberjson.format_int import write_int
 
 
 # Mojo port of the Teju Jagua algorithm by Cassio Neri.

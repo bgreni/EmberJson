@@ -11,8 +11,7 @@ from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
 from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
-from ._deserialize import Parser, ParseOptions
-from .format_int import write_int
+from ._deserialize import Parser, ParseOptionsx
 from sys.info import bit_width_of
 from .teju import write_f64
 from os import abort
@@ -375,9 +374,9 @@ struct Value(JsonValue, Sized):
 
     fn write_to(self, mut writer: Some[Writer]):
         if self.is_int():
-            write_int(self.int(), writer)
+            writer.write(self.int())
         elif self.is_uint():
-            write_int(self.uint(), writer)
+            writer.write(self.uint())
         elif self.is_float():
             write_f64(self.float(), writer)
         elif self.is_string():
