@@ -239,19 +239,32 @@ fn write_escaped_string(s: String, mut writer: Some[Writer]):
     writer.write('"')
 
 
-comptime hex_chars = "0123456789abcdef"
+comptime hex_chars = "0123456789abcdef".as_bytes()
 
 
-fn get_hex_bytes(out o: InlineArray[Byte, len(hex_chars)]):
-    o = {fill = 0}
-    for i in range(len(hex_chars)):
-        o[i] = hex_chars.as_bytes()[i]
+fn get_hex_bytes(out s: StackArray[Byte, 16]):
+    s = StackArray[Byte, 16](uninitialized=True)
+    for i in range(16):
+        s.unsafe_get(i) = hex_chars[i]
 
 
 @always_inline
 fn _write_hex_byte(b: Byte, mut writer: Some[Writer]):
     var bytes = materialize[get_hex_bytes()]()
-    var h1 = bytes[Int(b >> 4)]
-    var h2 = bytes[Int(b & 0xF)]
+    var h1 = bytes.unsafe_get(Int(b >> 4))
+    var h2 = bytes.unsafe_get(Int(b & 0xF))
     writer.write(Codepoint(h1))
     writer.write(Codepoint(h2))
+
+
+fn _generate_digit_pairs(out s: StackArray[SIMD[DType.uint8, 2], 100]):
+    s = StackArray[SIMD[DType.uint8, 2], 100](uninitialized=True)
+    for i in range(100):
+        s.unsafe_get(i) = SIMD[DType.uint8, 2](
+            UInt8(0x30 + (i // 10)), UInt8(0x30 + (i % 10))
+        )
+
+
+comptime DIGIT_PAIRS: StackArray[
+    SIMD[DType.uint8, 2], 100
+] = _generate_digit_pairs()

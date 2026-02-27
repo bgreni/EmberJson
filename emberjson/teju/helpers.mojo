@@ -2,7 +2,7 @@
 # Original implementation: https://github.com/cassioneri/teju_jagua
 # Licensed under the Apache License, Version 2.0.
 from .tables import MINIVERSE
-from ..utils import lut
+from ..utils import lut, select
 
 comptime LOG10_POW2_MAX: Int32 = 112815
 comptime LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
@@ -10,27 +10,44 @@ comptime LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
 
 @always_inline
 fn remove_trailing_zeros(var m: UInt64, var e: Int32) -> Fields:
-    comptime minv5: UInt64 = -(UInt64.MAX // 5)
-    comptime bound: UInt64 = (UInt64.MAX // 10 + 1)
+    # Fastest algorithm for removing trailing zeroes:
+    # https://github.com/jk-jeon/rtz_benchmark
+    # Adapted from Mojo stdlib Dragonbox implementation.
 
-    while True:
-        var q = ror(m * minv5)
-        if q >= bound:
-            return Fields(m, e)
-        e += 1
-        m = q
+    var r = _rotr(m * 28999941890838049, 8)
+    var b = r < 184467440738
+    var s = Int(b)
+    m = select(b, r, m)
+
+    r = _rotr(m * 182622766329724561, 4)
+    b = r < 1844674407370956
+    s = s * 2 + Int(b)
+    m = select(b, r, m)
+
+    r = _rotr(m * 10330176681277348905, 2)
+    b = r < 184467440737095517
+    s = s * 2 + Int(b)
+    m = select(b, r, m)
+
+    r = _rotr(m * 14757395258967641293, 1)
+    b = r < 1844674407370955162
+    s = s * 2 + Int(b)
+    m = select(b, r, m)
+
+    return Fields(m, e + Int32(s))
 
 
 @always_inline
-fn ror(m: UInt64) -> UInt64:
-    return m << 63 | m >> 1
+fn _rotr(n: UInt64, r: UInt64) -> UInt64:
+    var r_masked = r & 63
+    return (n >> r_masked) | (n << ((64 - r_masked) & 63))
 
 
 @always_inline
-fn is_small_integer(m: UInt64, e: Int32) -> Bool:
-    return (Int32(0) <= -e < Int32(MANTISSA_SIZE)) and is_multiple_of_pow2(
-        m, -e
-    )
+fn is_small_integer(m: UInt64, e: Int32, mantissa_size: Int32) -> Bool:
+    if e >= 0:
+        return e + mantissa_size <= 64
+    return (Int32(0) <= -e < mantissa_size) and is_multiple_of_pow2(m, -e)
 
 
 @always_inline

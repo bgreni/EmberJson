@@ -8,6 +8,7 @@ from testing.prop import PropTest, PropTestConfig
 from benchmark import keep
 from time import perf_counter_ns
 from sys.param_env import is_defined
+from testing import assert_equal
 
 
 @fieldwise_init
@@ -105,6 +106,7 @@ fn main() raises:
                     pass
             else:
                 j = parse(s)
+                assert_equal(String(j), s)
             iters -= 1
             keep(j)
 

@@ -11,9 +11,9 @@ from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from collections import InlineArray
 from memory import UnsafePointer
 from sys.intrinsics import unlikely, likely
-from ._deserialize import Parser, ParseOptionsx
+from ._deserialize import Parser, ParseOptions
 from sys.info import bit_width_of
-from .teju import write_f64
+from .teju import write_float
 from os import abort
 from python import PythonObject
 from ._pointer import resolve_pointer, PointerIndex
@@ -378,7 +378,7 @@ struct Value(JsonValue, Sized):
         elif self.is_uint():
             writer.write(self.uint())
         elif self.is_float():
-            write_f64(self.float(), writer)
+            write_float(self.float(), writer)
         elif self.is_string():
             write_escaped_string(self.string(), writer)
         elif self.is_bool():

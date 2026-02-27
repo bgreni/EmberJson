@@ -1,3 +1,4 @@
+from utils.numerics import FPUtils
 from memory.unsafe import bitcast
 from .helpers import (
     is_small_integer,
@@ -11,26 +12,55 @@ from .helpers import (
     is_tie_uncentered,
 )
 from .tables import MULTIPLIERS
-from ..utils import StackArray, lut
+from ..utils import StackArray, lut, DIGIT_PAIRS
 from emberjson.constants import `-`, `0`, `.`, `e`
 
 # Mojo port of the Teju Jagua algorithm by Cassio Neri.
 # Original implementation: https://github.com/cassioneri/teju_jagua
 # Licensed under the Apache License, Version 2.0.
 
-comptime MANTISSA_SIZE: UInt64 = 53
-comptime EXPONENT_MIN: Int32 = -1074
 comptime STORAGE_INDEX_OFFSET = -324
 
 
 @always_inline
-fn write_f64(d: Float64, mut writer: Some[Writer]):
-    comptime TOP_BIT = 1 << 63
+fn _get_sig_digits[dtype: DType]() -> Int:
+    return Int((FPUtils[dtype].mantissa_width() + 1) * 30103 // 100000) + 24
 
-    var buffer = StackArray[Byte, 24](fill=0)
+
+@always_inline
+fn _get_exp_digits[dtype: DType]() -> Int:
+    var max_exp = (1 << (FPUtils[dtype].exponent_width() - 1)) - 1
+    var max_dec_exp = max_exp * 30103 // 100000
+    if max_dec_exp < 10:
+        return 1
+    if max_dec_exp < 100:
+        return 2
+    if max_dec_exp < 1000:
+        return 3
+    if max_dec_exp < 10000:
+        return 4
+    return 5
+
+
+@always_inline
+fn _get_buffer_size[dtype: DType]() -> Int:
+    # sign(1) + sig_digits + dec(1) + 'e'(1) + exp_sign(1) + exp_digits + padding(11)
+    return 16 + _get_sig_digits[dtype]() + _get_exp_digits[dtype]()
+
+
+@always_inline
+fn write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
+    comptime if dtype != DType.float64 and dtype != DType.float32 and dtype != DType.float16:
+        # Let stdlib handle exotic float types in case someone is bold enough to use
+        # them in JSON.
+        writer.write(d)
+        return
+
+    comptime buf_size = _get_buffer_size[dtype]()
+    var buffer = StackArray[Byte, buf_size](uninitialized=True)
     var buf_idx = 0
 
-    if bitcast[DType.uint64](d) & TOP_BIT != 0:
+    if FPUtils[dtype].get_sign(d):
         buffer.unsafe_get(buf_idx) = `-`
         buf_idx += 1
 
@@ -45,7 +75,7 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
         writer.write(str_slice)
         return
 
-    var fields = teju(f64_to_binary(abs(d)))
+    var fields = teju[dtype](fp_to_binary(abs(d)))
 
     var sig = fields.mantissa
     var exp = fields.exponent
@@ -53,9 +83,22 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
     var orig_sig = sig
     var abs_exp = abs(exp)
 
-    var digits = StackArray[Byte, 17](fill=0)
+    comptime max_sig = _get_sig_digits[dtype]()
+    var digits = StackArray[Byte, max_sig](uninitialized=True)
 
     var idx = 0
+    # Fast 2-digit extraction
+    while sig >= 100:
+        var q = sig // 100
+        var r = Int(sig - (q * 100))
+        var pair = lut[DIGIT_PAIRS](r)
+        digits.unsafe_get(idx) = pair[1] - `0`
+        digits.unsafe_get(idx + 1) = pair[0] - `0`
+        sig = q
+        idx += 2
+        exp += 2
+
+    # Handle remaining digits
     while sig > 0:
         var q = div10(sig)
         digits.unsafe_get(idx) = Byte(sig - (q * 10))
@@ -92,21 +135,28 @@ fn write_f64(d: Float64, mut writer: Some[Writer]):
             buf_idx += 1
             exp = -exp
 
-        # Pad exponent with a 0 if less than two digits
+        # Optimized exponent writing
         if exp < 10:
             buffer.unsafe_get(buf_idx) = `0`
-            buf_idx += 1
+            buffer.unsafe_get(buf_idx + 1) = Byte(exp) + `0`
+            buf_idx += 2
+        elif exp < 100:
+            var pair = lut[DIGIT_PAIRS](Int(exp))
+            buffer.unsafe_get(buf_idx) = pair[0]
+            buffer.unsafe_get(buf_idx + 1) = pair[1]
+            buf_idx += 2
+        else:
+            comptime max_exp_d = _get_exp_digits[dtype]()
+            var exp_digits = StackArray[Byte, max_exp_d](uninitialized=True)
+            var exp_idx = 0
+            while exp > 0:
+                exp_digits.unsafe_get(exp_idx) = Byte(exp % 10)
+                exp = Int32(div10(UInt64(exp)))
+                exp_idx += 1
 
-        var exp_digits = StackArray[Byte, 3](fill=0)
-        var exp_idx = 0
-        while exp > 0:
-            exp_digits.unsafe_get(exp_idx) = Byte(exp % 10)
-            exp = Int32(div10(UInt64(exp)))
-            exp_idx += 1
-
-        for i in reversed(range(exp_idx)):
-            buffer.unsafe_get(buf_idx) = exp_digits.unsafe_get(i) + `0`
-            buf_idx += 1
+            for i in reversed(range(exp_idx)):
+                buffer.unsafe_get(buf_idx) = exp_digits.unsafe_get(i) + `0`
+                buf_idx += 1
 
     # If between 0 and 0.0001
     elif exp < 0 and leading_zeroes > 0:
@@ -158,12 +208,20 @@ struct Fields(TrivialRegisterPassable):
 
 
 @always_inline
-fn teju(binary: Fields, out dec: Fields):
+fn teju[dtype: DType](binary: Fields, out dec: Fields):
+    comptime mantissa_size = UInt64(FPUtils[dtype].mantissa_width() + 1)
+    comptime min_exponent = Int32(
+        1 - FPUtils[dtype].exponent_bias() - FPUtils[dtype].mantissa_width()
+    )
+
     var e = binary.exponent
     var m = binary.mantissa
 
-    if is_small_integer(m, e):
-        return remove_trailing_zeros(m >> UInt64(-e), 0)
+    if is_small_integer(m, e, Int32(mantissa_size)):
+        if e < 0:
+            return remove_trailing_zeros(m >> UInt64(-e), 0)
+        else:
+            return remove_trailing_zeros(m << UInt64(e), 0)
 
     var f = log10_pow2(e)
     var r = log10_pow2_residual(e)
@@ -173,9 +231,9 @@ fn teju(binary: Fields, out dec: Fields):
     var u = mult[0]
     var l = mult[1]
 
-    var m_0: UInt64 = 1 << (MANTISSA_SIZE - 1)
+    var m_0: UInt64 = 1 << (mantissa_size - 1)
 
-    if m != m_0 or e == EXPONENT_MIN:
+    if m != m_0 or e == min_exponent:
         var m_a = UInt64(2 * m - 1) << UInt64(r)
         var a = mshift(m_a, u, l)
         var m_b = UInt64(2 * m + 1) << UInt64(r)
@@ -215,7 +273,7 @@ fn teju(binary: Fields, out dec: Fields):
         elif s == a and wins_tiebreak(m_0) and is_tie_uncentered(m_a, f):
             return remove_trailing_zeros(q, f + 1)
 
-        var log2_m_c = UInt64(MANTISSA_SIZE) + UInt64(r) + 1
+        var log2_m_c = mantissa_size + UInt64(r) + 1
         var c_2 = mshift(log2_m_c, u, l)
         var c = c_2 // 2
 
@@ -240,21 +298,17 @@ fn teju(binary: Fields, out dec: Fields):
 
 
 @always_inline
-fn f64_to_binary(d: Float64, out bin: Fields):
-    var bits = bitcast[DType.uint64](d)
-    comptime k = MANTISSA_SIZE - 1
-    comptime MANTISSA_MASK = (((1) << (k)) - 1)
+fn fp_to_binary[dtype: DType](d: Scalar[dtype], out bin: Fields):
+    comptime mantissa_width = FPUtils[dtype].mantissa_width()
+    comptime min_exponent = 1 - FPUtils[dtype].exponent_bias() - mantissa_width
 
-    var mantissa = bits & MANTISSA_MASK
-
-    bits >>= k
-    var exponent = Int32(bits)
+    var mantissa = UInt64(FPUtils[dtype].get_mantissa_uint(d))
+    var exponent = FPUtils[dtype].get_exponent_biased(d)
 
     if exponent != 0:
         exponent -= 1
-        comptime `1 << k` = 1 << k
-        mantissa |= `1 << k`
+        mantissa |= UInt64(1) << UInt64(mantissa_width)
 
-    exponent += EXPONENT_MIN
+    exponent += min_exponent
 
-    return Fields(mantissa, exponent)
+    return Fields(mantissa, Int32(exponent))

@@ -18,6 +18,7 @@ test = { cmd = "python run_tests.py" }
 build_bench = "mojo build bench.mojo"
 bench = { cmd = "./bench && rm bench", depends-on=["build_bench"] }
 bench_compare = { cmd = "./bench --print-relative && rm bench", depends-on=["build_bench"] }
+bench_float = "mojo compare_float_formatting.mojo"
 bench_write_results = { cmd = "./bench --overwrite && rm bench", depends-on=["build_bench"] }
 update_and_build = { cmd = "pixi update && pixi run test && pixi run build" }
 precommit = { depends-on = ["format", "test", "test_python_compat", "fuzz"] }
