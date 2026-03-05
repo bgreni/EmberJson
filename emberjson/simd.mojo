@@ -1,4 +1,4 @@
-from sys import simd_width_of
+from std.sys import simd_width_of
 
 
 comptime SIMD8_WIDTH = simd_width_of[Byte.dtype]()

@@ -1,7 +1,6 @@
 from emberjson.utils import BytePtr, CheckedPointer, select
-from memory import UnsafePointer
+from std.memory import UnsafePointer, memcpy
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
-from memory import memcpy
 from std.builtin.dtype import _uint_type_of_width
 from emberjson.constants import (
     `0`,
@@ -27,10 +26,10 @@ from emberjson.constants import (
     `t`,
     `/`,
 )
-from memory.unsafe import bitcast, pack_bits
-from bit import count_trailing_zeros
-from sys.info import bit_width_of
-from sys.intrinsics import _type_is_eq, likely, unlikely
+from std.memory.unsafe import bitcast, pack_bits
+from std.bit import count_trailing_zeros
+from std.sys.info import bit_width_of
+from std.sys.intrinsics import _type_is_eq, likely, unlikely
 
 comptime smallest_power: Int64 = -342
 comptime largest_power: Int64 = 308

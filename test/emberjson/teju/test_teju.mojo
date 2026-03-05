@@ -1,6 +1,25 @@
 from emberjson.teju import write_float
 from testing import assert_equal, TestSuite
 from std.format import Writer
+from utils.numerics import FPUtils
+
+
+fn get_smallest_subnormal[dtype: DType]() -> Scalar[dtype]:
+    var x = Scalar[dtype](1)
+    var prev = x
+    while x > 0:
+        prev = x
+        x /= Scalar[dtype](2)
+    return prev
+
+
+fn get_largest_subnormal[dtype: DType]() -> Scalar[dtype]:
+    comptime mantissa_width = FPUtils[dtype].mantissa_width()
+    var prev = get_smallest_subnormal[dtype]()
+    var largest = prev
+    for i in range(1, mantissa_width):
+        largest += prev * Scalar[dtype](1 << i)
+    return largest
 
 
 def test_float16():
@@ -50,10 +69,16 @@ def test_float16():
     write_float[DType.float16](Float16(0.7), sw)
     assert_equal(sw, "0.7")
 
-    # Smallest subnormal
+    # Smallest and Largest subnormals
+    var smallest = get_smallest_subnormal[DType.float16]()
     sw = String()
-    write_float[DType.float16](Float16(5.96046e-8), sw)
-    assert_equal(sw, "0.0")
+    write_float[DType.float16](smallest, sw)
+    assert_equal(sw, "6e-08")
+
+    var largest = get_largest_subnormal[DType.float16]()
+    sw = String()
+    write_float[DType.float16](largest, sw)
+    assert_equal(sw, "6.1e-05")
 
 
 def test_float32():
@@ -121,16 +146,37 @@ def test_float32():
     write_float[DType.float32](Float32(0.7), sw)
     assert_equal(sw, "0.7")
 
-    # Smallest subnormal (known limitation: formatted as 0.0)
+    # Smallest and Largest subnormals
+    var smallest = get_smallest_subnormal[DType.float32]()
     sw = String()
-    write_float[DType.float32](Float32(1.4e-45), sw)
-    assert_equal(sw, "0.0")
+    write_float[DType.float32](smallest, sw)
+    assert_equal(sw, "1e-45")
+
+    var largest = get_largest_subnormal[DType.float32]()
+    sw = String()
+    write_float[DType.float32](largest, sw)
+    assert_equal(sw, "1.1754942e-38")
 
 
 def test_float64():
     var sw = String()
     write_float[DType.float64](Float64(1.234567890123), sw)
     assert_equal(sw, "1.234567890123")
+
+    sw = String()
+    write_float[DType.float64](Float64(0.7), sw)
+    assert_equal(sw, "0.7")
+
+    # Smallest and Largest subnormals
+    var smallest = get_smallest_subnormal[DType.float64]()
+    sw = String()
+    write_float[DType.float64](smallest, sw)
+    assert_equal(sw, "5e-324")
+
+    var largest = get_largest_subnormal[DType.float64]()
+    sw = String()
+    write_float[DType.float64](largest, sw)
+    assert_equal(sw, "2.225073858507201e-308")
 
     sw = String()
     write_float[DType.float64](Float64(0.0), sw)

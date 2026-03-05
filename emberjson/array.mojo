@@ -2,7 +2,7 @@ from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser
-from python import PythonObject, Python
+from std.python import PythonObject, Python
 
 
 struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
@@ -145,14 +145,6 @@ struct Array(JsonValue, Sized):
             if i < len(self._data) - 1:
                 writer.write(",")
             writer.write("\n")
-
-    @always_inline
-    fn __str__(self) -> String:
-        return write(self)
-
-    @always_inline
-    fn __repr__(self) -> String:
-        return self.__str__()
 
     @always_inline
     fn append(mut self, var item: Value):

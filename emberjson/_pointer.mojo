@@ -4,8 +4,8 @@ from std.collections import List
 from std.utils import Variant
 from .object import Object
 from .array import Array
-from memory import UnsafePointer
-from sys.intrinsics import unlikely
+from std.memory import UnsafePointer
+from std.sys.intrinsics import unlikely
 
 
 fn parse_int(s: String) raises -> Int:

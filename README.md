@@ -40,8 +40,7 @@ print(parse(r'["\uD83D\uDD25"]')) # prints '["🔥"]'
 
 Use the `to_string` function to convert a JSON struct to its string representation.
 It accepts a parameter to control whether to pretty print the value.
-The JSON struct also conforms to the `Stringable`, `Representable` and `Writable`
-traits.
+The JSON struct also conforms to the `Writable` trait.
 
 ```mojo
 from emberjson import parse, to_string

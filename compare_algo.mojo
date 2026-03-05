@@ -31,6 +31,9 @@ fn bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
     fn do():
+        var casted = val.cast[
+            DType.float64 if dtype == DType.float64 else DType.float32
+        ]()
         for _ in range(1000):
             var writer = String()
             writer.write(val)

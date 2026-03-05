@@ -6,16 +6,16 @@ from .utils import (
     write_escaped_string,
     ByteView,
 )
-from utils import Variant
+from std.utils import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
-from collections import InlineArray
-from memory import UnsafePointer
-from sys.intrinsics import unlikely, likely
+from std.collections import InlineArray
+from std.memory import UnsafePointer
+from std.sys.intrinsics import unlikely, likely
 from ._deserialize import Parser, ParseOptions
-from sys.info import bit_width_of
+from std.sys.info import bit_width_of
 from .teju import write_float
-from os import abort
-from python import PythonObject
+from std.os import abort
+from std.python import PythonObject
 from ._pointer import resolve_pointer, PointerIndex
 
 
@@ -34,20 +34,12 @@ struct Null(JsonValue, TrivialRegisterPassable):
         return False
 
     @always_inline
-    fn __str__(self) -> String:
-        return "null"
-
-    @always_inline
-    fn __repr__(self) -> String:
-        return self.__str__()
-
-    @always_inline
     fn __bool__(self) -> Bool:
         return False
 
     @always_inline
     fn write_to(self, mut writer: Some[Writer]):
-        writer.write(self.__str__())
+        writer.write("null")
 
     @always_inline
     fn pretty_to(
@@ -419,14 +411,6 @@ struct Value(JsonValue, Sized):
             self.array().pretty_to(writer, indent, curr_depth=curr_depth)
         else:
             self.write_to(writer)
-
-    @always_inline
-    fn __str__(self) -> String:
-        return write(self)
-
-    @always_inline
-    fn __repr__(self) -> String:
-        return self.__str__()
 
     @always_inline
     fn write_json(self, mut writer: Some[Writer]):

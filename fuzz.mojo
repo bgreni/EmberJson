@@ -1,14 +1,14 @@
 from emberjson import parse, Array, Object, Value, Null, JSON
 from emberjson.utils import write_escaped_string
-from utils.numerics import isinf
-from time import monotonic
-from testing import assert_equal
-from testing.prop.strategy import Strategy, Rng
-from testing.prop import PropTest, PropTestConfig
-from benchmark import keep
-from time import perf_counter_ns
-from sys.param_env import is_defined
-from testing import assert_equal
+from std.utils.numerics import isinf
+from std.time import monotonic
+from std.testing import assert_equal
+from std.testing.prop.strategy import Strategy, Rng
+from std.testing.prop import PropTest, PropTestConfig
+from std.benchmark import keep
+from std.time import perf_counter_ns
+from std.sys.param_env import is_defined
+from std.testing import assert_equal
 
 
 @fieldwise_init

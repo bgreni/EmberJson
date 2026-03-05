@@ -1,4 +1,4 @@
-from python import ConvertibleToPython
+from std.python import ConvertibleToPython
 from emberjson._serialize import JsonSerializable
 from emberjson._deserialize import JsonDeserializable
 
@@ -20,8 +20,6 @@ trait JsonValue(
     JsonSerializable,
     Movable,
     PrettyPrintable,
-    Representable,
-    Stringable,
     Writable,
 ):
     pass

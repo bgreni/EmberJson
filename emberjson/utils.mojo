@@ -1,19 +1,19 @@
-from bit import pop_count
+from std.bit import pop_count
 from .constants import ` `, `\n`, `\t`, `\r`, `\b`, `\f`, `"`, `\\`
-from utils import Variant
-from utils.numerics import FPUtils
-from math import log10, log2
-from memory import Span
-from memory import memcmp, UnsafePointer
+from std.utils import Variant
+from std.utils.numerics import FPUtils
+from std.math import log10, log2
+from std.memory import Span
+from std.memory import memcmp, UnsafePointer
 from std.format._utils import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
-from sys import size_of
-from sys.intrinsics import unlikely
-from sys.intrinsics import _type_is_eq
-from sys.compile import is_compile_time
-from utils._select import _select_register_value as select
+from std.sys import size_of
+from std.sys.intrinsics import unlikely
+from std.sys.intrinsics import _type_is_eq
+from std.sys.compile import is_compile_time
+from std.utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
-from builtin.globals import global_constant
+from std.builtin.globals import global_constant
 
 comptime ByteVec = SIMD[DType.uint8, _]
 comptime ByteView = Span[Byte, _]

@@ -10,8 +10,8 @@ from ._parser_helper import (
     append_digit,
 )
 from emberjson.utils import select, StackArray, CheckedPointer, lut
-from memory.unsafe import bitcast
-from memory import UnsafePointer
+from std.memory.unsafe import bitcast
+from std.memory import UnsafePointer
 
 
 comptime MANTISSA_EXPLICIT_BITS = 52

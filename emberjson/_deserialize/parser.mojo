@@ -8,16 +8,16 @@ from emberjson.utils import (
     select,
     lut,
 )
-from math import isinf
+from std.math import isinf
 from emberjson.json import JSON
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
 from emberjson.array import Array
 from emberjson.object import Object
 from emberjson.value import Value
-from bit import count_trailing_zeros
-from memory import UnsafePointer, memset
-from sys.intrinsics import unlikely, likely
-from collections import InlineArray
+from std.bit import count_trailing_zeros
+from std.memory import UnsafePointer, memset
+from std.sys.intrinsics import unlikely, likely
+from std.collections import InlineArray
 from ._parser_helper import (
     copy_to_string,
     TRUE,
@@ -38,10 +38,10 @@ from ._parser_helper import (
     pack_into_integer,
     isdigit,
 )
-from memory.unsafe import bitcast
-from bit import count_leading_zeros
+from std.memory.unsafe import bitcast
+from std.bit import count_leading_zeros
 from .slow_float_parse import from_chars_slow
-from sys.compile import is_compile_time
+from std.sys.compile import is_compile_time
 from .tables import (
     POWER_OF_TEN,
     full_multiplication,

@@ -16,7 +16,7 @@ from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`, `"`
 from std.sys.intrinsics import unlikely, _type_is_eq
 from emberjson.utils import to_string
 from ._parser_helper import NULL, copy_to_string
-from hashlib.hasher import Hasher
+from std.hashlib.hasher import Hasher
 
 
 comptime non_struct_error = "Cannot deserialize non-struct type"

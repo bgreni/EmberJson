@@ -5,7 +5,7 @@ from std.reflection import (
     is_struct_type,
 )
 from std.collections import Set
-from sys.intrinsics import _type_is_eq
+from std.sys.intrinsics import _type_is_eq
 from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
 from emberjson.teju import write_float

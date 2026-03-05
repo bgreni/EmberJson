@@ -1,13 +1,13 @@
 from .value import Value, Null
-from collections import Dict, List
-from sys.intrinsics import unlikely, likely
+from std.collections import Dict, List
+from std.sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser
 from .utils import write_escaped_string
-from python import PythonObject, Python
-from os import abort
-from memory import UnsafePointer
-from hashlib.hasher import Hasher
+from std.python import PythonObject, Python
+from std.os import abort
+from std.memory import UnsafePointer
+from std.hashlib.hasher import Hasher
 
 
 @fieldwise_init
@@ -258,14 +258,6 @@ struct Object(JsonValue, Sized):
             if i < len(self._data) - 1:
                 writer.write(",")
         writer.write("}")
-
-    @always_inline
-    fn __str__(self) -> String:
-        return write(self)
-
-    @always_inline
-    fn __repr__(self) -> String:
-        return self.__str__()
 
     @always_inline
     fn to_dict(self, out d: Dict[String, Value]):

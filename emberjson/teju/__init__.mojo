@@ -1,5 +1,5 @@
-from utils.numerics import FPUtils
-from memory.unsafe import bitcast
+from std.utils.numerics import FPUtils
+from std.memory.unsafe import bitcast
 from .helpers import (
     is_small_integer,
     remove_trailing_zeros,

@@ -1,14 +1,14 @@
-from pathlib import Path
+from std.pathlib import Path
 from .json import JSON
-from memory import ArcPointer, memset, Span, memcpy
+from std.memory import ArcPointer, memset, Span, memcpy
 from .constants import `\n`, `\r`
 from std.os import PathLike
 from .simd import SIMD8_WIDTH
 from std.bit import count_leading_zeros
-from memory.unsafe import pack_bits
+from std.memory.unsafe import pack_bits
 
 
-struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
+struct _ReadBuffer(Copyable, Movable, Sized, Writable):
     comptime BUFFER_SIZE = 4096
     var buf: InlineArray[Byte, Self.BUFFER_SIZE]
     var length: Int
@@ -42,9 +42,6 @@ struct _ReadBuffer(Copyable, Movable, Sized, Stringable, Writable):
     fn clear(mut self):
         memset(self.ptr(), 0, Self.BUFFER_SIZE)
         self.length = 0
-
-    fn __str__(self) -> String:
-        return String(unsafe_from_utf8=Span(ptr=self.ptr(), length=self.length))
 
     fn write_to(self, mut writer: Some[Writer]):
         writer.write(StringSlice(ptr=self.ptr(), length=self.length))
