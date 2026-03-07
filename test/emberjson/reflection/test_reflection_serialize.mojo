@@ -39,7 +39,7 @@ struct Baz(JsonSerializable):
         return True
 
 
-def test_serialize():
+def test_serialize() raises:
     var f = Foo[45, 7.43](
         1,
         "something",
@@ -67,7 +67,7 @@ def test_serialize():
     )
 
 
-def test_ctime_serialize():
+def test_ctime_serialize() raises:
     comptime f = Foo[45, 7.43](
         1,
         "something",
@@ -171,7 +171,7 @@ struct DeepNode(Copyable):
             self.children.append(copy.children[i].copy())
 
 
-def test_nested_structs():
+def test_nested_structs() raises:
     var addr = Address("123 Main St", "Springfield", 62704)
     var tags = List[String]()
     tags.append("safety")
@@ -187,7 +187,7 @@ def test_nested_structs():
     )
 
 
-def test_deep_hierarchy():
+def test_deep_hierarchy() raises:
     var hq = Address("1 Infinite Loop", "Cupertino", 95014)
     var manager_addr = Address("Test St", "Test City", 12345)
     var manager_tags = List[String]()
@@ -212,7 +212,7 @@ def test_deep_hierarchy():
     assert_equal(serialize(company^), expected)
 
 
-def test_wrappers():
+def test_wrappers() raises:
     var w_int = IntWrapper(123, "an integer")
     assert_equal(serialize(w_int^), '{"value":123,"description":"an integer"}')
 
@@ -227,7 +227,7 @@ def test_wrappers():
     )
 
 
-def test_optional_fields():
+def test_optional_fields() raises:
     var m1 = MaybeFields(10, String("foo"), Address("A", "B", 1))
     assert_equal(
         serialize(m1^),
@@ -238,7 +238,7 @@ def test_optional_fields():
     assert_equal(serialize(m2^), '{"f1":null,"f2":null,"f3":null}')
 
 
-def test_deep_recursion():
+def test_deep_recursion() raises:
     # Create 1 -> 2 -> 3
     var n3 = DeepNode(3, List[DeepNode]())
     var c2 = List[DeepNode]()
@@ -254,7 +254,7 @@ def test_deep_recursion():
     )
 
 
-def test_pretty_serialize():
+def test_pretty_serialize() raises:
     var f = Foo[45, 7.43](
         1,
         "something",
@@ -282,5 +282,5 @@ def test_pretty_serialize():
     assert_equal(serialized, expected)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

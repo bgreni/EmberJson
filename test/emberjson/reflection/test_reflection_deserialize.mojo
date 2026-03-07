@@ -58,7 +58,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
         self.op = OwnedPointer[Int](0)
 
 
-def test_deserialize():
+def test_deserialize() raises:
     var foo = deserialize[Foo[23, 234.23]](
         """
 {
@@ -115,13 +115,13 @@ struct Bar(Defaultable, Movable):
         self.b = False
 
 
-def test_out_of_order_keys():
+def test_out_of_order_keys() raises:
     var bar = deserialize[Bar]('{"b": false, "a": 10}')
     assert_equal(bar.a, 10)
     assert_equal(bar.b, False)
 
 
-def test_ctime_deserialize():
+def test_ctime_deserialize() raises:
     comptime foo_ctime = try_deserialize[Foo[23, 234.23]](
         """
 {
@@ -178,12 +178,12 @@ struct Baz(Movable):
     var b: Int
 
 
-def test_unexpected():
+def test_unexpected() raises:
     with assert_raises():
         var b = deserialize[Baz]('{"c": 230}')
 
 
-def test_unexpected_keys():
+def test_unexpected_keys() raises:
     with assert_raises():
         var foo = deserialize[Foo[23, 234.23]](
             """
@@ -229,7 +229,7 @@ struct Point(JsonDeserializable):
         return True
 
 
-def test_point_array_reflection():
+def test_point_array_reflection() raises:
     var json_str = "[1, 2]"
     var p = deserialize[Point](json_str)
     assert_equal(p.x, 1)
@@ -250,7 +250,7 @@ struct NestedArray(Defaultable, JsonDeserializable):
         return True
 
 
-def test_nested_array_reflection():
+def test_nested_array_reflection() raises:
     var json_str = '[[10, 20], "test"]'
     var n = deserialize[NestedArray](json_str)
     assert_equal(n.p.x, 10)
@@ -264,12 +264,12 @@ struct OptionalTest(Movable):
     var b: Optional[Int]
 
 
-def test_missing_optional():
+def test_missing_optional() raises:
     var json_str = '{"a": 1}'
     var o = deserialize[OptionalTest](json_str)
     assert_equal(o.a, 1)
     assert_false(o.b)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

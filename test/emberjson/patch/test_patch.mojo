@@ -3,7 +3,7 @@ from emberjson import Value, Object, Array
 from emberjson.patch._patch import patch
 
 
-def test_patch_add():
+def test_patch_add() raises:
     # Test add to object
     var doc = Value(Object())
     var patch_ops = Array()
@@ -41,7 +41,7 @@ def test_patch_add():
     assert_equal(doc[1], 1)
 
 
-def test_patch_remove():
+def test_patch_remove() raises:
     var obj = Object()
     obj["foo"] = Value("bar")
     var doc = Value(obj^)
@@ -56,7 +56,7 @@ def test_patch_remove():
     assert_equal(len(doc.object().keys()), 0)
 
 
-def test_patch_replace():
+def test_patch_replace() raises:
     var obj = Object()
     obj["foo"] = Value("bar")
     var doc = Value(obj^)
@@ -72,7 +72,7 @@ def test_patch_replace():
     assert_equal(doc["foo"], "baz")
 
 
-def test_patch_move():
+def test_patch_move() raises:
     var obj = Object()
     obj["foo"] = Value("bar")
     var doc = Value(obj^)
@@ -88,7 +88,7 @@ def test_patch_move():
     assert_equal(doc["baz"], "bar")
 
 
-def test_patch_copy():
+def test_patch_copy() raises:
     var obj = Object()
     obj["foo"] = Value("bar")
     var doc = Value(obj^)
@@ -105,7 +105,7 @@ def test_patch_copy():
     assert_equal(doc["baz"], "bar")
 
 
-def test_patch_test():
+def test_patch_test() raises:
     var obj = Object()
     obj["foo"] = Value("bar")
     var doc = Value(obj^)
@@ -131,7 +131,7 @@ def test_patch_test():
     assert_equal(failed, True)
 
 
-def test_patch_from_string():
+def test_patch_from_string() raises:
     var doc = Value(Object())
     # Define a patch string with multiple operations
     # 1. Add /foo: "bar"
@@ -151,5 +151,5 @@ def test_patch_from_string():
     assert_equal(doc["baz"], "qux")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

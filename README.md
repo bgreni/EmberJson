@@ -153,7 +153,7 @@ struct Coordinate(JsonSerializable):
 struct MyInt(JsonSerializable):
     var value: Int
 
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self.value)
 
 

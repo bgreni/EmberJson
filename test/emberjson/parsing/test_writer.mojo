@@ -8,14 +8,14 @@ fn files_enabled() -> Bool:
     return not is_defined["DISABLE_TEST_FILES"]()
 
 
-def test_minify():
+def test_minify() raises:
     assert_equal(
         minify('{"key"\r\n: \t123\n, "k": \r\t[123, false, [1, \r2,   3]]}'),
         '{"key":123,"k":[123,false,[1,2,3]]}',
     )
 
 
-def test_minify_citm_catalog():
+def test_minify_citm_catalog() raises:
     comptime if files_enabled():
         with open("./bench_data/data/citm_catalog.json", "r") as formatted:
             with open(
@@ -24,7 +24,7 @@ def test_minify_citm_catalog():
                 assert_equal(minify(formatted.read()), minified.read())
 
 
-def test_pretty_print_array():
+def test_pretty_print_array() raises:
     var arr = parse('[123,"foo",false,null]')
     var expected: String = """[
     123,
@@ -55,7 +55,7 @@ iamateapotnull
     assert_equal(expected, write_pretty(arr))
 
 
-def test_pretty_print_object():
+def test_pretty_print_object() raises:
     var ob = parse('{"k1": null, "k2": 123}')
     var expected = """{
     "k1": null,
@@ -92,5 +92,5 @@ def test_pretty_print_object():
     assert_equal(expected, write_pretty(ob))
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

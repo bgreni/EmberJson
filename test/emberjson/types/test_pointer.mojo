@@ -2,7 +2,7 @@ from emberjson import JSON, Value, PointerIndex
 from std.testing import assert_equal, assert_raises, assert_true, TestSuite
 
 
-def test_rfc6901():
+def test_rfc6901() raises:
     # RFC 6901 Example
     var json_str = String(
         "{"
@@ -37,7 +37,7 @@ def test_rfc6901():
     assert_equal(j.get("/0123").int(), 9)
 
 
-def test_errors():
+def test_errors() raises:
     var j = JSON(parse_string='{"a": 1}')
 
     with assert_raises():
@@ -50,7 +50,7 @@ def test_errors():
         _ = j.get("/a/0")  # Traversing primitive
 
 
-def test_array_idx():
+def test_array_idx() raises:
     var j = JSON(parse_string="[10, 20]")
     assert_equal(j.get("/0").int(), 10)
     assert_equal(j.get("/1").int(), 20)
@@ -65,7 +65,7 @@ def test_array_idx():
         _ = j.get("/01")  # Leading zero
 
 
-def test_explicit_pointer_index():
+def test_explicit_pointer_index() raises:
     # Verify that we can construct a PointerIndex explicitly and reuse it
     var ptr = PointerIndex("/foo/1")
 
@@ -78,7 +78,7 @@ def test_explicit_pointer_index():
     assert_equal(j.get(materialize[ptr2]().value()).string(), "bar")
 
 
-def test_getattr_method():
+def test_getattr_method() raises:
     var j = JSON(parse_string='{"foo": {"bar": 1}}')
     assert_equal(j.`/foo/bar`, 1)
 
@@ -97,7 +97,7 @@ def test_getattr_method():
     assert_equal(j.baz, False)
 
 
-def test_unicode_keys():
+def test_unicode_keys() raises:
     var j = JSON(
         parse_string='{"🔥": "fire", "🚀": "rocket", "key with spaces": 1}'
     )
@@ -108,7 +108,7 @@ def test_unicode_keys():
     assert_equal(j.`key with spaces`.int(), 1)
 
 
-def test_value_sugar():
+def test_value_sugar() raises:
     # Test __getattr__ chaining on Value with mixed arrays/objects
     var j = JSON(
         parse_string=(
@@ -136,5 +136,5 @@ def test_value_sugar():
     assert_equal(j.users[1].name.string(), "Bob Dylan")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

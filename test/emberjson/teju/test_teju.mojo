@@ -22,7 +22,7 @@ fn get_largest_subnormal[dtype: DType]() -> Scalar[dtype]:
     return largest
 
 
-def test_float16():
+def test_float16() raises:
     var sw = String()
     write_float[DType.float16](Float16(1.25), sw)
     assert_equal(sw, "1.25")
@@ -81,7 +81,7 @@ def test_float16():
     assert_equal(sw, "6.1e-05")
 
 
-def test_float32():
+def test_float32() raises:
     var sw = String()
     write_float[DType.float32](Float32(1.23456), sw)
     assert_equal(sw, "1.23456")
@@ -158,7 +158,7 @@ def test_float32():
     assert_equal(sw, "1.1754942e-38")
 
 
-def test_float64():
+def test_float64() raises:
     var sw = String()
     write_float[DType.float64](Float64(1.234567890123), sw)
     assert_equal(sw, "1.234567890123")
@@ -217,5 +217,5 @@ def test_float64():
     assert_equal(sw, "2.2250738585072014e-308")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

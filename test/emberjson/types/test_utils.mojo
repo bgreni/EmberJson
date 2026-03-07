@@ -3,11 +3,11 @@ from emberjson import Value
 from testing import assert_equal, assert_true, TestSuite
 
 
-def test_string_builder_string():
+def test_string_builder_string() raises:
     assert_equal(write(Value("foo bar")), '"foo bar"')
 
 
-def test_write_escaped_string():
+def test_write_escaped_string() raises:
     # Quotes
     assert_equal(write(Value('foo "bar"')), r'"foo \"bar\""')
 
@@ -27,12 +27,12 @@ def test_write_escaped_string():
     assert_equal(write(Value(null_str)), r'"\u0000"')
 
 
-def test_write_unicode_string():
+def test_write_unicode_string() raises:
     # Multi-byte UTF-8 (should not be escaped)
     assert_equal(write(Value("Hello ☃")), r'"Hello ☃"')
     # Emoji (should not be escaped)
     assert_equal(write(Value("😊")), r'"😊"')
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

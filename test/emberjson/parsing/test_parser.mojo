@@ -3,7 +3,7 @@ from emberjson import JSON, Null, Array, Object, parse
 from testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
-def test_parse():
+def test_parse() raises:
     var s: String = '{"key": 123}'
     var p = Parser(s)
     var json = p.parse()
@@ -27,7 +27,7 @@ def test_parse():
     assert_equal(len(json.array()), 2)
 
 
-def test_parse_utf16_surrogates():
+def test_parse_utf16_surrogates() raises:
     var s: String = r'{"key": "To decode U+10437 (\uD801\uDC37) from UTF-16:"}'
     var p = Parser(s)
     var json = p.parse()
@@ -45,7 +45,7 @@ def test_parse_utf16_surrogates():
     assert_equal(json2.object()["𐐷"].string(), "𐐷")
 
 
-def test_parse_escaped_strings():
+def test_parse_escaped_strings() raises:
     # Quotes
     var s_quote = r'{"key": "foo \"bar\""}'
     var json_quote = parse(s_quote)
@@ -92,7 +92,7 @@ def test_parse_escaped_strings():
     assert_equal(json_null.object()["key"].string(), expected_null)
 
 
-def test_parse_wrong_backslash():
+def test_parse_wrong_backslash() raises:
     var data = List('{"key": "This should raise and not segfault:'.as_bytes())
     data.append(Byte(ord("\\")))
     with assert_raises():
@@ -127,7 +127,7 @@ def test_parse_wrong_backslash():
         _ = p2.parse()
 
 
-def test_integer_strict_overflow():
+def test_integer_strict_overflow() raises:
     # Int8 max is 127
     var s_ok = "127"
     var p_ok = Parser(s_ok)
@@ -149,7 +149,7 @@ def test_integer_strict_overflow():
         _ = p_under.expect_integer[DType.int8]()
 
 
-def test_unsigned_strict_overflow():
+def test_unsigned_strict_overflow() raises:
     # UInt8 max is 255
     var s_ok = "255"
     var p_ok = Parser(s_ok)
@@ -167,7 +167,7 @@ def test_unsigned_strict_overflow():
         _ = p_neg.expect_unsigned_integer[DType.uint8]()
 
 
-def test_float_conversions():
+def test_float_conversions() raises:
     # Float32 should parse
     var s = "42.5"
     var p = Parser(s)
@@ -187,7 +187,7 @@ def test_float_conversions():
         _ = p_huge.expect_float[DType.float16]()
 
 
-def test_integer_edge_cases():
+def test_integer_edge_cases() raises:
     # Leading zeros are invalid (except for just "0")
     var p_01 = Parser("01")
     with assert_raises():
@@ -218,7 +218,7 @@ def test_integer_edge_cases():
     assert_equal(p_umax.expect_unsigned_integer(), 18446744073709551615)
 
 
-def test_float_edge_cases():
+def test_float_edge_cases() raises:
     # Negative zero
     var p_neg0 = Parser("-0.0")
     assert_equal(p_neg0.expect_float(), -0.0)
@@ -254,7 +254,7 @@ def test_float_edge_cases():
         _ = p.expect_float()  # Dot must be followed by digit
 
 
-def test_unicode_byte_lengths():
+def test_unicode_byte_lengths() raises:
     # 1 byte: A (U+0041)
     var s1 = r'{"key": "\u0041"}'
     var j1 = parse(s1)
@@ -276,7 +276,7 @@ def test_unicode_byte_lengths():
     assert_equal(j5.object()["key"].string(), "𝄞")
 
 
-def test_trailing_tokens():
+def test_trailing_tokens() raises:
     with assert_raises(
         contains="Invalid json, expected end of input, recieved: garbage tokens"
     ):
@@ -290,7 +290,7 @@ def test_trailing_tokens():
         _ = parse('{"key": null} "trailing string"')
 
 
-def test_incomplete_data():
+def test_incomplete_data() raises:
     with assert_raises():
         _ = parse("[1 null, false,")
 
@@ -304,7 +304,7 @@ def test_incomplete_data():
         _ = parse('["no close')
 
 
-def test_reject_comment():
+def test_reject_comment() raises:
     var s = """
     {
         // a comment
@@ -315,7 +315,7 @@ def test_reject_comment():
         _ = parse(s)
 
 
-def test_expect_object_bytes():
+def test_expect_object_bytes() raises:
     var s = String('{"a": 1, "b": {"c": 2}}')
     var p = Parser(s)
     var span = p.expect_object_bytes()
@@ -331,7 +331,7 @@ def test_expect_object_bytes():
     assert_equal(len(span2), len('{"a": 1}'))
 
 
-def test_expect_integer_bytes():
+def test_expect_integer_bytes() raises:
     var json = String(
         "12345, -67890, 1234567890123456789, -9876543210987654321"
     )
@@ -362,7 +362,7 @@ def test_expect_integer_bytes():
     # -9876543210987654321
 
 
-def test_expect_float_bytes():
+def test_expect_float_bytes() raises:
     var json = String(
         "123.45, -6.7e-8, 1.2E+3, 1234567890.123456789e-123,"
         " -0.000000000000000000001"
@@ -397,7 +397,7 @@ def test_expect_float_bytes():
     assert_equal(len(span5), 24)  # -0.000000000000000000001
 
 
-def test_expect_value_bytes():
+def test_expect_value_bytes() raises:
     var json = String(
         '{"a": 1}, [1, 2], "string", 12345, -12.34e5, true, false, null'
     )
@@ -458,5 +458,5 @@ def test_expect_value_bytes():
     assert_equal(StringSlice(unsafe_from_utf8=span8), "null")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

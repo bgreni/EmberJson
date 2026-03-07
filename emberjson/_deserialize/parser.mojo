@@ -138,21 +138,21 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @implicit
     fn __init__(out self: Parser[origin_of(s), Self.options], s: String):
-        self = type_of(self)(ptr=s.unsafe_ptr(), length=s.byte_length())
+        self = {ptr = s.unsafe_ptr(), length = s.byte_length()}
 
     @implicit
     fn __init__(
         out self: Parser[StaticConstantOrigin, Self.options], s: StringLiteral
     ):
-        self = type_of(self)(StaticString(s))
+        self = {StaticString(s)}
 
     @implicit
     fn __init__(out self, s: StringSlice[Self.origin]):
-        self = Self(ptr=s.unsafe_ptr(), length=s.byte_length())
+        self = {ptr = s.unsafe_ptr(), length = s.byte_length()}
 
     @implicit
     fn __init__(out self, s: ByteView[Self.origin]):
-        self = Self(ptr=s.unsafe_ptr(), length=len(s))
+        self = {ptr = s.unsafe_ptr(), length = len(s)}
 
     fn __init__(
         out self,

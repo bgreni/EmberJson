@@ -22,7 +22,7 @@ from std.benchmark import (
     BenchConfig,
     keep,
 )
-from python import Python, PythonObject
+from std.python import Python, PythonObject
 from std.sys import argv
 from std.pathlib import Path
 
@@ -461,7 +461,7 @@ fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     fn do() raises:
-        var p = Parser[options = ParseOptions(ignore_unicode=True)](s)
+        var p = Parser[options=ParseOptions(ignore_unicode=True)](s)
         var v = p.parse()
         keep(v)
 
@@ -534,7 +534,7 @@ fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
     @parameter
     fn do():
-        var a = String(v)
+        var a = to_string(v)
         keep(a)
 
     b.iter[do]()

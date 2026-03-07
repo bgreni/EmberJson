@@ -32,6 +32,23 @@ from .lazy import (
     LazyValue,
 )
 
+from .schema import (
+    Range,
+    Size,
+    OneOf,
+    Secret,
+    Clamp,
+    Coerce,
+    CoerceInt,
+    CoerceUInt,
+    CoerceFloat,
+    CoerceString,
+    Default,
+    Transform,
+    MultipleOf,
+    ValidatorSet,
+)
+
 
 @always_inline
 fn parse[

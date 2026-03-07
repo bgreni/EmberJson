@@ -2,7 +2,7 @@ from emberjson import parse, try_parse, ParseOptions
 from testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
-def test_compile_time():
+def test_compile_time() raises:
     comptime data = r"""{
     "key": [
         1.234,
@@ -39,7 +39,7 @@ def test_compile_time():
     assert_equal(arr[9].string(), "string that has unicode in it: ü")
 
 
-def test_unicode_parsing():
+def test_unicode_parsing() raises:
     # Just check it doesn't trip up on any of these
     comptime s = r"""{
   "user": {
@@ -192,7 +192,7 @@ def test_unicode_parsing():
     _ = parse[ParseOptions(ignore_unicode=True)](s)
 
 
-def test_lone_surrogate_error():
+def test_lone_surrogate_error() raises:
     # Lone low surrogate (invalid)
     with assert_raises():
         _ = parse('"\\uDC00"')
@@ -206,5 +206,5 @@ def test_lone_surrogate_error():
     assert_equal(j.string(), "🔥")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

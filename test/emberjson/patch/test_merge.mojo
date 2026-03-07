@@ -3,7 +3,7 @@ from emberjson import Value, Object, Array, Null
 from emberjson.patch._merge import merge_patch
 
 
-def test_merge_simple_replace():
+def test_merge_simple_replace() raises:
     var target = Value("foo")
     var patch = Value("bar")
     merge_patch(target, patch)
@@ -20,7 +20,7 @@ def test_merge_simple_replace():
     assert_equal(target, Null())
 
 
-def test_merge_object_add():
+def test_merge_object_add() raises:
     var target = Value(Object())
     target.object()["a"] = Value("b")
 
@@ -33,7 +33,7 @@ def test_merge_object_add():
     assert_equal(target["c"], "d")
 
 
-def test_merge_object_remove():
+def test_merge_object_remove() raises:
     var target = Value(Object())
     target.object()["a"] = Value("b")
     target.object()["c"] = Value("d")
@@ -47,7 +47,7 @@ def test_merge_object_remove():
     assert_equal(target["c"], "d")
 
 
-def test_merge_object_replace():
+def test_merge_object_replace() raises:
     var target = Value(Object())
     target.object()["a"] = Value("b")
 
@@ -59,7 +59,7 @@ def test_merge_object_replace():
     assert_equal(target["a"], "c")
 
 
-def test_merge_nested():
+def test_merge_nested() raises:
     var target = Value(Object())
     target.object()["title"] = Value("Goodbye!")
 
@@ -99,7 +99,7 @@ def test_merge_nested():
     assert_equal(target["phoneNumber"], "+01-123-456-7890")
 
 
-def test_rfc7386_example():
+def test_rfc7386_example() raises:
     # Example from RFC 7386
     var target_json = String(
         "{"
@@ -137,7 +137,7 @@ def test_rfc7386_example():
     assert_equal(target["phoneNumber"], "+01-123-456-7890")
 
 
-def test_array_replace():
+def test_array_replace() raises:
     # Arrays are replaced, not merged
     var target = Value(Array())
     target.array().append(Value(1))
@@ -151,7 +151,7 @@ def test_array_replace():
     assert_equal(target[0], 2)
 
 
-def test_null_patch():
+def test_null_patch() raises:
     # Null patch implies deletion/null replacement for root?
     # If target is root Value, and patch is null:
     # merge_patch(target, null) -> target = null
@@ -160,7 +160,7 @@ def test_null_patch():
     assert_equal(target, Null())
 
 
-def test_merge_from_string():
+def test_merge_from_string() raises:
     var target = Value(Object())
     target.object()["a"] = Value("b")
 
@@ -171,11 +171,11 @@ def test_merge_from_string():
     assert_equal(target["d"], "e")
 
 
-def test_merge_null_string():
+def test_merge_null_string() raises:
     var target = Value("foo")
     merge_patch(target, "null")
     assert_equal(target, Null())
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -11,7 +11,7 @@ from testing import (
 )
 
 
-def test_array():
+def test_array() raises:
     var s = '[ 1, 2, "foo" ]'
     var arr = Array(parse_string=s)
     assert_equal(len(arr), 3)
@@ -23,7 +23,7 @@ def test_array():
     assert_equal(arr[0].int(), 10)
 
 
-def test_array_no_space():
+def test_array_no_space() raises:
     var s = '[1,2,"foo"]'
     var arr = Array(parse_string=s)
     assert_equal(len(arr), 3)
@@ -32,7 +32,7 @@ def test_array_no_space():
     assert_equal(arr[2].string(), "foo")
 
 
-def test_nested_object():
+def test_nested_object() raises:
     var s = '[false, null, [4.0], { "key": "bar" }]'
     var arr = Array(parse_string=s)
     assert_equal(len(arr), 4)
@@ -46,7 +46,7 @@ def test_nested_object():
     assert_equal(ob["key"].string(), "bar")
 
 
-def test_contains():
+def test_contains() raises:
     var s = '[false, 123, "str"]'
     var arr = Array(parse_string=s)
     assert_true(False in arr)
@@ -56,7 +56,7 @@ def test_contains():
     assert_true(True not in arr)
 
 
-def test_variadic_init():
+def test_variadic_init() raises:
     var arr = Array(123, "foo", Null())
     var ob = Object()
     ob["key"] = "value"
@@ -73,7 +73,7 @@ def test_variadic_init():
     assert_true(arr2[4].isa[Object]())
 
 
-def test_equality():
+def test_equality() raises:
     var arr1 = Array(123, 456)
     var arr2 = Array(123, 456)
     var arr3 = Array(123, "456")
@@ -81,7 +81,7 @@ def test_equality():
     assert_not_equal(arr1, arr3)
 
 
-def test_list_ctr():
+def test_list_ctr() raises:
     var l: List[Value] = [123, "foo", Null(), False]
     var arr = Array(l^)
     assert_equal(arr[0].int(), 123)
@@ -92,7 +92,7 @@ def test_list_ctr():
     assert_equal(arr.to_list(), [123, "foo", Null(), False])
 
 
-def test_iter():
+def test_iter() raises:
     var arr = Array(False, 123, None)
 
     var i = 0
@@ -106,12 +106,12 @@ def test_iter():
         i -= 1
 
 
-def test_list_literal():
+def test_list_literal() raises:
     var a: Array = [123, 435, False, None, 12.32, "string"]
     assert_equal(a, Array(123, 435, False, None, 12.32, "string"))
 
 
-def test_parse_simple_array():
+def test_parse_simple_array() raises:
     var s = "[123, 345]"
     var json = parse(s)
     assert_true(json.is_array())
@@ -130,19 +130,19 @@ def test_parse_simple_array():
     assert_equal(json.array()[2], 3)
 
 
-def test_setter_array_generic():
+def test_setter_array_generic() raises:
     var arr = parse('[123, "foo"]')
     arr.array()[0] = Null()
     assert_true(arr.array()[0].is_null())
     assert_equal(arr.array()[1], "foo")
 
 
-def test_stringify_array_generic():
+def test_stringify_array_generic() raises:
     var arr = parse('[123,"foo",false,null]')
     assert_equal(String(arr), '[123,"foo",false,null]')
 
 
-def test_iter_count():
+def test_iter_count() raises:
     var arr = Array(Value(1), Value(2), Value(3))
     var count = 0
     for _ in arr:
@@ -155,5 +155,5 @@ def test_iter_count():
     assert_equal(count, 3)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

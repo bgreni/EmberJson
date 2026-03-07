@@ -125,7 +125,7 @@ struct Array(JsonValue, Sized):
         writer.write("]")
 
     @always_inline
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     fn pretty_to(

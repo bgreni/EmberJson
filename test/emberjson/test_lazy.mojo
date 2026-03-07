@@ -9,7 +9,7 @@ from emberjson.lazy import (
 )
 
 
-def test_lazy_int():
+def test_lazy_int() raises:
     # Test simple int
     var single = "123"
     var p_single = Parser(single)
@@ -29,7 +29,7 @@ def test_lazy_int():
     assert_equal(s_large.get(), 9007199254740991)
 
 
-def test_lazy_uint():
+def test_lazy_uint() raises:
     # Test simple uint
     var single = "123"
     var p_single = Parser(single)
@@ -43,7 +43,7 @@ def test_lazy_uint():
     assert_equal(s_large.get(), 18446744073709551615)
 
 
-def test_lazy_float():
+def test_lazy_float() raises:
     # Test simple float
     var single = "123.456"
     var p_single = Parser(single)
@@ -65,7 +65,7 @@ def test_lazy_float():
     assert_equal(s_scientific.get(), 1.23e4)
 
 
-def test_lazy_string():
+def test_lazy_string() raises:
     # Test short string
     var short = '"short"'
     var p_short = Parser(short)
@@ -106,7 +106,7 @@ def test_lazy_string():
     assert_equal(s_mixed.get(), 'foo " bar \\ baz')
 
 
-def test_lazy_value():
+def test_lazy_value() raises:
     # Test capturing a string
     var string_val = '"hello world"'
     var p_string = Parser(string_val)
@@ -133,11 +133,11 @@ def test_lazy_value():
     assert_true(l_bool.get().bool())
 
 
-def test_lazy_init_from_bytes():
+def test_lazy_init_from_bytes() raises:
     var s = "123.42"
     var l = LazyFloat[origin_of(s)](s.as_bytes())
     assert_equal(l.get(), 123.42)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

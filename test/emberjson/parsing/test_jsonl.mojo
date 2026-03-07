@@ -3,7 +3,7 @@ from testing import *
 from sys.param_env import is_defined
 
 
-def test_read_lines():
+def test_read_lines() raises:
     if is_defined["DISABLE_TEST_FILES"]():
         return
 
@@ -21,7 +21,7 @@ def test_read_lines():
         i += 1
 
 
-def test_read_lines_big():
+def test_read_lines_big() raises:
     if is_defined["DISABLE_TEST_FILES"]():
         return
 
@@ -31,5 +31,5 @@ def test_read_lines_big():
         i += 1
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -6,7 +6,7 @@ from .utils import (
     write_escaped_string,
     ByteView,
 )
-from std.utils import Variant
+from std.utils.variant import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from std.collections import InlineArray
 from std.memory import UnsafePointer
@@ -51,7 +51,7 @@ struct Null(JsonValue, TrivialRegisterPassable):
         return {}
 
     @always_inline
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     @staticmethod
@@ -149,7 +149,7 @@ struct Value(JsonValue, Sized):
         self = p.parse()
 
     @always_inline
-    fn __init__(out self, *, parse_bytes: ByteView[mut=False]) raises:
+    fn __init__(out self, *, parse_bytes: ByteView[mut=False, ...]) raises:
         """Parse JSON document from bytes.
 
         Args:
@@ -198,10 +198,6 @@ struct Value(JsonValue, Sized):
         for val in values:
             self.array().append(val.copy())
 
-    @always_inline
-    fn _type_equal(self, other: Self) -> Bool:
-        return self._data._get_discr() == other._data._get_discr()
-
     fn __eq__(self, other: Self) -> Bool:
         if (self.is_int() or self.is_uint()) and (
             other.is_int() or other.is_uint()
@@ -215,21 +211,24 @@ struct Value(JsonValue, Sized):
                     return self.uint() == other.uint()
                 return False
 
-        if not self._type_equal(other):
+        if (
+            self._data._storage.get_discriminant()
+            != other._data._storage.get_discriminant()
+        ):
             return False
-        elif self.isa[Float64]():
+        elif self.isa[Float64]() and other.isa[Float64]():
             return self.float() == other.float()
-        elif self.isa[String]():
+        elif self.isa[String]() and other.isa[String]():
             return self.string() == other.string()
-        elif self.isa[Bool]():
+        elif self.isa[Bool]() and other.isa[Bool]():
             return self.bool() == other.bool()
-        elif self.isa[Object]():
+        elif self.isa[Object]() and other.isa[Object]():
             return self.object() == other.object()
-        elif self.isa[Array]():
+        elif self.isa[Array]() and other.isa[Array]():
             return self.array() == other.array()
-        elif self.isa[Null]():
+        elif self.isa[Null]() and other.isa[Null]():
             return True
-        abort("Unreachable: __eq__")
+        abort("unreachable: Value.__eq__")
 
     fn __len__(self) -> Int:
         if self.is_array():
@@ -324,7 +323,7 @@ struct Value(JsonValue, Sized):
     @always_inline
     fn get[T: Movable & Copyable](ref self) -> ref[self._data] T:
         constrain_json_type[T]()
-        return self._data[T]
+        return self._data.unsafe_get[T]()
 
     @always_inline
     fn int(self) -> Int64:
@@ -387,13 +386,13 @@ struct Value(JsonValue, Sized):
     fn _pretty_to_as_element(
         self, mut writer: Some[Writer], indent: String, curr_depth: UInt
     ):
-        if self.isa[Object]():
+        if self.is_object():
             writer.write("{\n")
             self.object()._pretty_write_items(writer, indent, curr_depth + 1)
             for _ in range(curr_depth):
                 writer.write(indent)
             writer.write("}")
-        elif self.isa[Array]():
+        elif self.is_array():
             writer.write("[\n")
             self.array()._pretty_write_items(writer, indent, curr_depth + 1)
             for _ in range(curr_depth):
@@ -405,15 +404,15 @@ struct Value(JsonValue, Sized):
     fn pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
-        if self.isa[Object]():
+        if self.is_object():
             self.object().pretty_to(writer, indent, curr_depth=curr_depth)
-        elif self.isa[Array]():
+        elif self.is_array():
             self.array().pretty_to(writer, indent, curr_depth=curr_depth)
         else:
             self.write_to(writer)
 
     @always_inline
-    fn write_json(self, mut writer: Some[Writer]):
+    fn write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     fn to_python_object(self) raises -> PythonObject:
@@ -439,9 +438,12 @@ struct Value(JsonValue, Sized):
     fn get(ref self, path: PointerIndex) raises -> ref[self] Value:
         return resolve_pointer(self, path)
 
-    fn __getattr__(ref self, var name: String) raises -> ref[self] Value:
-        if name.startswith("/"):
-            return self.get(name)
+    fn __getattr__(ref self, nameLit: StringLiteral) raises -> ref[self] Value:
+        comptime name = type_of(nameLit)()
+        comptime if name.startswith("/"):
+            comptime index = PointerIndex.try_from_string(name)
+            comptime assert Bool(index), "Failed to parse path: " + name
+            return self.get(index.value())
         else:
             if self.is_object():
                 return UnsafePointer(to=self.object()[name]).unsafe_origin_cast[
@@ -450,9 +452,14 @@ struct Value(JsonValue, Sized):
             else:
                 raise Error("Cannot use getattr on JSON Array")
 
-    fn __setattr__(mut self, var name: String, var value: Value) raises:
-        if name.startswith("/"):
-            self.get(name) = value^
+    fn __setattr__(
+        mut self, var nameLit: StringLiteral, var value: Value
+    ) raises:
+        comptime name = type_of(nameLit)()
+        comptime if name.startswith("/"):
+            comptime index = PointerIndex.try_from_string(name)
+            comptime assert Bool(index), "Failed to parse path: " + name
+            self.get(index.value()) = value^
         else:
             if self.is_object():
                 self.object()[name] = value^

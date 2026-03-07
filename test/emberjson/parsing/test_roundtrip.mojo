@@ -17,113 +17,113 @@ def round_trip_test(filename: String):
             assert_equal(String(json), src)
 
 
-def test_roundtrip01():
+def test_roundtrip01() raises:
     round_trip_test("roundtrip01")
 
 
-def test_roundtrip02():
+def test_roundtrip02() raises:
     round_trip_test("roundtrip02")
 
 
-def test_roundtrip03():
+def test_roundtrip03() raises:
     round_trip_test("roundtrip03")
 
 
-def test_roundtrip04():
+def test_roundtrip04() raises:
     round_trip_test("roundtrip04")
 
 
-def test_roundtrip05():
+def test_roundtrip05() raises:
     round_trip_test("roundtrip05")
 
 
-def test_roundtrip06():
+def test_roundtrip06() raises:
     round_trip_test("roundtrip06")
 
 
-def test_roundtrip07():
+def test_roundtrip07() raises:
     round_trip_test("roundtrip07")
 
 
-def test_roundtrip08():
+def test_roundtrip08() raises:
     round_trip_test("roundtrip08")
 
 
-def test_roundtrip09():
+def test_roundtrip09() raises:
     round_trip_test("roundtrip09")
 
 
-def test_roundtrip10():
+def test_roundtrip10() raises:
     round_trip_test("roundtrip10")
 
 
-def test_roundtrip11():
+def test_roundtrip11() raises:
     round_trip_test("roundtrip11")
 
 
-def test_roundtrip12():
+def test_roundtrip12() raises:
     round_trip_test("roundtrip12")
 
 
-def test_roundtrip13():
+def test_roundtrip13() raises:
     round_trip_test("roundtrip13")
 
 
-def test_roundtrip14():
+def test_roundtrip14() raises:
     round_trip_test("roundtrip14")
 
 
-def test_roundtrip15():
+def test_roundtrip15() raises:
     round_trip_test("roundtrip15")
 
 
-def test_roundtrip16():
+def test_roundtrip16() raises:
     round_trip_test("roundtrip16")
 
 
-def test_roundtrip17():
+def test_roundtrip17() raises:
     round_trip_test("roundtrip17")
 
 
-def test_roundtrip18():
+def test_roundtrip18() raises:
     round_trip_test("roundtrip18")
 
 
-def test_roundtrip19():
+def test_roundtrip19() raises:
     round_trip_test("roundtrip19")
 
 
-def test_roundtrip20():
+def test_roundtrip20() raises:
     round_trip_test("roundtrip20")
 
 
-def test_roundtrip21():
+def test_roundtrip21() raises:
     round_trip_test("roundtrip21")
 
 
-def test_roundtrip22():
+def test_roundtrip22() raises:
     round_trip_test("roundtrip22")
 
 
-def test_roundtrip23():
+def test_roundtrip23() raises:
     round_trip_test("roundtrip23")
 
 
-def test_roundtrip27():
+def test_roundtrip27() raises:
     round_trip_test("roundtrip27")
 
 
-def test_roundtrip24():
+def test_roundtrip24() raises:
     round_trip_test("roundtrip24")
 
 
-def test_roundtrip25():
+def test_roundtrip25() raises:
     round_trip_test("roundtrip25")
 
 
-def test_roundtrip26():
+def test_roundtrip26() raises:
     round_trip_test("roundtrip26")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

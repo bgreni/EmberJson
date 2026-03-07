@@ -8,6 +8,7 @@ from emberjson import (
     deserialize,
     Value,
 )
+from std.sys.intrinsics import _type_is_eq
 from emberjson._deserialize.reflection import _Base
 
 ##########################################################
@@ -16,11 +17,9 @@ from emberjson._deserialize.reflection import _Base
 
 
 @fieldwise_init
-struct Validated[
-    T: _Base,
-    validator: fn(T) -> Bool,
-    err_msg: String = "Value is not valid",
-](JsonDeserializable, JsonSerializable):
+struct ValidatorSet[T: _Base, *validators: Validator](
+    JsonDeserializable, JsonSerializable
+):
     var value: Self.T
 
     @staticmethod
@@ -29,7 +28,50 @@ struct Validated[
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
-        if not Self.validator(s.value):
+        s.validate()
+
+    fn validate(self) raises:
+        comptime for i in range(Variadic.size(Self.validators)):
+            comptime VType = Self.validators[i]
+            comptime assert _type_is_eq[VType.Type, Self.T]()
+            VType.validate(rebind[VType.Type](self.value))
+
+    fn write_json(self, mut writer: Some[Serializer]):
+        serialize(self.value, writer)
+
+    fn __getitem__(self) -> ref[self.value] Self.T:
+        return self.value
+
+
+trait Validator:
+    comptime Type: _Base
+
+    @staticmethod
+    fn validate(value: Self.Type) raises:
+        ...
+
+
+@fieldwise_init
+struct Validated[
+    T: _Base,
+    validator: fn(T) -> Bool,
+    err_msg: String = "Value is not valid",
+](JsonDeserializable, JsonSerializable, Validator):
+    var value: Self.T
+
+    comptime Type = Self.T
+
+    @staticmethod
+    fn from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = {deserialize[Self.T](p)}
+
+        s.validate(s.value)
+
+    @staticmethod
+    fn validate(value: Self.Type) raises:
+        if not Self.validator(value):
             raise Error(Self.err_msg)
 
     fn write_json(self, mut writer: Some[Serializer]):
@@ -65,9 +107,10 @@ comptime Size[T: Sized & _Base, min: Int, max: Int] = Validated[
 
 @fieldwise_init
 struct OneOf[T: _Base & Equatable, *accepted: T](
-    JsonDeserializable, JsonSerializable
+    JsonDeserializable, JsonSerializable, Validator
 ):
     var value: Self.T
+    comptime Type = Self.T
 
     @staticmethod
     fn from_json[
@@ -75,8 +118,12 @@ struct OneOf[T: _Base & Equatable, *accepted: T](
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
+        s.validate(s.value)
+
+    @staticmethod
+    fn validate(value: Self.Type) raises:
         comptime for i in range(Variadic.size(Self.accepted)):
-            if s.value == materialize[Self.accepted[i]]():
+            if value == materialize[Self.accepted[i]]():
                 return
 
         raise Error("Value not in options")
@@ -87,6 +134,19 @@ struct OneOf[T: _Base & Equatable, *accepted: T](
     fn __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
+
+@always_inline
+fn __is_multiple_of[base: SIMD](v: type_of(base)) -> Bool:
+    comptime zeroes = type_of(base)(0)
+    return v % base == zeroes
+
+
+# TODO: Use some trait for this
+comptime MultipleOf[base: SIMD] = Validated[
+    type_of(base),
+    __is_multiple_of[base],
+    "Value is not a multiple of " + String(base),
+]
 
 ##########################################################
 # Secret
@@ -208,6 +268,10 @@ fn __try_coerce_string(v: Value) raises -> String:
         return String(v.uint())
     elif v.is_float():
         return String(v.float())
+    elif v.is_bool():
+        return String(v.bool())
+    elif v.is_null():
+        return "null"
     else:
         raise Error("Value cannot be converted to a string")
 

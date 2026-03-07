@@ -11,13 +11,13 @@ from testing import (
 )
 
 
-def test_nested_access():
+def test_nested_access() raises:
     var nested: Value = {"key": [True, None, {"inner2": False}]}
 
     assert_equal(nested["key"][2]["inner2"].bool(), False)
 
 
-def test_bool():
+def test_bool() raises:
     var s: String = "false"
     var v = Value(parse_string=s)
     assert_true(v.is_bool())
@@ -31,7 +31,7 @@ def test_bool():
     assert_equal(String(v), s)
 
 
-def test_string():
+def test_string() raises:
     var s: String = '"Some String"'
     var v = Value(parse_string=s)
     assert_true(v.is_string())
@@ -66,7 +66,7 @@ def test_string():
         _ = Value(parse_string=r"Incomplete escape \u12 escape")
 
 
-def test_null():
+def test_null() raises:
     var s: String = "null"
     var v = Value(parse_string=s)
     assert_true(v.is_null())
@@ -79,7 +79,7 @@ def test_null():
         _ = Value(parse_string="nil")
 
 
-def test_integer():
+def test_integer() raises:
     var v = Value(parse_string="123")
     assert_true(v.is_int())
     assert_equal(v.int(), 123)
@@ -96,21 +96,21 @@ def test_integer():
     assert_not_equal(Value(-123), Value(UInt64(123)))
 
 
-def test_integer_leading_plus():
+def test_integer_leading_plus() raises:
     var v = Value(parse_string="+123")
     assert_true(v.is_int())
     assert_equal(v.int(), 123)
     assert_equal(v.uint(), 123)
 
 
-def test_integer_negative():
+def test_integer_negative() raises:
     var v = Value(parse_string="-123")
     assert_true(v.is_int())
     assert_equal(v.int(), -123)
     assert_equal(String(v), "-123")
 
 
-def test_signed_overflow_to_unsigned():
+def test_signed_overflow_to_unsigned() raises:
     var n = UInt64(Int64.MAX) + 100
     var v = Value(parse_string=String(n))
     assert_true(v.is_uint())
@@ -118,7 +118,7 @@ def test_signed_overflow_to_unsigned():
     assert_equal(String(v), String(n))
 
 
-def test_float():
+def test_float() raises:
     var v = Value(parse_string="43.5")
     assert_true(v.is_float())
     assert_almost_equal(v.float(), 43.5)
@@ -126,14 +126,14 @@ def test_float():
     assert_true(v.is_float())
 
 
-def test_eight_digits_after_dot():
+def test_eight_digits_after_dot() raises:
     var v = Value(parse_string="342.12345678")
     assert_true(v.is_float())
     assert_almost_equal(v.float(), 342.12345678)
     assert_equal(String(v), "342.12345678")
 
 
-def test_special_case_floats():
+def test_special_case_floats() raises:
     var v = Value(parse_string="2.2250738585072013e-308")
     assert_almost_equal(v.float(), 2.2250738585072013e-308)
     assert_true(v.is_float())
@@ -167,31 +167,31 @@ def test_special_case_floats():
     assert_equal(v.float(), Float64.MIN_FINITE)
 
 
-def test_float_leading_plus():
+def test_float_leading_plus() raises:
     var v = Value(parse_string="+43.5")
     assert_true(v.is_float())
     assert_almost_equal(v.float(), 43.5)
 
 
-def test_float_negative():
+def test_float_negative() raises:
     var v = Value(parse_string="-43.5")
     assert_true(v.is_float())
     assert_almost_equal(v.float(), -43.5)
 
 
-def test_float_exponent():
+def test_float_exponent() raises:
     var v = Value(parse_string="43.5e10")
     assert_true(v.is_float())
     assert_almost_equal(v.float(), 43.5e10)
 
 
-def test_float_exponent_negative():
+def test_float_exponent_negative() raises:
     var v = Value(parse_string="-43.5e10")
     assert_true(v.is_float())
     assert_almost_equal(v.float(), -43.5e10)
 
 
-def test_equality():
+def test_equality() raises:
     var v1 = Value(34)
     var v2 = Value("Some string")
     var v3 = Value("Some string")
@@ -209,7 +209,7 @@ def test_equality():
     eq_self(Value(Object()))
 
 
-def test_implicit_conversion():
+def test_implicit_conversion() raises:
     var val: Value = "a string"
     assert_equal(val.string(), "a string")
     val = 100
@@ -226,7 +226,7 @@ def test_implicit_conversion():
     assert_equal(val.array(), Array(1, 2, 3))
 
 
-def test_pretty():
+def test_pretty() raises:
     var v = Value(parse_string="[123, 43564, false]")
     var expected: String = """[
     123,
@@ -244,7 +244,7 @@ def test_pretty():
     assert_equal(expected, write_pretty(v))
 
 
-def test_booling():
+def test_booling() raises:
     var a: Value = True
     assert_true(a)
     if not a:
@@ -259,5 +259,5 @@ def test_booling():
         assert_false(f)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
