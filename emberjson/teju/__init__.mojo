@@ -106,118 +106,118 @@ def write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
     var sig = fields.mantissa
     var exp = fields.exponent
 
-    var orig_sig = sig
-    var abs_exp = abs(exp)
+    var sig_len = 0
+    var temp_sig = sig
 
-    comptime max_sig = _get_sig_digits[dtype]()
-    var digits = StackArray[Byte, max_sig](uninitialized=True)
+    comptime for p in range(4, -1, -1):
+        comptime step = 1 << p
+        comptime pow10 = UInt64(10**step)
+        if temp_sig >= pow10:
+            temp_sig //= pow10
+            sig_len += step
 
-    var idx = 0
-    # Fast 2-digit extraction
+    sig_len += 1
+
+    var digit_start = buf_idx
+    var cur_idx = digit_start + sig_len
+
+    # Fast 2-digit extraction directly into buffer
     while sig >= 100:
         var q = sig // 100
         var r = Int(sig - (q * 100))
         var pair = lut[DIGIT_PAIRS](r)
-        digits.unsafe_get(idx) = pair[1] - `0`
-        digits.unsafe_get(idx + 1) = pair[0] - `0`
+        cur_idx -= 2
+        buffer.unsafe_get(cur_idx) = pair[0]
+        buffer.unsafe_get(cur_idx + 1) = pair[1]
         sig = q
-        idx += 2
-        exp += 2
 
-    # Handle remaining digits
-    while sig > 0:
-        var q = div10(sig)
-        digits.unsafe_get(idx) = Byte(sig - (q * 10))
-        sig = q
-        idx += 1
-        if sig > 0:
-            exp += 1
-
-    var leading_zeroes = abs_exp - Int32(idx)
-
-    # Write in scientific notation if < 0.0001 or exp > 15
-    if (exp < 0 and leading_zeroes > 3) or exp > 15:
-        # Handle single digit case
-        if orig_sig < 10:
-            buffer.unsafe_get(buf_idx) = Byte(orig_sig) + `0`
-            buf_idx += 1
+    if sig > 0:
+        if sig >= 10:
+            var pair = lut[DIGIT_PAIRS](Int(sig))
+            cur_idx -= 2
+            buffer.unsafe_get(cur_idx) = pair[0]
+            buffer.unsafe_get(cur_idx + 1) = pair[1]
         else:
-            # Write digit before decimal point
-            buffer.unsafe_get(buf_idx) = digits.unsafe_get(idx - 1) + `0`
-            buf_idx += 1
-            buffer.unsafe_get(buf_idx) = `.`
+            cur_idx -= 1
+            buffer.unsafe_get(cur_idx) = Byte(sig) + `0`
+
+    var leading_zeroes = -exp - Int32(sig_len)
+    var str_exp = exp + Int32(sig_len - 1)
+
+    if (exp < 0 and leading_zeroes > 3) or str_exp > 15:
+        # Scientific notation
+        if sig_len > 1:
+            for i in reversed(range(1, sig_len)):
+                buffer.unsafe_get(digit_start + i + 1) = buffer.unsafe_get(
+                    digit_start + i
+                )
+            buffer.unsafe_get(digit_start + 1) = `.`
+            buf_idx += sig_len + 1
+        else:
             buf_idx += 1
 
-        # Write digits after decimal point
-        for i in reversed(range(idx - 1)):
-            buffer.unsafe_get(buf_idx) = digits.unsafe_get(i) + `0`
-            buf_idx += 1
-
-        # Write exponent
         buffer.unsafe_get(buf_idx) = `e`
         buf_idx += 1
-        if exp < 0:
+
+        var abs_e = Int(str_exp) if str_exp >= 0 else Int(-str_exp)
+        if str_exp < 0:
             buffer.unsafe_get(buf_idx) = `-`
             buf_idx += 1
-            exp = -exp
 
-        # Optimized exponent writing
-        if exp < 10:
+        if abs_e < 10:
             buffer.unsafe_get(buf_idx) = `0`
-            buffer.unsafe_get(buf_idx + 1) = Byte(exp) + `0`
+            buffer.unsafe_get(buf_idx + 1) = Byte(abs_e) + `0`
             buf_idx += 2
-        elif exp < 100:
-            var pair = lut[DIGIT_PAIRS](Int(exp))
+        elif abs_e < 100:
+            var pair = lut[DIGIT_PAIRS](abs_e)
             buffer.unsafe_get(buf_idx) = pair[0]
             buffer.unsafe_get(buf_idx + 1) = pair[1]
             buf_idx += 2
         else:
-            comptime max_exp_d = _get_exp_digits[dtype]()
-            var exp_digits = StackArray[Byte, max_exp_d](uninitialized=True)
-            var exp_idx = 0
-            while exp > 0:
-                exp_digits.unsafe_get(exp_idx) = Byte(exp % 10)
-                exp = Int32(div10(UInt64(exp)))
-                exp_idx += 1
+            var q = abs_e // 100
+            var r = Int(abs_e - (q * 100))
+            var pair = lut[DIGIT_PAIRS](r)
+            buffer.unsafe_get(buf_idx) = Byte(q) + `0`
+            buffer.unsafe_get(buf_idx + 1) = pair[0]
+            buffer.unsafe_get(buf_idx + 2) = pair[1]
+            buf_idx += 3
 
-            for i in reversed(range(exp_idx)):
-                buffer.unsafe_get(buf_idx) = exp_digits.unsafe_get(i) + `0`
-                buf_idx += 1
+    elif exp < 0 and leading_zeroes >= 0:
+        # Between 0.0001 and 0.9999
+        var shift_amount = 2 + Int(leading_zeroes)
+        for i in reversed(range(sig_len)):
+            buffer.unsafe_get(
+                digit_start + shift_amount + i
+            ) = buffer.unsafe_get(digit_start + i)
 
-    # If between 0 and 0.0001
-    elif exp < 0 and leading_zeroes > 0:
-        buffer.unsafe_get(buf_idx) = `0`
-        buf_idx += 1
-        buffer.unsafe_get(buf_idx) = `.`
-        buf_idx += 1
-        for _ in range(leading_zeroes):
-            buffer.unsafe_get(buf_idx) = `0`
-            buf_idx += 1
-        for i in reversed(range(idx)):
-            buffer.unsafe_get(buf_idx) = digits.unsafe_get(i) + `0`
-            buf_idx += 1
+        buffer.unsafe_get(digit_start) = `0`
+        buffer.unsafe_get(digit_start + 1) = `.`
+        for i in range(Int(leading_zeroes)):
+            buffer.unsafe_get(digit_start + 2 + i) = `0`
 
-    # All other floats > 0.0001 with an exponent <= 15
+        buf_idx += sig_len + shift_amount
+
     else:
-        var point_written = False
-        for i in reversed(range(idx)):
-            if leading_zeroes < 1 and exp == Int32(idx - i) - 2:
-                # No integer part so write leading 0
-                if i == idx - 1:
-                    buffer.unsafe_get(buf_idx) = `0`
-                    buf_idx += 1
-                buffer.unsafe_get(buf_idx) = `.`
+        var digits_before = Int(exp) + sig_len
+        var trailing = digits_before - sig_len
+        if trailing > 0:
+            buf_idx += sig_len
+            for _ in range(trailing):
+                buffer.unsafe_get(buf_idx) = `0`
                 buf_idx += 1
-                point_written = True
-            buffer.unsafe_get(buf_idx) = digits.unsafe_get(i) + `0`
+            buffer.unsafe_get(buf_idx) = `.`
             buf_idx += 1
-
-        # If exp - idx + 1 > 0 it's a positive number with more 0's than the
-        # sig
-        for _ in range(Int(exp) - idx + 1):
             buffer.unsafe_get(buf_idx) = `0`
             buf_idx += 1
-        if not point_written:
+        elif digits_before < sig_len:
+            for i in reversed(range(digits_before, sig_len)):
+                buffer.unsafe_get(digit_start + i + 1) = buffer.unsafe_get(
+                    digit_start + i
+                )
+            buffer.unsafe_get(digit_start + digits_before) = `.`
+            buf_idx += sig_len + 1
+        else:
+            buf_idx += sig_len
             buffer.unsafe_get(buf_idx) = `.`
             buf_idx += 1
             buffer.unsafe_get(buf_idx) = `0`
