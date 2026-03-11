@@ -8,7 +8,7 @@ from std.memory import UnsafePointer
 from std.sys.intrinsics import unlikely
 
 
-fn parse_int(s: String) raises -> Int:
+def parse_int(s: String) raises -> Int:
     # Simple integer parser
     var res = 0
     if s == "":
@@ -22,7 +22,7 @@ fn parse_int(s: String) raises -> Int:
     return res
 
 
-fn unescape(token: StringSlice) -> String:
+def unescape(token: StringSlice) -> String:
     # RFC 6901 Escaping:
     # ~1 -> /
     # ~0 -> ~
@@ -59,7 +59,7 @@ struct PointerIndex(Copyable, Movable):
     var tokens: List[PointerToken]
 
     @implicit
-    fn __init__(out self, path: String) raises:
+    def __init__(out self, path: String) raises:
         self.tokens = List[PointerToken]()
         if path == "":
             return
@@ -91,18 +91,18 @@ struct PointerIndex(Copyable, Movable):
                 # Not a valid int, treat as String
                 self.tokens.append(PointerToken(raw))
 
-    fn __init__(out self, var tokens: List[PointerToken]):
+    def __init__(out self, var tokens: List[PointerToken]):
         self.tokens = tokens^
 
     @staticmethod
-    fn try_from_string(path: String) -> Optional[Self]:
+    def try_from_string(path: String) -> Optional[Self]:
         try:
             return PointerIndex(path)
         except:
             return None
 
 
-fn resolve_pointer(
+def resolve_pointer(
     ref root: Value, ptr: PointerIndex
 ) raises -> ref[root] Value:
     if len(ptr.tokens) == 0:
@@ -110,7 +110,7 @@ fn resolve_pointer(
     return _resolve_ref(root, ptr.tokens, 0)
 
 
-fn resolve_pointer(
+def resolve_pointer(
     ref root: Object, ptr: PointerIndex
 ) raises -> ref[root] Value:
     if unlikely(len(ptr.tokens) == 0):
@@ -119,7 +119,7 @@ fn resolve_pointer(
     return _resolve_ref(root, ptr.tokens, 0)
 
 
-fn resolve_pointer(
+def resolve_pointer(
     ref root: Array, ptr: PointerIndex
 ) raises -> ref[root] Value:
     if unlikely(len(ptr.tokens) == 0):
@@ -128,7 +128,7 @@ fn resolve_pointer(
     return _resolve_ref(root, ptr.tokens, 0)
 
 
-fn _resolve_ref(
+def _resolve_ref(
     ref val: Value, tokens: List[PointerToken], idx: Int
 ) raises -> ref[val] Value:
     if idx >= len(tokens):
@@ -157,7 +157,7 @@ fn _resolve_ref(
             )
 
 
-fn _resolve_ref(
+def _resolve_ref(
     ref obj: Object, tokens: List[PointerToken], idx: Int
 ) raises -> ref[obj] Value:
     if unlikely(idx >= len(tokens)):
@@ -187,7 +187,7 @@ fn _resolve_ref(
     raise Error("Key not found: " + key)
 
 
-fn _resolve_ref(
+def _resolve_ref(
     ref arr: Array, tokens: List[PointerToken], idx: Int
 ) raises -> ref[arr] Value:
     if unlikely(idx >= len(tokens)):

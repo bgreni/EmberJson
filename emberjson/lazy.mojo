@@ -11,58 +11,58 @@ from std.sys.intrinsics import _type_is_eq
 from std.builtin.rebind import downcast
 
 
-fn _get_object_bytes[
+def _get_object_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_object_bytes()
 
 
-fn _get_array_bytes[
+def _get_array_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_array_bytes()
 
 
-fn _get_int_bytes[
+def _get_int_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_integer_bytes()
 
 
-fn _get_float_bytes[
+def _get_float_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_float_bytes()
 
 
-fn _get_string_bytes[
+def _get_string_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_string_bytes()
 
 
-fn _get_value_bytes[
+def _get_value_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_value_bytes()
 
 
-fn _deserialize_bytes[
+def _deserialize_bytes[
     T: _Base, origin: Origin
 ](b: Span[Byte, origin]) raises -> T:
     var p = Parser(b)
     return _deserialize_impl[T](p)
 
 
-comptime ReadBytesFn[origin: ImmutOrigin] = fn(
+comptime ReadBytesdef[origin: ImmutOrigin] = def(
     mut Parser[origin]
 ) raises -> Span[Byte, origin]
-comptime ParseFn[T: _Base, origin: ImmutOrigin] = fn(
+comptime Parsedef[T: _Base, origin: ImmutOrigin] = def(
     Span[Byte, origin]
 ) raises -> T
 
 
-fn __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:
+def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesdef[origin]:
     comptime if conforms_to(T, JsonDeserializable) and downcast[
         T, JsonDeserializable
     ].deserialize_as_array():
@@ -75,13 +75,13 @@ fn __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:
 struct Lazy[
     T: _Base,
     origin: ImmutOrigin,
-    parse_value: ReadBytesFn[origin] = __pick_byte_expect[T, origin](),
-    extract_value: ParseFn[T, origin] = _deserialize_bytes[T, origin],
+    parse_value: ReadBytesdef[origin] = __pick_byte_expect[T, origin](),
+    extract_value: Parsedef[T, origin] = _deserialize_bytes[T, origin],
 ](Hashable, JsonDeserializable, JsonSerializable, TrivialRegisterPassable):
     var _data: Span[Byte, Self.origin]
 
     @staticmethod
-    fn from_json[
+    def from_json[
         o: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[o, options], out s: Self) raises:
         # TODO: Remove this restriction when compiler allows
@@ -90,23 +90,23 @@ struct Lazy[
         ), "Lazy deserialization only works with default parse options"
         s = {Self.parse_value(rebind[Parser[Self.origin]](p))}
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write(StringSlice(unsafe_from_utf8=self._data))
 
-    fn get(self) raises -> Self.T:
+    def get(self) raises -> Self.T:
         return Self.extract_value(self._data)
 
-    fn __getitem__(self) raises -> Self.T:
+    def __getitem__(self) raises -> Self.T:
         return self.get()
 
-    fn __eq__(self, other: Self) -> Bool:
+    def __eq__(self, other: Self) -> Bool:
         return self._data == other._data
 
-    fn __hash__(self, mut h: Some[Hasher]):
+    def __hash__(self, mut h: Some[Hasher]):
         comptime assert conforms_to(Self.T, Hashable)
         h.update(StringSlice(unsafe_from_utf8=self._data))
 
-    fn unsafe_as_string_slice(
+    def unsafe_as_string_slice(
         self,
     ) -> StringSlice[Self.origin]:
         # TODO: Use where clause when that actually works

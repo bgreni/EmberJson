@@ -11,7 +11,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
     var index: Int
     var src: Pointer[Array, Self.origin]
 
-    fn __init__(out self, src: Pointer[Array, Self.origin]):
+    def __init__(out self, src: Pointer[Array, Self.origin]):
         self.src = src
 
         comptime if Self.forward:
@@ -19,10 +19,10 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
         else:
             self.index = len(self.src[])
 
-    fn __iter__(self) -> Self:
+    def __iter__(self) -> Self:
         return self
 
-    fn __next__(mut self) raises StopIteration -> ref[self.src[]._data] Value:
+    def __next__(mut self) raises StopIteration -> ref[self.src[]._data] Value:
         if len(self) == 0:
             raise StopIteration()
 
@@ -33,7 +33,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
             self.index -= 1
             return self.src[][self.index]
 
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         comptime if Self.forward:
             return len(self.src[]) - self.index
         else:
@@ -51,72 +51,72 @@ struct Array(JsonValue, Sized):
     var _data: Self.Type
 
     @always_inline
-    fn __init__(out self):
+    def __init__(out self):
         self._data = Self.Type()
 
     @always_inline
-    fn __init__(out self, *, capacity: Int):
+    def __init__(out self, *, capacity: Int):
         self._data = Self.Type(capacity=capacity)
 
     @always_inline
     @implicit
-    fn __init__(out self, var d: Self.Type):
+    def __init__(out self, var d: Self.Type):
         self._data = d^
 
     @always_inline
-    fn __init__(out self, var *values: Value, __list_literal__: () = ()):
+    def __init__(out self, var *values: Value, __list_literal__: () = ()):
         self._data = Self.Type(elements=values^)
 
     @always_inline
-    fn __init__(out self: Array, *, parse_string: String) raises:
+    def __init__(out self: Array, *, parse_string: String) raises:
         var p = Parser(parse_string)
         self = p.parse_array()
 
     @always_inline
-    fn __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data] Value:
+    def __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data] Value:
         return self._data[ind]
 
     @always_inline
-    fn __setitem__(mut self, ind: Some[Indexer], var item: Value):
+    def __setitem__(mut self, ind: Some[Indexer], var item: Value):
         self._data[ind] = item^
 
     @always_inline
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         return len(self._data)
 
     @always_inline
-    fn __bool__(self) -> Bool:
+    def __bool__(self) -> Bool:
         return len(self) == 0
 
     @always_inline
-    fn __contains__(self, v: Value) -> Bool:
+    def __contains__(self, v: Value) -> Bool:
         return v in self._data
 
     @always_inline
-    fn __eq__(self, other: Self) -> Bool:
+    def __eq__(self, other: Self) -> Bool:
         return self._data == other._data
 
     @always_inline
-    fn __ne__(self, other: Self) -> Bool:
+    def __ne__(self, other: Self) -> Bool:
         return self._data != other._data
 
     @always_inline
-    fn __iter__(ref self) -> _ArrayIter[origin_of(self)]:
+    def __iter__(ref self) -> _ArrayIter[origin_of(self)]:
         return _ArrayIter(Pointer(to=self))
 
     @always_inline
-    fn reversed(ref self) -> _ArrayIter[origin_of(self), False]:
+    def reversed(ref self) -> _ArrayIter[origin_of(self), False]:
         return _ArrayIter[forward=False](Pointer(to=self))
 
     @always_inline
-    fn iter(ref self) -> _ArrayIter[origin_of(self)]:
+    def iter(ref self) -> _ArrayIter[origin_of(self)]:
         return self.__iter__()
 
     @always_inline
-    fn reserve(mut self, n: Int):
+    def reserve(mut self, n: Int):
         self._data.reserve(n)
 
-    fn write_to(self, mut writer: Some[Writer]):
+    def write_to(self, mut writer: Some[Writer]):
         writer.write("[")
         for i in range(len(self._data)):
             writer.write(self._data[i])
@@ -125,17 +125,17 @@ struct Array(JsonValue, Sized):
         writer.write("]")
 
     @always_inline
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
-    fn pretty_to(
+    def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
         writer.write("[\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("]")
 
-    fn _pretty_write_items(
+    def _pretty_write_items(
         self, mut writer: Some[Writer], indent: String, curr_depth: UInt
     ):
         for i in range(len(self._data)):
@@ -147,23 +147,23 @@ struct Array(JsonValue, Sized):
             writer.write("\n")
 
     @always_inline
-    fn append(mut self, var item: Value):
+    def append(mut self, var item: Value):
         self._data.append(item^)
 
     @always_inline
-    fn insert(mut self, idx: Int, var item: Value):
+    def insert(mut self, idx: Int, var item: Value):
         self._data.insert(idx, item^)
 
     @always_inline
-    fn pop(mut self, idx: Int) -> Value:
+    def pop(mut self, idx: Int) -> Value:
         return self._data.pop(idx)
 
-    fn to_list(self, out l: List[Value]):
+    def to_list(self, out l: List[Value]):
         l = self._data.copy()
 
-    fn to_python_object(self) raises -> PythonObject:
+    def to_python_object(self) raises -> PythonObject:
         return Python.list(self._data)
 
     @staticmethod
-    fn from_json(mut json: Parser, out s: Self) raises:
+    def from_json(mut json: Parser, out s: Self) raises:
         s = json.parse_array()

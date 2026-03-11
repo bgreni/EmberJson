@@ -35,7 +35,7 @@ struct Baz(JsonSerializable):
     var c: String
 
     @staticmethod
-    fn serialize_as_array() -> Bool:
+    def serialize_as_array() -> Bool:
         return True
 
 
@@ -128,7 +128,7 @@ struct Company(JsonSerializable):
     var founded_year: Int
 
     @staticmethod
-    fn serialize_as_array() -> Bool:
+    def serialize_as_array() -> Bool:
         return False
 
 
@@ -138,7 +138,7 @@ struct IntWrapper(JsonSerializable):
     var description: String
 
     @staticmethod
-    fn serialize_as_array() -> Bool:
+    def serialize_as_array() -> Bool:
         return False
 
 
@@ -148,7 +148,7 @@ struct AddressWrapper(JsonSerializable):
     var description: String
 
     @staticmethod
-    fn serialize_as_array() -> Bool:
+    def serialize_as_array() -> Bool:
         return False
 
 
@@ -164,7 +164,7 @@ struct DeepNode(Copyable):
     var val: Int
     var children: List[DeepNode]
 
-    fn __init__(out self, *, copy: Self):
+    def __init__(out self, *, copy: Self):
         self.val = copy.val
         self.children = List[DeepNode](capacity=len(copy.children))
         for i in range(len(copy.children)):

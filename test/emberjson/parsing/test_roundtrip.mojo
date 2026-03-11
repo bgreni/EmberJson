@@ -4,7 +4,7 @@ from std.sys.param_env import is_defined
 
 
 @always_inline
-fn files_enabled() -> Bool:
+def files_enabled() -> Bool:
     return not is_defined["DISABLE_TEST_FILES"]()
 
 

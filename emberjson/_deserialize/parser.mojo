@@ -87,7 +87,7 @@ struct StrictOptions(Defaultable, Equatable, TrivialRegisterPassable):
     var _flags: Int
 
     @always_inline
-    fn __init__(out self, val: Int):
+    def __init__(out self, val: Int):
         self._flags = val
 
     comptime STRICT = StrictOptions(0)
@@ -97,13 +97,13 @@ struct StrictOptions(Defaultable, Equatable, TrivialRegisterPassable):
 
     comptime LENIENT = Self.ALLOW_TRAILING_COMMA | Self.ALLOW_DUPLICATE_KEYS
 
-    fn __init__(out self):
+    def __init__(out self):
         self = Self.STRICT
 
-    fn __or__(self, other: Self) -> Self:
+    def __or__(self, other: Self) -> Self:
         return Self(self._flags | other._flags)
 
-    fn __contains__(self, other: Self) -> Bool:
+    def __contains__(self, other: Self) -> Bool:
         return self._flags & other._flags == other._flags
 
 
@@ -117,7 +117,7 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
     var ignore_unicode: Bool
     var strict_mode: StrictOptions
 
-    fn __init__(
+    def __init__(
         out self,
         *,
         ignore_unicode: Bool = False,
@@ -137,24 +137,24 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var size: Int
 
     @implicit
-    fn __init__(out self: Parser[origin_of(s), Self.options], s: String):
+    def __init__(out self: Parser[origin_of(s), Self.options], s: String):
         self = {ptr = s.unsafe_ptr(), length = s.byte_length()}
 
     @implicit
-    fn __init__(
+    def __init__(
         out self: Parser[StaticConstantOrigin, Self.options], s: StringLiteral
     ):
         self = {StaticString(s)}
 
     @implicit
-    fn __init__(out self, s: StringSlice[Self.origin]):
+    def __init__(out self, s: StringSlice[Self.origin]):
         self = {ptr = s.unsafe_ptr(), length = s.byte_length()}
 
     @implicit
-    fn __init__(out self, s: ByteView[Self.origin]):
+    def __init__(out self, s: ByteView[Self.origin]):
         self = {ptr = s.unsafe_ptr(), length = len(s)}
 
-    fn __init__(
+    def __init__(
         out self,
         *,
         ptr: UnsafePointer[Byte, origin=Self.origin],
@@ -164,15 +164,15 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.size = length
 
     @always_inline
-    fn bytes_remaining(self) -> Int:
+    def bytes_remaining(self) -> Int:
         return self.data.dist()
 
     @always_inline
-    fn has_more(self) -> Bool:
+    def has_more(self) -> Bool:
         return self.bytes_remaining() > 0
 
     @always_inline
-    fn remaining(self) -> String:
+    def remaining(self) -> String:
         """Used for debug purposes.
 
         Returns:
@@ -184,22 +184,22 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             return ""
 
     @always_inline
-    fn load_chunk(self) -> SIMD8xT:
+    def load_chunk(self) -> SIMD8xT:
         return self.data.load_chunk()
 
     @always_inline
-    fn can_load_chunk(self) -> Bool:
+    def can_load_chunk(self) -> Bool:
         return self.bytes_remaining() >= SIMD8_WIDTH
 
     @always_inline
-    fn pos(self) -> Int:
+    def pos(self) -> Int:
         return self.size - (self.size - self.data.dist())
 
     @always_inline
-    fn peek(self) raises -> Byte:
+    def peek(self) raises -> Byte:
         return self.data[]
 
-    fn parse(mut self, out json: Value) raises:
+    def parse(mut self, out json: Value) raises:
         self.skip_whitespace()
         json = self.parse_value()
 
@@ -210,7 +210,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 self.remaining(),
             )
 
-    fn parse_array(mut self, out arr: Array) raises:
+    def parse_array(mut self, out arr: Array) raises:
         self.data += 1
         self.skip_whitespace()
         arr = Array()
@@ -240,7 +240,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.data += 1
         self.skip_whitespace()
 
-    fn parse_object(mut self, out obj: Object) raises:
+    def parse_object(mut self, out obj: Object) raises:
         obj = Object()
         self.data += 1
         self.skip_whitespace()
@@ -289,7 +289,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
 
     @always_inline
-    fn parse_true(mut self) raises -> Bool:
+    def parse_true(mut self) raises -> Bool:
         if unlikely(self.bytes_remaining() < 3):
             raise Error('Encountered EOF when expecting "true"')
         # Safety: Safe because we checked the amount of bytes remaining
@@ -300,7 +300,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         return True
 
     @always_inline
-    fn parse_false(mut self) raises -> Bool:
+    def parse_false(mut self) raises -> Bool:
         self.data += 1
         if unlikely(self.bytes_remaining() < 3):
             raise Error('Encountered EOF when expecting "false"')
@@ -312,11 +312,11 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         return False
 
     @always_inline
-    fn parse_null(mut self) raises -> Null:
+    def parse_null(mut self) raises -> Null:
         self.expect_null()
         return Null()
 
-    fn parse_value(mut self, out v: Value) raises:
+    def parse_value(mut self, out v: Value) raises:
         self.skip_whitespace()
         var b = self.data[]
         # Handle string
@@ -349,7 +349,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value")
 
-    fn find(mut self, start: CheckedPointer, out s: String) raises:
+    def find(mut self, start: CheckedPointer, out s: String) raises:
         var found_escaped = False
         while True:
             var block = StringBlock.find(self.data)
@@ -393,7 +393,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 if self.data[] != `\\`:
                     break
 
-    fn read_serial(mut self, start: CheckedPointer, out s: String) raises:
+    def read_serial(mut self, start: CheckedPointer, out s: String) raises:
         var found_escaped = False
         while likely(self.has_more()):
             if self.data[] == `"`:
@@ -422,7 +422,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         raise Error("Invalid String")
 
-    fn read_string(mut self, out s: String) raises:
+    def read_string(mut self, out s: String) raises:
         self.data += 1
         var start = self.data
         # compile time interpreter is incompatible with the SIMD accelerated
@@ -434,7 +434,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             s = self.read_serial(start)
 
     @always_inline
-    fn skip_whitespace(mut self) raises:
+    def skip_whitespace(mut self) raises:
         if not self.has_more() or not is_space(self.data[]):
             return
         self.data += 1
@@ -458,7 +458,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     #####################################################################################################################
 
     @always_inline
-    fn compute_float_fast(
+    def compute_float_fast(
         self, out d: Float64, power: Int64, i: UInt64, negative: Bool
     ):
         d = Float64(i)
@@ -472,7 +472,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             d = -d
 
     @always_inline
-    fn compute_float64(
+    def compute_float64(
         self, out d: Float64, power: Int64, var i: UInt64, negative: Bool
     ) raises:
         comptime min_fast_power = Int64(-22)
@@ -526,7 +526,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 return
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
 
-            real_exponent = select(mantissa < (`1 << 52`), Int64(0), Int64(1))
+            real_exponent = select(mantissa < `1 << 52`, Int64(0), Int64(1))
             return to_double(
                 mantissa, real_exponent.cast[DType.uint64](), negative
             )
@@ -542,7 +542,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         mantissa >>= 1
 
         comptime `1 << 53` = 1 << 53
-        if mantissa >= (`1 << 53`):
+        if mantissa >= `1 << 53`:
             mantissa = `1 << 52`
             real_exponent += 1
         mantissa &= ~(`1 << 52`)
@@ -553,7 +553,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         d = to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
 
     @always_inline
-    fn write_float(
+    def write_float(
         self,
         out v: Float64,
         negative: Bool,
@@ -576,7 +576,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         return self.compute_float64(exponent, i, negative)
 
     @always_inline
-    fn parse_number(mut self, out v: Value) raises:
+    def parse_number(mut self, out v: Value) raises:
         var neg = self.data[] == `-`
         var p = self.data + Int(neg or self.data[] == `+`)
 
@@ -660,7 +660,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             return i
         return select(neg, Int64(~i + 1), Int64(i))
 
-    fn expect(mut self, expected: Byte) raises:
+    def expect(mut self, expected: Byte) raises:
         self.skip_whitespace()
         if unlikely(self.data[] != expected):
             raise Error(
@@ -673,7 +673,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
 
     @always_inline
-    fn _parse_integer_common(
+    def _parse_integer_common(
         mut self,
     ) raises -> IntegerParseResult[Self.origin]:
         var neg = self.data[] == `-`
@@ -697,7 +697,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return i, neg, p, digit_count, start_digits
 
-    fn expect_integer[
+    def expect_integer[
         type: DType = DType.int64
     ](mut self) raises -> Scalar[type]:
         comptime assert (
@@ -741,7 +741,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return res.cast[type]()
 
-    fn expect_unsigned_integer[
+    def expect_unsigned_integer[
         type: DType = DType.uint64
     ](mut self) raises -> Scalar[type]:
         comptime assert (
@@ -776,7 +776,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return i.cast[type]()
 
-    fn expect_float[
+    def expect_float[
         type: DType = DType.float64
     ](mut self) raises -> Scalar[type]:
         comptime assert (
@@ -853,14 +853,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return f.cast[type]()
 
-    fn expect_bool(mut self) raises -> Bool:
+    def expect_bool(mut self) raises -> Bool:
         if self.data[] == `t`:
             return self.parse_true()
         elif self.data[] == `f`:
             return self.parse_false()
         raise Error("Expected Bool")
 
-    fn expect_null(mut self) raises:
+    def expect_null(mut self) raises:
         if unlikely(self.bytes_remaining() < 3):
             raise Error("Encountered EOF when expecting 'null'")
         # Safety: Safe because we checked the amount of bytes remaining
@@ -869,7 +869,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             raise Error("Expected 'null', received: ", to_string(w))
         self.data += 4
 
-    fn expect_value_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_value_bytes(mut self) raises -> Span[Byte, Self.origin]:
         self.skip_whitespace()
         var b = self.data[]
         if b == `"`:
@@ -891,10 +891,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         else:
             raise Error("Invalid json value to skip")
 
-    fn skip_value(mut self) raises:
+    def skip_value(mut self) raises:
         _ = self.expect_value_bytes()
 
-    fn expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
         self.data += 1
 
@@ -948,7 +948,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         raise Error("Unexpected EOF")
 
-    fn _expect_structural_bytes[
+    def _expect_structural_bytes[
         open: Byte, close: Byte
     ](mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
@@ -1020,7 +1020,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         raise Error("Unexpected EOF while parsing structure")
 
-    fn expect_integer_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_integer_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
         if self.data[] == `-`:  # '-'
             self.data += 1
@@ -1045,7 +1045,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
-    fn expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
         if self.data[] == `-`:  # '-'
             self.data += 1
@@ -1082,14 +1082,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
-    fn expect_object_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_object_bytes(mut self) raises -> Span[Byte, Self.origin]:
         return self._expect_structural_bytes[`{`, `}`]()
 
-    fn expect_array_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_array_bytes(mut self) raises -> Span[Byte, Self.origin]:
         return self._expect_structural_bytes[`[`, `]`]()
 
 
-fn minify(s: String, out out_str: String) raises:
+def minify(s: String, out out_str: String) raises:
     """Removes whitespace characters from JSON string.
 
     Returns:
@@ -1103,7 +1103,7 @@ fn minify(s: String, out out_str: String) raises:
 
     @always_inline
     @parameter
-    fn _load_chunk(
+    def _load_chunk(
         p: type_of(ptr), cond: Bool
     ) -> SIMD[DType.uint8, SIMD8_WIDTH]:
         if cond:

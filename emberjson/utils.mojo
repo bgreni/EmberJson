@@ -21,7 +21,7 @@ comptime BytePtr[origin: ImmutOrigin] = UnsafePointer[Byte, origin]
 
 
 @always_inline
-fn lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
+def lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
     return global_constant[A]().unsafe_get(i).copy()
 
 
@@ -32,57 +32,57 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
     var end: BytePtr[Self.origin]
 
     @always_inline("nodebug")
-    fn __add__(self, v: Int) -> Self:
+    def __add__(self, v: Int) -> Self:
         return {self.p + v, self.start, self.end}
 
     @always_inline("nodebug")
-    fn __iadd__(mut self, v: Int):
+    def __iadd__(mut self, v: Int):
         self.p += v
 
     @always_inline("nodebug")
-    fn __eq__(self, other: Self) -> Bool:
+    def __eq__(self, other: Self) -> Bool:
         return self.p == other.p
 
     @always_inline("nodebug")
-    fn __ne__(self, other: Self) -> Bool:
+    def __ne__(self, other: Self) -> Bool:
         return self.p != other.p
 
     @always_inline("nodebug")
-    fn __gt__(self, other: Self) -> Bool:
+    def __gt__(self, other: Self) -> Bool:
         return self.p > other.p
 
     @always_inline("nodebug")
-    fn __lt__(self, other: Self) -> Bool:
+    def __lt__(self, other: Self) -> Bool:
         return self.p < other.p
 
     @always_inline("nodebug")
-    fn __ge__(self, other: Self) -> Bool:
+    def __ge__(self, other: Self) -> Bool:
         return self.p >= other.p
 
     @always_inline("nodebug")
-    fn __le__(self, other: Self) -> Bool:
+    def __le__(self, other: Self) -> Bool:
         return self.p <= other.p
 
     @always_inline("nodebug")
-    fn __add__(self, v: SIMD) -> Self:
+    def __add__(self, v: SIMD) -> Self:
         comptime assert v.dtype.is_integral()
         return {self.p + v, self.start, self.end}
 
     @always_inline("nodebug")
-    fn __iadd__(mut self, v: SIMD):
+    def __iadd__(mut self, v: SIMD):
         comptime assert v.dtype.is_integral()
         self.p += v
 
     @always_inline("nodebug")
-    fn __sub__(self, i: Int) -> Self:
+    def __sub__(self, i: Int) -> Self:
         return {self.p - i, self.start, self.end}
 
     @always_inline("nodebug")
-    fn __isub__(mut self, i: Int):
+    def __isub__(mut self, i: Int):
         self.p -= i
 
     @always_inline("nodebug")
-    fn __getitem__(
+    def __getitem__(
         ref self,
     ) raises -> ref[Self.origin, self.p.address_space] Byte:
         if unlikely(self.dist() <= 0):
@@ -90,7 +90,7 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
         return self.p[]
 
     @always_inline("nodebug")
-    fn __getitem__(
+    def __getitem__(
         ref self, i: Int
     ) raises -> ref[Self.origin, self.p.address_space] Byte:
         if unlikely(self.dist() - i <= 0):
@@ -98,11 +98,11 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
         return self.p[i]
 
     @always_inline("nodebug")
-    fn dist(self) -> Int:
+    def dist(self) -> Int:
         return Int(self.end) - Int(self.p)
 
     @always_inline("nodebug")
-    fn load_chunk(self) -> SIMD8xT:
+    def load_chunk(self) -> SIMD8xT:
         if self.dist() < SIMD8_WIDTH:
             v = SIMD8xT(0)
             for i in range(self.dist()):
@@ -111,7 +111,7 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
         return self.p.load[width=SIMD8_WIDTH]()
 
     @always_inline("nodebug")
-    fn expect_remaining(self, i: Int):
+    def expect_remaining(self, i: Int):
         debug_assert(
             self.dist() + 1 >= i,
             "Expected at least: ",
@@ -131,11 +131,11 @@ comptime StackArray[
 
 
 @always_inline
-fn will_overflow(i: UInt64) -> Bool:
+def will_overflow(i: UInt64) -> Bool:
     return i > UInt64(Int64.MAX)
 
 
-fn write(out s: String, v: Some[JsonValue]):
+def write(out s: String, v: Some[JsonValue]):
     s = String()  # FIXME(modular/#4573): once it is optimized, return String(v)
     var writer = _WriteBufferStack(s)
     v.write_to(writer)
@@ -143,7 +143,7 @@ fn write(out s: String, v: Some[JsonValue]):
 
 
 @no_inline
-fn write_pretty(
+def write_pretty(
     value: Some[PrettyPrintable],
     indent: Variant[Int, String] = DefaultPrettyIndent,
     out s: String,
@@ -156,17 +156,17 @@ fn write_pretty(
 
 
 @always_inline
-fn is_space(char: Byte) -> Bool:
+def is_space(char: Byte) -> Bool:
     return char == ` ` or char == `\n` or char == `\t` or char == `\r`
 
 
 @always_inline
-fn to_string(b: ByteView[_]) -> StringSlice[b.origin]:
+def to_string(b: ByteView[_]) -> StringSlice[b.origin]:
     return StringSlice(unsafe_from_utf8=b)
 
 
 @always_inline
-fn to_string(v: ByteVec, out s: String):
+def to_string(v: ByteVec, out s: String):
     s = String(capacity=v.size)
 
     comptime for i in range(v.size):
@@ -174,19 +174,19 @@ fn to_string(v: ByteVec, out s: String):
 
 
 @always_inline
-fn to_string(b: Byte, out s: String):
+def to_string(b: Byte, out s: String):
     s = String(capacity=1)
     s.append(Codepoint(b))
     return s^
 
 
 @always_inline
-fn to_string(var i: UInt32) -> String:
+def to_string(var i: UInt32) -> String:
     # This is meant to be a sequence of 4 characters
     return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
 
 
-fn constrain_json_type[T: Movable & Copyable]():
+def constrain_json_type[T: Movable & Copyable]():
     comptime valid = _type_is_eq[T, Int64]() or _type_is_eq[
         T, UInt64
     ]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
@@ -201,7 +201,7 @@ fn constrain_json_type[T: Movable & Copyable]():
     comptime assert valid, "Invalid type for JSON"
 
 
-fn write_escaped_string(s: String, mut writer: Some[Writer]):
+def write_escaped_string(s: String, mut writer: Some[Writer]):
     writer.write('"')
     var start = 0
     var p = s.as_bytes()
@@ -242,14 +242,14 @@ fn write_escaped_string(s: String, mut writer: Some[Writer]):
 comptime hex_chars = "0123456789abcdef".as_bytes()
 
 
-fn get_hex_bytes(out s: StackArray[Byte, 16]):
+def get_hex_bytes(out s: StackArray[Byte, 16]):
     s = StackArray[Byte, 16](uninitialized=True)
     for i in range(16):
         s.unsafe_get(i) = hex_chars[i]
 
 
 @always_inline
-fn _write_hex_byte(b: Byte, mut writer: Some[Writer]):
+def _write_hex_byte(b: Byte, mut writer: Some[Writer]):
     var bytes = materialize[get_hex_bytes()]()
     var h1 = bytes.unsafe_get(Int(b >> 4))
     var h2 = bytes.unsafe_get(Int(b & 0xF))
@@ -257,7 +257,7 @@ fn _write_hex_byte(b: Byte, mut writer: Some[Writer]):
     writer.write(Codepoint(h2))
 
 
-fn _generate_digit_pairs(out s: StackArray[SIMD[DType.uint8, 2], 100]):
+def _generate_digit_pairs(out s: StackArray[SIMD[DType.uint8, 2], 100]):
     s = StackArray[SIMD[DType.uint8, 2], 100](uninitialized=True)
     for i in range(100):
         s.unsafe_get(i) = SIMD[DType.uint8, 2](

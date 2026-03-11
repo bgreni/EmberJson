@@ -13,22 +13,22 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
     var buf: InlineArray[Byte, Self.BUFFER_SIZE]
     var length: Int
 
-    fn __init__(out self):
+    def __init__(out self):
         self.buf = InlineArray[Byte, Self.BUFFER_SIZE](fill=0)
         self.length = 0
 
     @always_inline
-    fn ptr(ref self) -> UnsafePointer[Byte, origin=origin_of(self.buf)]:
+    def ptr(ref self) -> UnsafePointer[Byte, origin=origin_of(self.buf)]:
         return self.buf.unsafe_ptr()
 
-    fn index(self, b: Byte) -> Int:
+    def index(self, b: Byte) -> Int:
         for i in range(self.length):
             if self.buf[i] == b:
                 return i
 
         return -1
 
-    fn clear(mut self, n: Int):
+    def clear(mut self, n: Int):
         self.length -= n
 
         memcpy(
@@ -39,14 +39,14 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
 
         memset(self.ptr() + self.length, 0, Self.BUFFER_SIZE - self.length)
 
-    fn clear(mut self):
+    def clear(mut self):
         memset(self.ptr(), 0, Self.BUFFER_SIZE)
         self.length = 0
 
-    fn write_to(self, mut writer: Some[Writer]):
+    def write_to(self, mut writer: Some[Writer]):
         writer.write(StringSlice(ptr=self.ptr(), length=self.length))
 
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         return self.length
 
 
@@ -57,12 +57,12 @@ struct JSONLinesIter(Iterator):
     var next_object: JSON
     var read_buf: _ReadBuffer
 
-    fn __init__(out self, var file: FileHandle):
+    def __init__(out self, var file: FileHandle):
         self.f = file^
         self.next_object = JSON()
         self.read_buf = _ReadBuffer()
 
-    fn __next__(mut self, out j: JSON) raises StopIteration:
+    def __next__(mut self, out j: JSON) raises StopIteration:
         var line: List[Byte]
         try:
             line = self._read_until_newline()
@@ -74,10 +74,10 @@ struct JSONLinesIter(Iterator):
         except e:
             raise StopIteration()
 
-    fn __iter__(var self) -> Self:
+    def __iter__(var self) -> Self:
         return self^
 
-    fn collect(deinit self, out l: List[Value]) raises:
+    def collect(deinit self, out l: List[Value]) raises:
         l = List[Value]()
         while True:
             try:
@@ -85,7 +85,7 @@ struct JSONLinesIter(Iterator):
             except StopIteration:
                 break
 
-    fn _read_until_newline(mut self) raises -> List[Byte]:
+    def _read_until_newline(mut self) raises -> List[Byte]:
         ref file = self.f
 
         var line = List[Byte]()
@@ -137,11 +137,11 @@ struct JSONLinesIter(Iterator):
                 self.read_buf.clear()
 
 
-fn read_lines(p: Some[PathLike]) raises -> JSONLinesIter:
+def read_lines(p: Some[PathLike]) raises -> JSONLinesIter:
     return JSONLinesIter(open(p, "r"))
 
 
-fn write_lines(p: Path, lines: List[JSON]) raises:
+def write_lines(p: Path, lines: List[JSON]) raises:
     with open(p, "w") as f:
         for i in range(len(lines)):
             f.write(lines[i])

@@ -27,22 +27,22 @@ comptime _Base = ImplicitlyDestructible & Movable
 
 trait JsonDeserializable(_Base):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = _default_deserialize[Self, Self.deserialize_as_array()](p)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 @always_inline
-fn try_deserialize[T: _Base](s: String) -> Optional[T]:
+def try_deserialize[T: _Base](s: String) -> Optional[T]:
     return try_deserialize[T](Parser(s))
 
 
-fn try_deserialize[
+def try_deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](var p: Parser[origin, options]) -> Optional[T]:
     try:
@@ -52,35 +52,35 @@ fn try_deserialize[
 
 
 @always_inline
-fn deserialize[T: _Base](s: String, out res: T) raises:
+def deserialize[T: _Base](s: String, out res: T) raises:
     res = deserialize[T](Parser(s))
 
 
 @always_inline
-fn deserialize[
+def deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
 @always_inline
-fn deserialize[
+def deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](var p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
 @always_inline
-fn __is_optional[T: AnyType]() -> Bool:
+def __is_optional[T: AnyType]() -> Bool:
     return get_base_type_name[T]() == "Optional"
 
 
 @always_inline
-fn __is_default[T: AnyType]() -> Bool:
+def __is_default[T: AnyType]() -> Bool:
     return get_base_type_name[T]() == "Default"
 
 
-fn __all_dtors_are_trivial[T: AnyType]() -> Bool:
+def __all_dtors_are_trivial[T: AnyType]() -> Bool:
     comptime field_types = struct_field_types[T]()
     comptime for i in range(struct_field_count[T]()):
         comptime type = field_types[i]
@@ -90,7 +90,7 @@ fn __all_dtors_are_trivial[T: AnyType]() -> Bool:
 
 
 @always_inline
-fn _default_deserialize[
+def _default_deserialize[
     origin: ImmutOrigin,
     options: ParseOptions,
     //,
@@ -169,7 +169,7 @@ fn _default_deserialize[
         p.expect(`}`)
 
 
-fn _deserialize_impl[
+def _deserialize_impl[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out s: T) raises:
     comptime assert is_struct_type[T](), non_struct_error
@@ -187,50 +187,50 @@ fn _deserialize_impl[
 
 __extension String(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.read_string()
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension Int(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Int(p.expect_integer())
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension Bool(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.expect_bool()
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension SIMD(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
 
         @parameter
         @always_inline
-        fn parse_simd_element(
+        def parse_simd_element(
             mut p: Parser[origin, options],
         ) raises -> Scalar[Self.dtype]:
             comptime if Self.dtype.is_numeric():
@@ -257,13 +257,13 @@ __extension SIMD(JsonDeserializable):
             p.expect(`]`)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension IntLiteral(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
@@ -272,13 +272,13 @@ __extension IntLiteral(JsonDeserializable):
             raise Error("Expected: ", s, ", Received: ", i)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension FloatLiteral(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
@@ -287,7 +287,7 @@ __extension FloatLiteral(JsonDeserializable):
             raise Error("Expected: ", s, ", Received: ", f)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
@@ -298,19 +298,19 @@ __extension FloatLiteral(JsonDeserializable):
 
 __extension ArcPointer(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension OwnedPointer(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = rebind_var[Self](
@@ -318,7 +318,7 @@ __extension OwnedPointer(JsonDeserializable):
         )
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
@@ -329,7 +329,7 @@ __extension OwnedPointer(JsonDeserializable):
 
 __extension Optional(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         if p.peek() == `n`:
@@ -339,13 +339,13 @@ __extension Optional(JsonDeserializable):
             s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension List(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         p.expect(`[`)
@@ -359,13 +359,13 @@ __extension List(JsonDeserializable):
         p.expect(`]`)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension Dict(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         comptime assert (
@@ -387,13 +387,13 @@ __extension Dict(JsonDeserializable):
         p.expect(`}`)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension Tuple(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
@@ -410,13 +410,13 @@ __extension Tuple(JsonDeserializable):
         p.expect(`]`)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension InlineArray(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut j: Parser[origin, options], out s: Self) raises:
         j.expect(`[`)
@@ -433,13 +433,13 @@ __extension InlineArray(JsonDeserializable):
         j.expect(`]`)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False
 
 
 __extension Set(JsonDeserializable):
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut j: Parser[origin, options], out s: Self) raises:
         j.expect(`[`)
@@ -453,5 +453,5 @@ __extension Set(JsonDeserializable):
         j.expect(`]`)
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return False

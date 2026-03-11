@@ -15,10 +15,10 @@ comptime BenchResults = Dict[String, Float64]
 
 
 @parameter
-fn bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
+def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
-    fn do():
+    def do():
         for _ in range(1000):
             var writer = String()
             write_float[dtype](val, writer)
@@ -27,10 +27,10 @@ fn bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
 
 
 @parameter
-fn bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
+def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
-    fn do():
+    def do():
         var casted = val.cast[
             DType.float64 if dtype == DType.float64 else DType.float32
         ]()
@@ -41,7 +41,7 @@ fn bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     b.iter[do]()
 
 
-fn run_group[
+def run_group[
     dtype: DType
 ](mut m: Bench, name: String, val: Scalar[dtype]) raises:
     m.bench_with_input[Scalar[dtype], bench_teju[dtype]](
@@ -52,7 +52,7 @@ fn run_group[
     )
 
 
-fn capture_report(mut m: Bench) raises -> String:
+def capture_report(mut m: Bench) raises -> String:
     var os = Python.import_module("os")
     var sys_py = Python.import_module("sys")
 
@@ -81,7 +81,7 @@ fn capture_report(mut m: Bench) raises -> String:
     return String(content)
 
 
-fn parse_report(report: String) raises -> BenchResults:
+def parse_report(report: String) raises -> BenchResults:
     var lines = report.split("\n")
     var results = BenchResults()
 
@@ -114,7 +114,7 @@ fn parse_report(report: String) raises -> BenchResults:
     return results^
 
 
-fn format_float(val: Float64) -> String:
+def format_float(val: Float64) -> String:
     var s = String(val)
     if "e" in s:
         # Keep scientific notation but limit decimal places before 'e'
@@ -129,7 +129,7 @@ fn format_float(val: Float64) -> String:
     return s
 
 
-fn print_comparison(var results: BenchResults, names: List[String]) raises:
+def print_comparison(var results: BenchResults, names: List[String]) raises:
     print("")
     print("Relative Performance (Teju vs Stdlib - 1k iterations)")
     print("-" * 105)
@@ -179,14 +179,14 @@ fn print_comparison(var results: BenchResults, names: List[String]) raises:
     print("")
 
 
-fn pad_right(s: String, width: Int) -> String:
+def pad_right(s: String, width: Int) -> String:
     var res = s
     while len(res) < width:
         res = res + " "
     return res
 
 
-fn main() raises:
+def main() raises:
     print("Starting Float Formatting Benchmarks...")
     var config = BenchConfig()
     var m = Bench(config^)

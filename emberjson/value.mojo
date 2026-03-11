@@ -26,36 +26,36 @@ struct Null(JsonValue, TrivialRegisterPassable):
     """
 
     @always_inline
-    fn __eq__(self, n: Null) -> Bool:
+    def __eq__(self, n: Null) -> Bool:
         return True
 
     @always_inline
-    fn __ne__(self, n: Null) -> Bool:
+    def __ne__(self, n: Null) -> Bool:
         return False
 
     @always_inline
-    fn __bool__(self) -> Bool:
+    def __bool__(self) -> Bool:
         return False
 
     @always_inline
-    fn write_to(self, mut writer: Some[Writer]):
+    def write_to(self, mut writer: Some[Writer]):
         writer.write("null")
 
     @always_inline
-    fn pretty_to(
+    def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
         writer.write(self)
 
-    fn to_python_object(self) raises -> PythonObject:
+    def to_python_object(self) raises -> PythonObject:
         return {}
 
     @always_inline
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
     @staticmethod
-    fn from_json(mut json: Parser, out s: Self) raises:
+    def from_json(mut json: Parser, out s: Self) raises:
         s = json.parse_null()
 
 
@@ -68,32 +68,32 @@ struct Value(JsonValue, Sized):
     var _data: Self.Type
 
     @always_inline
-    fn __init__(out self):
+    def __init__(out self):
         self._data = Null()
 
     @implicit
     @always_inline
-    fn __init__(out self, n: NoneType._mlir_type):
+    def __init__(out self, n: NoneType._mlir_type):
         self._data = Null()
 
     @implicit
     @always_inline
-    fn __init__(out self, var v: Self.Type):
+    def __init__(out self, var v: Self.Type):
         self._data = v^
 
     @implicit
     @always_inline
-    fn __init__(out self, v: Int64):
+    def __init__(out self, v: Int64):
         self._data = v
 
     @implicit
     @always_inline
-    fn __init__(out self, v: UInt64):
+    def __init__(out self, v: UInt64):
         self._data = v
 
     @implicit
     @always_inline
-    fn __init__(out self, v: IntLiteral):
+    def __init__(out self, v: IntLiteral):
         if UInt64(v) > Int64.MAX.cast[DType.uint64]():
             self._data = UInt64(v)
         else:
@@ -101,7 +101,7 @@ struct Value(JsonValue, Sized):
 
     @implicit
     @always_inline
-    fn __init__(out self, v: Int):
+    def __init__(out self, v: Int):
         comptime assert (
             bit_width_of[DType.int]() <= bit_width_of[DType.int64]()
         ), "Cannot fit index width into 64 bits for signed integer"
@@ -109,7 +109,7 @@ struct Value(JsonValue, Sized):
 
     @implicit
     @always_inline
-    fn __init__(out self, v: UInt):
+    def __init__(out self, v: UInt):
         comptime assert (
             bit_width_of[DType.int]() <= bit_width_of[DType.uint64]()
         ), "Cannot fit index width into 64 bits for unsigned integer"
@@ -117,26 +117,26 @@ struct Value(JsonValue, Sized):
 
     @implicit
     @always_inline
-    fn __init__(out self, v: Float64):
+    def __init__(out self, v: Float64):
         self._data = v
 
     @implicit
     @always_inline
-    fn __init__(out self, var v: Object):
+    def __init__(out self, var v: Object):
         self._data = v^
 
     @implicit
     @always_inline
-    fn __init__(out self, var v: Array):
+    def __init__(out self, var v: Array):
         self._data = v^
 
     @implicit
     @always_inline
-    fn __init__(out self, var v: String):
+    def __init__(out self, var v: String):
         self._data = v^
 
     @always_inline
-    fn __init__(out self, *, parse_string: String) raises:
+    def __init__(out self, *, parse_string: String) raises:
         """Parse JSON document from a string.
 
         Args:
@@ -149,7 +149,7 @@ struct Value(JsonValue, Sized):
         self = p.parse()
 
     @always_inline
-    fn __init__(out self, *, parse_bytes: ByteView[mut=False, ...]) raises:
+    def __init__(out self, *, parse_bytes: ByteView[mut=False, ...]) raises:
         """Parse JSON document from bytes.
 
         Args:
@@ -162,27 +162,27 @@ struct Value(JsonValue, Sized):
         self = parser.parse()
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.parse()
 
     @implicit
     @always_inline
-    fn __init__(out self, var v: StringLiteral):
+    def __init__(out self, var v: StringLiteral):
         self._data = String(v)
 
     @implicit
     @always_inline
-    fn __init__(out self, v: Null):
+    def __init__(out self, v: Null):
         self._data = v
 
     @implicit
     @always_inline
-    fn __init__(out self, v: Bool):
+    def __init__(out self, v: Bool):
         self._data = v
 
-    fn __init__(
+    def __init__(
         out self,
         var keys: List[String],
         var values: List[Value],
@@ -193,12 +193,12 @@ struct Value(JsonValue, Sized):
         for i in range(len(keys)):
             self.object()[keys[i]] = values[i].copy()
 
-    fn __init__(out self, var *values: Value, __list_literal__: ()):
+    def __init__(out self, var *values: Value, __list_literal__: ()):
         self = Array()
         for val in values:
             self.array().append(val.copy())
 
-    fn __eq__(self, other: Self) -> Bool:
+    def __eq__(self, other: Self) -> Bool:
         if (self.is_int() or self.is_uint()) and (
             other.is_int() or other.is_uint()
         ):
@@ -230,7 +230,7 @@ struct Value(JsonValue, Sized):
             return True
         abort("unreachable: Value.__eq__")
 
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         if self.is_array():
             return len(self.array())
         if self.is_object():
@@ -239,21 +239,21 @@ struct Value(JsonValue, Sized):
             return len(self.string())
         return -1
 
-    fn __contains__(self, v: Value) raises -> Bool:
+    def __contains__(self, v: Value) raises -> Bool:
         if self.is_array():
             return v in self.array().copy()
         if not v.isa[String]():
             raise Error("expected string key")
         return v.string() in self.object().copy()
 
-    fn __getitem__(ref self, ind: Some[Indexer]) raises -> ref[self] Value:
+    def __getitem__(ref self, ind: Some[Indexer]) raises -> ref[self] Value:
         if not self.is_array():
             raise Error("Expected numerical index for array")
         return UnsafePointer(to=self.array()[ind]).unsafe_origin_cast[
             origin_of(self)
         ]()[]
 
-    fn __getitem__(ref self, key: String) raises -> ref[self] Value:
+    def __getitem__(ref self, key: String) raises -> ref[self] Value:
         if not self.is_object():
             raise Error("Expected string key for object")
         return UnsafePointer(to=self.object()[key]).unsafe_origin_cast[
@@ -261,10 +261,10 @@ struct Value(JsonValue, Sized):
         ]()[]
 
     @always_inline
-    fn __ne__(self, other: Self) -> Bool:
+    def __ne__(self, other: Self) -> Bool:
         return not self == other
 
-    fn __bool__(self) -> Bool:
+    def __bool__(self) -> Bool:
         if self.isa[Int64]():
             return Bool(self.int())
         elif self.isa[UInt64]():
@@ -284,86 +284,86 @@ struct Value(JsonValue, Sized):
         abort("Unreachable: __bool__")
 
     @always_inline
-    fn isa[T: Movable & Copyable](self) -> Bool:
+    def isa[T: Movable & Copyable](self) -> Bool:
         constrain_json_type[T]()
         return self._data.isa[T]()
 
     @always_inline
-    fn is_int(self) -> Bool:
+    def is_int(self) -> Bool:
         return self.isa[Int64]()
 
     @always_inline
-    fn is_uint(self) -> Bool:
+    def is_uint(self) -> Bool:
         return self.isa[UInt64]()
 
     @always_inline
-    fn is_string(self) -> Bool:
+    def is_string(self) -> Bool:
         return self.isa[String]()
 
     @always_inline
-    fn is_bool(self) -> Bool:
+    def is_bool(self) -> Bool:
         return self.isa[Bool]()
 
     @always_inline
-    fn is_float(self) -> Bool:
+    def is_float(self) -> Bool:
         return self.isa[Float64]()
 
     @always_inline
-    fn is_object(self) -> Bool:
+    def is_object(self) -> Bool:
         return self.isa[Object]()
 
     @always_inline
-    fn is_array(self) -> Bool:
+    def is_array(self) -> Bool:
         return self.isa[Array]()
 
     @always_inline
-    fn is_null(self) -> Bool:
+    def is_null(self) -> Bool:
         return self.isa[Null]()
 
     @always_inline
-    fn get[T: Movable & Copyable](ref self) -> ref[self._data] T:
+    def get[T: Movable & Copyable](ref self) -> ref[self._data] T:
         constrain_json_type[T]()
         return self._data.unsafe_get[T]()
 
     @always_inline
-    fn int(self) -> Int64:
+    def int(self) -> Int64:
         if self.is_int():
             return self.get[Int64]()
         else:
             return Int64(self.get[UInt64]())
 
     @always_inline
-    fn uint(self) -> UInt64:
+    def uint(self) -> UInt64:
         if self.is_uint():
             return self.get[UInt64]()
         else:
             return UInt64(self.get[Int64]())
 
     @always_inline
-    fn null(self) -> Null:
+    def null(self) -> Null:
         return Null()
 
     @always_inline
-    fn string(ref self) -> ref[self._data] String:
+    def string(ref self) -> ref[self._data] String:
         return self.get[String]()
 
     @always_inline
-    fn float(self) -> Float64:
+    def float(self) -> Float64:
         return self.get[Float64]()
 
     @always_inline
-    fn bool(self) -> Bool:
+    def bool(self) -> Bool:
         return self.get[Bool]()
 
     @always_inline
-    fn object(ref self) -> ref[self._data] Object:
+    def object(ref self) -> ref[self._data] Object:
         return self.get[Object]()
 
     @always_inline
-    fn array(ref self) -> ref[self._data] Array:
+    def array(ref self) -> ref[self._data] Array:
         return self.get[Array]()
 
-    fn write_to(self, mut writer: Some[Writer]):
+    def write_to(self, mut writer: Some[Writer]):
         if self.is_int():
             writer.write(self.int())
         elif self.is_uint():
@@ -383,7 +383,7 @@ struct Value(JsonValue, Sized):
         else:
             abort("Unreachable: write_to")
 
-    fn _pretty_to_as_element(
+    def _pretty_to_as_element(
         self, mut writer: Some[Writer], indent: String, curr_depth: UInt
     ):
         if self.is_object():
@@ -401,7 +401,7 @@ struct Value(JsonValue, Sized):
         else:
             self.write_to(writer)
 
-    fn pretty_to(
+    def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
         if self.is_object():
@@ -412,10 +412,10 @@ struct Value(JsonValue, Sized):
             self.write_to(writer)
 
     @always_inline
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
-    fn to_python_object(self) raises -> PythonObject:
+    def to_python_object(self) raises -> PythonObject:
         if self.is_int():
             return PythonObject(self.int())
         elif self.is_uint():
@@ -435,10 +435,10 @@ struct Value(JsonValue, Sized):
         else:
             abort("Unreachable: to_python_object")
 
-    fn get(ref self, path: PointerIndex) raises -> ref[self] Value:
+    def get(ref self, path: PointerIndex) raises -> ref[self] Value:
         return resolve_pointer(self, path)
 
-    fn __getattr__(ref self, nameLit: StringLiteral) raises -> ref[self] Value:
+    def __getattr__(ref self, nameLit: StringLiteral) raises -> ref[self] Value:
         comptime name = type_of(nameLit)()
         comptime if name.startswith("/"):
             comptime index = PointerIndex.try_from_string(name)
@@ -452,7 +452,7 @@ struct Value(JsonValue, Sized):
             else:
                 raise Error("Cannot use getattr on JSON Array")
 
-    fn __setattr__(
+    def __setattr__(
         mut self, var nameLit: StringLiteral, var value: Value
     ) raises:
         comptime name = type_of(nameLit)()
@@ -467,14 +467,14 @@ struct Value(JsonValue, Sized):
                 raise Error("Cannot use setattr on JSON Array")
 
     @always_inline
-    fn __setitem__(mut self, var key: String, var value: Value) raises:
+    def __setitem__(mut self, var key: String, var value: Value) raises:
         if self.is_object():
             self.object()[key] = value^
         else:
             raise Error("Value is not an object")
 
     @always_inline
-    fn __setitem__(mut self, idx: Int, var value: Value) raises:
+    def __setitem__(mut self, idx: Int, var value: Value) raises:
         if self.is_array():
             self.array()[idx] = value^
         else:

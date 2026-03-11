@@ -144,7 +144,7 @@ def test_clamp() raises:
     assert_equal(c3[], 10)
 
 
-fn coerce_int(v: Value) raises -> Int:
+def coerce_int(v: Value) raises -> Int:
     if v.is_int():
         return Int(v.int())
     elif v.is_string():
@@ -248,7 +248,7 @@ def test_default() raises:
     assert_equal(d3.b[], 42)
 
 
-fn date_to_int(s: String) -> Int:
+def date_to_int(s: String) -> Int:
     if s == "2024-01-01":
         return 1
     return 0

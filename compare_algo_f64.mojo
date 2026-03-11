@@ -16,12 +16,12 @@ comptime BenchResults = Dict[String, Float64]
 
 
 @parameter
-fn bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
+def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     var bin = fp_to_binary(val)
 
     @always_inline
     @parameter
-    fn do():
+    def do():
         for _ in range(1_000_000):
             var dec = teju[dtype](bin)
             keep(dec)
@@ -30,14 +30,14 @@ fn bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
 
 
 @parameter
-fn bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
+def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     var casted = val.cast[
         DType.float64 if dtype == DType.float64 else DType.float32
     ]()
 
     @always_inline
     @parameter
-    fn do():
+    def do():
         for _ in range(1_000_000):
             var sig = FPUtils.get_mantissa_uint(casted)
             var exp = FPUtils.get_exponent_biased(casted)
@@ -48,7 +48,7 @@ fn bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     b.iter[do]()
 
 
-fn run_group[
+def run_group[
     dtype: DType
 ](mut m: Bench, name: String, val: Scalar[dtype]) raises:
     m.bench_with_input[Scalar[dtype], bench_teju[dtype]](
@@ -59,7 +59,7 @@ fn run_group[
     )
 
 
-fn capture_report(mut m: Bench) raises -> String:
+def capture_report(mut m: Bench) raises -> String:
     var os = Python.import_module("os")
     var sys_py = Python.import_module("sys")
 
@@ -88,7 +88,7 @@ fn capture_report(mut m: Bench) raises -> String:
     return String(content)
 
 
-fn parse_report(report: String) raises -> BenchResults:
+def parse_report(report: String) raises -> BenchResults:
     var lines = report.split("\n")
     var results = BenchResults()
 
@@ -123,7 +123,7 @@ fn parse_report(report: String) raises -> BenchResults:
     return results^
 
 
-fn compare_implementations() raises:
+def compare_implementations() raises:
     print("Starting Float64 Algorithmic Benchmarks...")
     var config = BenchConfig()
     var m = Bench(config^)
@@ -190,7 +190,7 @@ fn compare_implementations() raises:
     print("-" * 105)
 
 
-fn format_float(val: Float64) -> String:
+def format_float(val: Float64) -> String:
     var s = String(val)
     if "e" in s:
         var parts = s.split("e")
@@ -204,14 +204,14 @@ fn format_float(val: Float64) -> String:
     return s
 
 
-fn pad_right(s: String, width: Int) -> String:
+def pad_right(s: String, width: Int) -> String:
     var res = s
     while len(res) < width:
         res = res + " "
     return res
 
 
-fn main():
+def main():
     try:
         compare_implementations()
     except:

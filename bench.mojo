@@ -29,7 +29,7 @@ from std.pathlib import Path
 comptime BenchResults = Dict[String, Float64]
 
 
-fn main() raises:
+def main() raises:
     var config = BenchConfig()
     config.verbose_timing = True
     config.flush_denormals = True
@@ -38,7 +38,7 @@ fn main() raises:
     run_benchchecks(m)
 
 
-fn run_benchmarks(mut m: Bench) raises:
+def run_benchmarks(mut m: Bench) raises:
     var args = argv()
     var print_relative = False
     var overwrite = False
@@ -73,7 +73,7 @@ fn run_benchmarks(mut m: Bench) raises:
         write_report(report_str)
 
 
-fn capture_report(mut m: Bench) raises -> String:
+def capture_report(mut m: Bench) raises -> String:
     var os = Python.import_module("os")
     var sys_py = Python.import_module("sys")
     var io = Python.import_module("io")
@@ -103,7 +103,7 @@ fn capture_report(mut m: Bench) raises -> String:
     return String(content)
 
 
-fn parse_report(report: String) raises -> BenchResults:
+def parse_report(report: String) raises -> BenchResults:
     var lines = report.split("\n")
     var results = BenchResults()
 
@@ -140,7 +140,7 @@ fn parse_report(report: String) raises -> BenchResults:
     return results^
 
 
-fn print_relative_performance(
+def print_relative_performance(
     var old_results: BenchResults,
     var new_results: BenchResults,
 ) raises:
@@ -215,7 +215,7 @@ fn print_relative_performance(
     print("")
 
 
-fn write_report(report: String) raises:
+def write_report(report: String) raises:
     var header = String("Run on unknown system")
     try:
         var platform = Python.import_module("platform")
@@ -282,7 +282,7 @@ fn write_report(report: String) raises:
     print("Updated bench_result.txt")
 
 
-fn get_data(file: String) -> String:
+def get_data(file: String) -> String:
     try:
         with open("./bench_data/data/" + file, "r") as f:
             return f.read()
@@ -292,25 +292,25 @@ fn get_data(file: String) -> String:
     return "READ FAILED"
 
 
-fn get_gbs_measure(input: String) raises -> ThroughputMeasure:
+def get_gbs_measure(input: String) raises -> ThroughputMeasure:
     return ThroughputMeasure(BenchMetric.bytes, input.byte_length())
 
 
-fn run[
-    func: fn(mut Bencher, String) raises capturing, name: String
+def run[
+    func: def(mut Bencher, String) raises capturing, name: String
 ](mut m: Bench, data: String) raises:
     m.bench_with_input[String, func](
         BenchId(name), data, [get_gbs_measure(data)]
     )
 
 
-fn run[
-    func: fn[strict: Bool = True](mut Bencher, String) raises capturing,
+def run[
+    func: def[strict: Bool = True](mut Bencher, String) raises capturing,
     name: String,
 ](mut m: Bench, data: String) raises:
     @parameter
     @always_inline
-    fn wrapper(mut b: Bencher, s: String) raises:
+    def wrapper(mut b: Bencher, s: String) raises:
         func(b, s)
 
     m.bench_with_input[String, wrapper](
@@ -318,18 +318,18 @@ fn run[
     )
 
 
-fn run[
-    func: fn(mut Bencher, Value) raises capturing, name: String
+def run[
+    func: def(mut Bencher, Value) raises capturing, name: String
 ](mut m: Bench, data: Value) raises:
     m.bench_with_input[Value, func](
         BenchId(name), data, [get_gbs_measure(String(data))]
     )
 
 
-fn run[
+def run[
     T: Movable,
     //,
-    func: fn[_T: Movable](mut Bencher, _T) raises capturing,
+    func: def[_T: Movable](mut Bencher, _T) raises capturing,
     name: String,
 ](mut m: Bench, data: T) raises:
     m.bench_with_input[T, func[T]](
@@ -341,8 +341,8 @@ fn run[
     )
 
 
-fn run[
-    func: fn(mut Bencher, Path) raises capturing, name: String
+def run[
+    func: def(mut Bencher, Path) raises capturing, name: String
 ](mut m: Bench, path: Path) raises:
     var size: Int
     with open(path, "r") as f:
@@ -356,7 +356,7 @@ fn run[
     )
 
 
-fn run_benchchecks(mut m: Bench) raises:
+def run_benchchecks(mut m: Bench) raises:
     var canada = get_data("canada.json")
     var catalog = get_data("citm_catalog.json")
     var twitter = get_data("twitter.json")
@@ -446,10 +446,10 @@ fn run_benchchecks(mut m: Bench) raises:
 
 
 @parameter
-fn benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
+def benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
     @always_inline
     @parameter
-    fn do() raises:
+    def do() raises:
         var lines = read_lines(p).collect()
         keep(lines)
 
@@ -457,10 +457,10 @@ fn benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
 
 
 @parameter
-fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
+def benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
-    fn do() raises:
+    def do() raises:
         var p = Parser[options=ParseOptions(ignore_unicode=True)](s)
         var v = p.parse()
         keep(v)
@@ -469,10 +469,10 @@ fn benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
 
 
 @parameter
-fn benchmark_minify(mut b: Bencher, s: String) raises:
+def benchmark_minify(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
-    fn do() raises:
+    def do() raises:
         var v = minify(s)
         keep(v)
 
@@ -480,12 +480,12 @@ fn benchmark_minify(mut b: Bencher, s: String) raises:
 
 
 @parameter
-fn benchmark_reflection_serialize[
+def benchmark_reflection_serialize[
     T: Movable, //
 ](mut b: Bencher, data: T) raises:
     @always_inline
     @parameter
-    fn do():
+    def do():
         var a = serialize(data)
         keep(a)
 
@@ -493,10 +493,10 @@ fn benchmark_reflection_serialize[
 
 
 @parameter
-fn benchmark_pretty_print(mut b: Bencher, s: Value) raises:
+def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     @always_inline
     @parameter
-    fn do():
+    def do():
         var a = write_pretty(s)
         keep(a)
 
@@ -504,10 +504,10 @@ fn benchmark_pretty_print(mut b: Bencher, s: Value) raises:
 
 
 @parameter
-fn benchmark_value_parse(mut b: Bencher, s: String) raises:
+def benchmark_value_parse(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
-    fn do() raises:
+    def do() raises:
         var a = Value(parse_string=s)
         keep(a)
 
@@ -515,10 +515,10 @@ fn benchmark_value_parse(mut b: Bencher, s: String) raises:
 
 
 @parameter
-fn benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
+def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
-    fn do() raises:
+    def do() raises:
         var a = parse[
             ParseOptions(
                 strict_mode=StrictOptions.STRICT if strict else StrictOptions.LENIENT
@@ -530,10 +530,10 @@ fn benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
 
 
 @parameter
-fn benchmark_value_stringify(mut b: Bencher, v: Value) raises:
+def benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
     @parameter
-    fn do():
+    def do():
         var a = to_string(v)
         keep(a)
 
@@ -556,7 +556,7 @@ struct CatalogData(Defaultable, Movable):
     var topicSubTopics: Dict[String, List[Int]]
     var venueNames: Dict[String, String]
 
-    fn __init__(out self):
+    def __init__(out self):
         self.areaNames = Dict[String, String]()
         self.audienceSubCategoryNames = Dict[String, String]()
         self.blockNames = Dict[String, String]()
@@ -580,7 +580,7 @@ struct Event(Copyable, Defaultable):
     var subtitle: Optional[String]
     var topicIds: List[Int]
 
-    fn __init__(out self):
+    def __init__(out self):
         self.description = None
         self.id = 0
         self.logo = None
@@ -602,7 +602,7 @@ struct Performance(Copyable, Defaultable):
     var start: Int
     var venueCode: String
 
-    fn __init__(out self):
+    def __init__(out self):
         self.eventId = 0
         self.id = 0
         self.logo = None
@@ -618,7 +618,7 @@ struct SeatCategory(Copyable, Defaultable):
     var areas: List[Area]
     var seatCategoryId: Int
 
-    fn __init__(out self):
+    def __init__(out self):
         self.areas = List[Area]()
         self.seatCategoryId = 0
 
@@ -627,7 +627,7 @@ struct Area(Copyable, Defaultable):
     var areaId: Int
     var blockIds: List[Int]
 
-    fn __init__(out self):
+    def __init__(out self):
         self.areaId = 0
         self.blockIds = List[Int]()
 
@@ -637,7 +637,7 @@ struct Price(Copyable, Defaultable):
     var audienceSubCategoryId: Int
     var seatCategoryId: Int
 
-    fn __init__(out self):
+    def __init__(out self):
         self.amount = 0
         self.audienceSubCategoryId = 0
         self.seatCategoryId = 0
@@ -647,7 +647,7 @@ struct Canada(Defaultable, Movable):
     var type: String
     var features: List[Feature]
 
-    fn __init__(out self):
+    def __init__(out self):
         self.type = ""
         self.features = List[Feature]()
 
@@ -657,7 +657,7 @@ struct Feature(Copyable, Defaultable):
     var properties: Properties
     var geometry: Geometry
 
-    fn __init__(out self):
+    def __init__(out self):
         self.type = ""
         self.properties = Properties()
         self.geometry = Geometry()
@@ -667,7 +667,7 @@ struct Geometry(Copyable, Defaultable):
     var type: String
     var coordinates: List[List[Tuple[Float64, Float64]]]
 
-    fn __init__(out self):
+    def __init__(out self):
         self.type = ""
         self.coordinates = List[List[Tuple[Float64, Float64]]]()
 
@@ -675,17 +675,17 @@ struct Geometry(Copyable, Defaultable):
 struct Properties(Copyable, Defaultable):
     var name: String
 
-    fn __init__(out self):
+    def __init__(out self):
         self.name = ""
 
 
 @parameter
-fn benchmark_deserialize_with_reflection[
+def benchmark_deserialize_with_reflection[
     T: Movable & ImplicitlyDestructible
 ](mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
-    fn do() raises:
+    def do() raises:
         var parser = Parser(s)
         var a = deserialize[T](parser^)
         keep(a)

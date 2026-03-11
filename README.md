@@ -45,7 +45,7 @@ The JSON struct also conforms to the `Writable` trait.
 ```mojo
 from emberjson import parse, to_string
 
-fn main() raises:
+def main() raises:
     var json = parse('{"key": 123}')
     
     print(to_string(json)) # prints {"key":123}
@@ -118,7 +118,7 @@ struct User(Movable):
     var is_active: Bool
     var scores: List[Float64]
 
-fn main() raises:
+def main() raises:
     var json_str = '{"id": 1, "name": "Mojo", "is_active": true, "scores": [9.9, 8.5]}'
 
     var user_opt = try_deserialize[User](json_str)
@@ -145,7 +145,7 @@ struct Coordinate(JsonSerializable):
     var lng: Float64
 
     @staticmethod
-    fn serialize_as_array() -> Bool:
+    def serialize_as_array() -> Bool:
         return True
 
 
@@ -153,11 +153,11 @@ struct Coordinate(JsonSerializable):
 struct MyInt(JsonSerializable):
     var value: Int
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write(self.value)
 
 
-fn main():
+def main():
     print(serialize(Point(1, 2)))  # prints {"x":1,"y":2}
     print(serialize(Coordinate(1.0, 2.0)))  # prints [1.0,2.0]
     print(serialize(MyInt(1)))  # prints 1

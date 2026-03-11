@@ -15,7 +15,7 @@ from std.testing import assert_equal
 struct JsonStringStrategy(Movable, Strategy):
     comptime Value = String
 
-    fn value(self, mut rng: Rng) raises -> Self.Value:
+    def value(self, mut rng: Rng) raises -> Self.Value:
         var j: JSON
 
         if coin_flip(rng):
@@ -25,7 +25,7 @@ struct JsonStringStrategy(Movable, Strategy):
 
         return String(j)
 
-    fn gen_value(self, mut rng: Rng, depth: Int) raises -> Value:
+    def gen_value(self, mut rng: Rng, depth: Int) raises -> Value:
         var max_choice = 7  # 0-7
         if depth > 5:
             max_choice = 5  # 0-5 (Scalars: Null, Int, UInt, Str, Bool, Float)
@@ -51,12 +51,12 @@ struct JsonStringStrategy(Movable, Strategy):
         else:
             raise Error("Invalid choice")
 
-    fn gen_string(self, mut rng: Rng) raises -> String:
+    def gen_string(self, mut rng: Rng) raises -> String:
         # TODO: Fix string strategy
         var strat = String.strategy(unicode=False, only_printable=True)
         return strat.value(rng)
 
-    fn gen_array(self, mut rng: Rng, depth: Int) raises -> Array:
+    def gen_array(self, mut rng: Rng, depth: Int) raises -> Array:
         var arr = Array()
         var l = rng.rand_int(min=0, max=20 // max(depth, 1))
         arr.reserve(l)
@@ -64,7 +64,7 @@ struct JsonStringStrategy(Movable, Strategy):
             arr.append(self.gen_value(rng, depth))
         return arr^
 
-    fn gen_object(self, mut rng: Rng, depth: Int) raises -> Object:
+    def gen_object(self, mut rng: Rng, depth: Int) raises -> Object:
         var ob = Object()
         var l = rng.rand_int(min=0, max=20 // max(depth, 1))
         for _ in range(l):
@@ -72,11 +72,11 @@ struct JsonStringStrategy(Movable, Strategy):
         return ob^
 
 
-fn coin_flip(mut rng: Rng) raises -> Bool:
+def coin_flip(mut rng: Rng) raises -> Bool:
     return rng.rand_bool()
 
 
-fn main() raises:
+def main() raises:
     comptime if is_defined["GEN_JSONL"]():
         var rng = Rng(seed=Int(perf_counter_ns()))
         var strat = JsonStringStrategy()
@@ -90,7 +90,7 @@ fn main() raises:
         var iters = 100
 
         @parameter
-        fn test_parse(s: String) raises:
+        def test_parse(s: String) raises:
             var rng = Rng(seed=Int(perf_counter_ns()))
             var j: JSON = {}
             if iters % 4 == 0:

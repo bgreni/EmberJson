@@ -33,7 +33,7 @@ struct ValidatorSet[T: _Base, *validators: Validator](
     var value: Self.T
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
@@ -41,16 +41,16 @@ struct ValidatorSet[T: _Base, *validators: Validator](
         s.validate(s.value)
 
     @staticmethod
-    fn validate(value: Self.Type) raises:
+    def validate(value: Self.Type) raises:
         comptime for i in range(Variadic.size(Self.validators)):
             comptime VType = Self.validators[i]
             comptime assert _type_is_eq[VType.Type, Self.T]()
             VType.validate(rebind[VType.Type](value))
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.T:
+    def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
@@ -58,14 +58,14 @@ trait Validator:
     comptime Type: _Base
 
     @staticmethod
-    fn validate(value: Self.Type) raises:
+    def validate(value: Self.Type) raises:
         ...
 
 
 @fieldwise_init
 struct Validated[
     T: _Base,
-    validator: fn(T) -> Bool,
+    validator: def(T) -> Bool,
     err_msg: String = "Value is not valid",
 ](JsonDeserializable, JsonSerializable, Validator):
     var value: Self.T
@@ -73,7 +73,7 @@ struct Validated[
     comptime Type = Self.T
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
@@ -81,19 +81,19 @@ struct Validated[
         s.validate(s.value)
 
     @staticmethod
-    fn validate(value: Self.Type) raises:
+    def validate(value: Self.Type) raises:
         if not Self.validator(value):
             raise Error(Self.err_msg)
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.T:
+    def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
 @always_inline
-fn __is_in_range[
+def __is_in_range[
     T: Comparable & _Base, min: T, max: T
 ](value: T,) -> Bool:
     return value >= materialize[min]() and value <= materialize[max]()
@@ -105,7 +105,7 @@ comptime Range[T: Comparable & _Base, min: T, max: T] = Validated[
 
 
 @always_inline
-fn __is_in_size_range[
+def __is_in_size_range[
     T: Sized & _Base, min: Int, max: Int
 ](value: T,) -> Bool:
     return len(value) >= min and len(value) <= max
@@ -124,7 +124,7 @@ struct OneOf[T: _Base & Equatable, *accepted: T](
     comptime Type = Self.T
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
@@ -132,22 +132,22 @@ struct OneOf[T: _Base & Equatable, *accepted: T](
         s.validate(s.value)
 
     @staticmethod
-    fn validate(value: Self.Type) raises:
+    def validate(value: Self.Type) raises:
         comptime for i in range(Variadic.size(Self.accepted)):
             if value == materialize[Self.accepted[i]]():
                 return
 
         raise Error("Value not in options")
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.T:
+    def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
 @always_inline
-fn __is_multiple_of[base: SIMD](v: type_of(base)) -> Bool:
+def __is_multiple_of[base: SIMD](v: type_of(base)) -> Bool:
     comptime zeroes = type_of(base)(0)
     return v % base == zeroes
 
@@ -169,15 +169,15 @@ struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
     var value: Self.T
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write('"********"')
 
-    fn __getitem__(self) -> ref[self.value] Self.T:
+    def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
@@ -193,7 +193,7 @@ struct Clamp[T: _Base & Comparable, min: T, max: T](
     var value: Self.T
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
@@ -206,10 +206,10 @@ struct Clamp[T: _Base & Comparable, min: T, max: T](
         elif s.value > max_val:
             s.value = max_val^
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.T:
+    def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
@@ -219,25 +219,25 @@ struct Clamp[T: _Base & Comparable, min: T, max: T](
 
 
 @fieldwise_init
-struct Coerce[Target: _Base, func: fn(Value) raises -> Target](
+struct Coerce[Target: _Base, func: def(Value) raises -> Target](
     JsonDeserializable, JsonSerializable
 ):
     var value: Self.Target
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {Self.func(deserialize[Value](p))}
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.Target:
+    def __getitem__(self) -> ref[self.value] Self.Target:
         return self.value
 
 
-fn __try_coerce_int(v: Value) raises -> Int64:
+def __try_coerce_int(v: Value) raises -> Int64:
     if v.is_int() or v.is_uint():
         return v.int()
     elif v.is_float():
@@ -248,7 +248,7 @@ fn __try_coerce_int(v: Value) raises -> Int64:
         raise Error("Value cannot be converted to an integer")
 
 
-fn __try_coerce_uint(v: Value) raises -> UInt64:
+def __try_coerce_uint(v: Value) raises -> UInt64:
     if v.is_int() or v.is_uint():
         return v.uint()
     elif v.is_float():
@@ -259,7 +259,7 @@ fn __try_coerce_uint(v: Value) raises -> UInt64:
         raise Error("Value cannot be converted to an unsigned integer")
 
 
-fn __try_coerce_float(v: Value) raises -> Float64:
+def __try_coerce_float(v: Value) raises -> Float64:
     if v.is_int() or v.is_uint():
         return Float64(v.int())
     elif v.is_float():
@@ -270,7 +270,7 @@ fn __try_coerce_float(v: Value) raises -> Float64:
         raise Error("Value cannot be converted to a float")
 
 
-fn __try_coerce_string(v: Value) raises -> String:
+def __try_coerce_string(v: Value) raises -> String:
     if v.is_string():
         return v.string()
     elif v.is_int():
@@ -304,11 +304,11 @@ struct Default[T: _Base, default: T](
 ):
     var value: Self.T
 
-    fn __init__(out self):
+    def __init__(out self):
         self.value = materialize[Self.default]()
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         var op = deserialize[Optional[Self.T]](p)
@@ -317,10 +317,10 @@ struct Default[T: _Base, default: T](
         else:
             s = {materialize[Self.default]()}
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.T:
+    def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
@@ -330,19 +330,19 @@ struct Default[T: _Base, default: T](
 
 
 @fieldwise_init
-struct Transform[InT: _Base, OutT: _Base, func: fn(InT) -> OutT](
+struct Transform[InT: _Base, OutT: _Base, func: def(InT) -> OutT](
     JsonDeserializable, JsonSerializable
 ):
     var value: Self.OutT
 
     @staticmethod
-    fn from_json[
+    def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {Self.func(deserialize[Self.InT](p))}
 
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
-    fn __getitem__(self) -> ref[self.value] Self.OutT:
+    def __getitem__(self) -> ref[self.value] Self.OutT:
         return self.value

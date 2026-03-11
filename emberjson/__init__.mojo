@@ -51,7 +51,7 @@ from .schema import (
 
 
 @always_inline
-fn parse[
+def parse[
     options: ParseOptions = ParseOptions()
 ](out j: JSON, s: StringSlice) raises:
     """Parses a JSON object from a String.
@@ -73,7 +73,7 @@ fn parse[
 
 
 @always_inline
-fn try_parse[
+def try_parse[
     options: ParseOptions = ParseOptions()
 ](s: String) -> Optional[JSON]:
     try:
@@ -83,7 +83,7 @@ fn try_parse[
 
 
 @always_inline
-fn to_string[*, pretty: Bool = False](out s: String, j: JSON):
+def to_string[*, pretty: Bool = False](out s: String, j: JSON):
     """Stringifies the given JSON object.
 
     Parameters:

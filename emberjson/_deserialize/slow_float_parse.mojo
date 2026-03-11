@@ -30,7 +30,7 @@ struct Decimal(Copyable, Movable):
     var negative: Bool
     var digits: StackArray[Byte, MAX_DIGITS]
 
-    fn round(self) -> UInt64:
+    def round(self) -> UInt64:
         if self.num_digits == 0 or self.decimal_point < 0:
             return 0
         elif self.decimal_point > 18:
@@ -54,7 +54,7 @@ struct Decimal(Copyable, Movable):
             n += 1
         return n
 
-    fn __irshift__(mut self, shift: UInt64):
+    def __irshift__(mut self, shift: UInt64):
         var read_index = UInt32(0)
         var write_index = UInt32(0)
 
@@ -97,7 +97,7 @@ struct Decimal(Copyable, Movable):
         self.num_digits = write_index
         self.trim()
 
-    fn __ilshift__(mut self, shift: UInt64):
+    def __ilshift__(mut self, shift: UInt64):
         if self.num_digits == 0:
             return
         var num_new_digits = self.number_of_digits_decimal_left_shift(shift)
@@ -133,14 +133,14 @@ struct Decimal(Copyable, Movable):
         self.decimal_point += Int32(num_new_digits)
         self.trim()
 
-    fn trim(mut self):
+    def trim(mut self):
         while (
             self.num_digits > 0
             and self.digits.unsafe_get(self.num_digits - 1) == 0
         ):
             self.num_digits -= 1
 
-    fn number_of_digits_decimal_left_shift(self, var shift: UInt64) -> UInt32:
+    def number_of_digits_decimal_left_shift(self, var shift: UInt64) -> UInt32:
         shift &= 63
 
         var x_a = lut[number_of_digits_decimal_left_shift_table](shift).cast[
@@ -175,12 +175,12 @@ struct AdjustedMantissa(TrivialRegisterPassable):
     var mantissa: UInt64
     var power2: Int
 
-    fn __init__(out self):
+    def __init__(out self):
         self.mantissa = 0
         self.power2 = 0
 
 
-fn from_chars_slow(out value: Float64, var first: CheckedPointer) raises:
+def from_chars_slow(out value: Float64, var first: CheckedPointer) raises:
     var negative = first[] == `-`
     first += Int(negative or first[] == `+`)
     var am = compute_float(parse_decimal(first))
@@ -191,7 +191,7 @@ fn from_chars_slow(out value: Float64, var first: CheckedPointer) raises:
     value = bitcast[DType.float64](word)
 
 
-fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
+def compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
     answer = AdjustedMantissa()
 
     if d.num_digits == 0 or d.decimal_point < -324:
@@ -272,14 +272,14 @@ fn compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
     answer.mantissa = mantissa & ((UInt64(1) << MANTISSA_EXPLICIT_BITS) - 1)
 
 
-fn parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
+def parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
     answer = Decimal(
         0, 0, False, p[] == `-`, StackArray[Byte, MAX_DIGITS](fill=0)
     )
 
     @parameter
     @always_inline
-    fn consume_digits() raises:
+    def consume_digits() raises:
         while p.dist() > 0 and isdigit(p[]):
             if answer.num_digits < MAX_DIGITS:
                 answer.digits[answer.num_digits] = p[] - `0`

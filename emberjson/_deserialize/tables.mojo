@@ -28,7 +28,7 @@ comptime POWER_OF_TEN: StackArray[Float64, 23] = [
 
 
 @always_inline
-fn _truncate[
+def _truncate[
     D: DType, S: Int, //, TruncateType: DType
 ](u: SIMD[D, S]) -> SIMD[D, S]:
     """Cast to DType to truncate to the width of that type, then cast back to
@@ -38,7 +38,7 @@ fn _truncate[
 
 
 @always_inline
-fn full_multiplication(out answer: UInt128, x: UInt64, y: UInt64):
+def full_multiplication(out answer: UInt128, x: UInt64, y: UInt64):
     answer = UInt128(x) * UInt128(y)
 
 

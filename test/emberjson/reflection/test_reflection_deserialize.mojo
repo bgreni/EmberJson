@@ -37,7 +37,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var ap: ArcPointer[Int]
     var op: OwnedPointer[Int]
 
-    fn __init__(out self):
+    def __init__(out self):
         self.a = ""
         self.i = 0
         self.f = 0.0
@@ -110,7 +110,7 @@ struct Bar(Defaultable, Movable):
     var a: Int
     var b: Bool
 
-    fn __init__(out self):
+    def __init__(out self):
         self.a = 0
         self.b = False
 
@@ -225,7 +225,7 @@ struct Point(JsonDeserializable):
     var y: Int
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return True
 
 
@@ -241,12 +241,12 @@ struct NestedArray(Defaultable, JsonDeserializable):
     var p: Point
     var name: String
 
-    fn __init__(out self):
+    def __init__(out self):
         self.p = Point(0, 0)
         self.name = ""
 
     @staticmethod
-    fn deserialize_as_array() -> Bool:
+    def deserialize_as_array() -> Bool:
         return True
 
 

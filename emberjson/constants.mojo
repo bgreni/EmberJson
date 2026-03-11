@@ -40,6 +40,6 @@ comptime `1` = _to_byte("1")
 
 
 @always_inline
-fn _to_byte(s: StringSlice) -> Byte:
+def _to_byte(s: StringSlice) -> Byte:
     debug_assert(s.byte_length() > 0, "string is too small")
     return s.as_bytes()[0]

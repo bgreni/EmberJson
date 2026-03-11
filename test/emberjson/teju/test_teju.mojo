@@ -4,7 +4,7 @@ from std.format import Writer
 from std.utils.numerics import FPUtils
 
 
-fn get_smallest_subnormal[dtype: DType]() -> Scalar[dtype]:
+def get_smallest_subnormal[dtype: DType]() -> Scalar[dtype]:
     var x = Scalar[dtype](1)
     var prev = x
     while x > 0:
@@ -13,7 +13,7 @@ fn get_smallest_subnormal[dtype: DType]() -> Scalar[dtype]:
     return prev
 
 
-fn get_largest_subnormal[dtype: DType]() -> Scalar[dtype]:
+def get_largest_subnormal[dtype: DType]() -> Scalar[dtype]:
     comptime mantissa_width = FPUtils[dtype].mantissa_width()
     var prev = get_smallest_subnormal[dtype]()
     var largest = prev

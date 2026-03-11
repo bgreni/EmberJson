@@ -21,16 +21,16 @@ struct _ObjectIter[origin: Origin](Sized, TrivialRegisterPassable):
     var idx: Int
 
     @always_inline
-    fn __init__(out self, src: Pointer[Object, Self.origin]):
+    def __init__(out self, src: Pointer[Object, Self.origin]):
         self.src = src
         self.idx = 0
 
     @always_inline
-    fn __iter__(self) -> Self:
+    def __iter__(self) -> Self:
         return self
 
     @always_inline
-    fn __next__(
+    def __next__(
         mut self,
     ) raises StopIteration -> ref[self.src[]._data] KeyValuePair:
         if self.idx >= len(self.src[]):
@@ -39,7 +39,7 @@ struct _ObjectIter[origin: Origin](Sized, TrivialRegisterPassable):
         return self.src[]._data[self.idx - 1]
 
     @always_inline
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         return len(self.src[]) - self.idx
 
 
@@ -48,16 +48,16 @@ struct _ObjectKeyIter[origin: Origin](Sized, TrivialRegisterPassable):
     var idx: Int
 
     @always_inline
-    fn __init__(out self, src: Pointer[Object, Self.origin]):
+    def __init__(out self, src: Pointer[Object, Self.origin]):
         self.src = src
         self.idx = 0
 
     @always_inline
-    fn __iter__(self) -> Self:
+    def __iter__(self) -> Self:
         return self
 
     @always_inline
-    fn __next__(
+    def __next__(
         mut self,
     ) raises StopIteration -> ref[self.src[]._data[0].key] String:
         if self.idx >= len(self.src[]):
@@ -66,7 +66,7 @@ struct _ObjectKeyIter[origin: Origin](Sized, TrivialRegisterPassable):
         return self.src[]._data[self.idx - 1].key
 
     @always_inline
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         return len(self.src[]) - self.idx
 
 
@@ -75,16 +75,16 @@ struct _ObjectValueIter[origin: Origin](Sized, TrivialRegisterPassable):
     var idx: Int
 
     @always_inline
-    fn __init__(out self, src: Pointer[Object, Self.origin]):
+    def __init__(out self, src: Pointer[Object, Self.origin]):
         self.src = src
         self.idx = 0
 
     @always_inline
-    fn __iter__(self) -> Self:
+    def __iter__(self) -> Self:
         return self
 
     @always_inline
-    fn __next__(
+    def __next__(
         mut self,
     ) raises StopIteration -> ref[self.src[]._data[0].value] Value:
         if self.idx >= len(self.src[]):
@@ -93,7 +93,7 @@ struct _ObjectValueIter[origin: Origin](Sized, TrivialRegisterPassable):
         return self.src[]._data[self.idx - 1].value
 
     @always_inline
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         return len(self.src[]) - self.idx
 
 
@@ -107,26 +107,26 @@ struct Object(JsonValue, Sized):
     var _data: Self.Type
 
     @always_inline
-    fn __init__(out self):
+    def __init__(out self):
         self._data = Self.Type()
 
     @always_inline
-    fn __init__(out self, *, capacity: Int):
+    def __init__(out self, *, capacity: Int):
         self._data = Self.Type(capacity=capacity)
 
     @always_inline
     @implicit
-    fn __init__(out self, var d: Self.Type):
+    def __init__(out self, var d: Self.Type):
         self._data = d^
 
     @always_inline
     @implicit
-    fn __init__(out self, var d: Dict[String, Value]):
+    def __init__(out self, var d: Dict[String, Value]):
         self._data = Self.Type()
         for item in d.items():
             self._data.append(KeyValuePair(item.key, item.value.copy()))
 
-    fn __init__(
+    def __init__(
         out self,
         var keys: List[String],
         var values: List[Value],
@@ -138,16 +138,16 @@ struct Object(JsonValue, Sized):
             self._data.append(KeyValuePair(keys[i], values[i].copy()))
 
     @always_inline
-    fn __init__(out self, *, parse_string: String) raises:
+    def __init__(out self, *, parse_string: String) raises:
         var p = Parser(parse_string)
         self = p.parse_object()
 
     @always_inline
-    fn _add_unchecked(mut self, var key: String, var item: Value):
+    def _add_unchecked(mut self, var key: String, var item: Value):
         """Can call this when we know the key doesn't exist."""
         self._data.append(KeyValuePair(key^, item^))
 
-    fn __setitem__(mut self, var key: String, var item: Value):
+    def __setitem__(mut self, var key: String, var item: Value):
         """Sets a key-value pair.
         If the key already exists, its value is updated.
         """
@@ -157,14 +157,14 @@ struct Object(JsonValue, Sized):
                 return
         self._data.append(KeyValuePair(key^, item^))
 
-    fn pop(mut self, key: String) raises:
+    def pop(mut self, key: String) raises:
         for i in range(len(self._data)):
             if self._data[i].key == key:
                 _ = self._data.pop(i)
                 return
         raise Error("KeyError: " + key)
 
-    fn __getitem__(
+    def __getitem__(
         ref self, key: String
     ) raises -> ref[self._data[0].value] Value:
         for i in range(len(self._data)):
@@ -173,17 +173,17 @@ struct Object(JsonValue, Sized):
         raise Error("KeyError: " + key)
 
     @always_inline
-    fn __contains__(self, key: String) -> Bool:
+    def __contains__(self, key: String) -> Bool:
         for i in range(len(self._data)):
             if self._data[i].key == key:
                 return True
         return False
 
     @always_inline
-    fn __len__(self) -> Int:
+    def __len__(self) -> Int:
         return len(self._data)
 
-    fn __eq__(self, other: Self) -> Bool:
+    def __eq__(self, other: Self) -> Bool:
         if len(self) != len(other):
             return False
 
@@ -199,41 +199,41 @@ struct Object(JsonValue, Sized):
         return True
 
     @always_inline
-    fn __ne__(self, other: Self) -> Bool:
+    def __ne__(self, other: Self) -> Bool:
         return not self == other
 
     @always_inline
-    fn __bool__(self) -> Bool:
+    def __bool__(self) -> Bool:
         return len(self) == 0
 
     @always_inline
-    fn keys(ref self) -> _ObjectKeyIter[origin_of(self)]:
+    def keys(ref self) -> _ObjectKeyIter[origin_of(self)]:
         return _ObjectKeyIter(Pointer(to=self))
 
     @always_inline
-    fn values(ref self) -> _ObjectValueIter[origin_of(self)]:
+    def values(ref self) -> _ObjectValueIter[origin_of(self)]:
         return _ObjectValueIter(Pointer(to=self))
 
     @always_inline
-    fn __iter__(ref self) -> _ObjectKeyIter[origin_of(self)]:
+    def __iter__(ref self) -> _ObjectKeyIter[origin_of(self)]:
         return self.keys()
 
     @always_inline
-    fn items(ref self) -> _ObjectIter[origin_of(self)]:
+    def items(ref self) -> _ObjectIter[origin_of(self)]:
         return _ObjectIter(Pointer(to=self))
 
     @always_inline
-    fn write_json(self, mut writer: Some[Serializer]):
+    def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
 
-    fn pretty_to(
+    def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
         writer.write("{\n")
         self._pretty_write_items(writer, indent, curr_depth + 1)
         writer.write("}")
 
-    fn _pretty_write_items(
+    def _pretty_write_items(
         self, mut writer: Some[Writer], indent: String, curr_depth: UInt
     ):
         var done = 0
@@ -249,7 +249,7 @@ struct Object(JsonValue, Sized):
             done += 1
 
     @always_inline
-    fn write_to(self, mut writer: Some[Writer]):
+    def write_to(self, mut writer: Some[Writer]):
         writer.write("{")
         for i in range(len(self._data)):
             write_escaped_string(self._data[i].key, writer)
@@ -260,17 +260,17 @@ struct Object(JsonValue, Sized):
         writer.write("}")
 
     @always_inline
-    fn to_dict(self, out d: Dict[String, Value]):
+    def to_dict(self, out d: Dict[String, Value]):
         d = Dict[String, Value]()
         for item in self.items():
             d[item.key] = item.value.copy()
 
-    fn to_python_object(self) raises -> PythonObject:
+    def to_python_object(self) raises -> PythonObject:
         var d = Python.dict()
         for item in self.items():
             d[PythonObject(item.key)] = item.value.to_python_object()
         return d
 
     @staticmethod
-    fn from_json(mut json: Parser, out s: Self) raises:
+    def from_json(mut json: Parser, out s: Self) raises:
         s = json.parse_object()

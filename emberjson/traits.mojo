@@ -4,7 +4,7 @@ from emberjson._deserialize import JsonDeserializable
 
 
 trait PrettyPrintable:
-    fn pretty_to(
+    def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
         ...

@@ -1,11 +1,11 @@
 from emberjson import Value, Object, Array, Null
 
 
-fn merge_patch(mut target: Value, patch: String) raises:
+def merge_patch(mut target: Value, patch: String) raises:
     merge_patch(target, Value(parse_string=patch))
 
 
-fn merge_patch(mut target: Value, patch: Value) raises:
+def merge_patch(mut target: Value, patch: Value) raises:
     """Applies a JSON Merge Patch (RFC 7386) to the target value.
     The target is modified in-place.
     """

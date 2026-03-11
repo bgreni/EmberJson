@@ -39,22 +39,22 @@ comptime ALSE: UInt32 = _to_uint32("alse")
 comptime NULL: UInt32 = _to_uint32("null")
 
 
-fn _to_uint32(s: StaticString) -> UInt32:
+def _to_uint32(s: StaticString) -> UInt32:
     debug_assert(s.byte_length() > 3, "string is too small")
     return s.unsafe_ptr().bitcast[UInt32]()[0]
 
 
 @always_inline
-fn append_digit(v: Scalar, to_add: Scalar) -> type_of(v):
+def append_digit(v: Scalar, to_add: Scalar) -> type_of(v):
     return (10 * v) + to_add.cast[v.dtype]()
 
 
-fn isdigit(char: Byte) -> Bool:
+def isdigit(char: Byte) -> Bool:
     return `0` <= char <= `9`
 
 
 @always_inline
-fn is_numerical_component(char: Byte) -> Bool:
+def is_numerical_component(char: Byte) -> Bool:
     return isdigit(char) or char == `+` or char == `-`
 
 
@@ -62,23 +62,23 @@ comptime Bits_T = Scalar[_uint_type_of_width[SIMD8_WIDTH]()]
 
 
 @always_inline
-fn get_non_space_bits(s: SIMD8xT) -> Bits_T:
+def get_non_space_bits(s: SIMD8xT) -> Bits_T:
     var vec = s.eq(` `) | s.eq(`\n`) | s.eq(`\t`) | s.eq(`\r`)
     return ~pack_into_integer(vec)
 
 
 @always_inline
-fn pack_into_integer(simd: SIMDBool) -> Bits_T:
+def pack_into_integer(simd: SIMDBool) -> Bits_T:
     return Bits_T(pack_bits(simd))
 
 
 @always_inline
-fn first_true(simd: SIMDBool) -> Bits_T:
+def first_true(simd: SIMDBool) -> Bits_T:
     return count_trailing_zeros(pack_into_integer(simd))
 
 
 @always_inline
-fn ptr_dist(start: BytePtr, end: BytePtr) -> Int:
+def ptr_dist(start: BytePtr, end: BytePtr) -> Int:
     return Int(end) - Int(start)
 
 
@@ -90,25 +90,27 @@ struct StringBlock(TrivialRegisterPassable):
     var quote_bits: Bits_T
     var unescaped_bits: Bits_T
 
-    fn __init__(out self, bs: Self.BitMask, qb: Self.BitMask, un: Self.BitMask):
+    def __init__(
+        out self, bs: Self.BitMask, qb: Self.BitMask, un: Self.BitMask
+    ):
         self.bs_bits = pack_into_integer(bs)
         self.quote_bits = pack_into_integer(qb)
         self.unescaped_bits = pack_into_integer(un)
 
     @always_inline
-    fn quote_index(self) -> Bits_T:
+    def quote_index(self) -> Bits_T:
         return count_trailing_zeros(self.quote_bits)
 
     @always_inline
-    fn bs_index(self) -> Bits_T:
+    def bs_index(self) -> Bits_T:
         return count_trailing_zeros(self.bs_bits)
 
     @always_inline
-    fn unescaped_index(self) -> Bits_T:
+    def unescaped_index(self) -> Bits_T:
         return count_trailing_zeros(self.unescaped_bits)
 
     @always_inline
-    fn has_quote_first(self) -> Bool:
+    def has_quote_first(self) -> Bool:
         return (
             count_trailing_zeros(self.quote_bits)
             < count_trailing_zeros(self.bs_bits)
@@ -116,27 +118,27 @@ struct StringBlock(TrivialRegisterPassable):
         )
 
     @always_inline
-    fn has_backslash(self) -> Bool:
+    def has_backslash(self) -> Bool:
         return count_trailing_zeros(self.bs_bits) < count_trailing_zeros(
             self.quote_bits
         )
 
     @always_inline
-    fn has_unescaped(self) -> Bool:
+    def has_unescaped(self) -> Bool:
         return count_trailing_zeros(self.unescaped_bits) < count_trailing_zeros(
             self.quote_bits
         )
 
     @staticmethod
     @always_inline
-    fn find(src: CheckedPointer) -> StringBlock:
+    def find(src: CheckedPointer) -> StringBlock:
         var v = src.load_chunk()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
         return StringBlock(v.eq(`\\`), v.eq(`"`), v.lt(` `))
 
     @staticmethod
     @always_inline
-    fn find(src: BytePtr) -> StringBlock:
+    def find(src: BytePtr) -> StringBlock:
         # FIXME: Port minify to use CheckedPointer
         var v = src.load[width=SIMD8_WIDTH]()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
@@ -144,7 +146,7 @@ struct StringBlock(TrivialRegisterPassable):
 
 
 @always_inline
-fn hex_to_u32(p: BytePtr) -> UInt32:
+def hex_to_u32(p: BytePtr) -> UInt32:
     var v = p.load[width=4]().cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
     comptime shifts = SIMD[DType.uint32, 4](12, 8, 4, 0)
@@ -152,7 +154,7 @@ fn hex_to_u32(p: BytePtr) -> UInt32:
     return v.reduce_or()
 
 
-fn handle_unicode_codepoint(
+def handle_unicode_codepoint(
     mut p: BytePtr, mut dest: List[UInt8], end: BytePtr
 ) raises:
     # TODO: is this check necessary or just being paranoid?
@@ -211,13 +213,13 @@ fn handle_unicode_codepoint(
 
 
 @always_inline
-fn copy_to_string[
+def copy_to_string[
     ignore_unicode: Bool = False
 ](start: BytePtr, end: BytePtr, found_escaped: Bool = True) raises -> String:
     var length = ptr_dist(start, end)
 
     @parameter
-    fn decode_escaped() raises -> String:
+    def decode_escaped() raises -> String:
         # This will usually slightly overallocate if the string contains
         # escaped unicode
         var dest = List[UInt8](capacity=length)
@@ -286,17 +288,17 @@ fn copy_to_string[
 
 
 @always_inline
-fn is_exp_char(char: Byte) -> Bool:
+def is_exp_char(char: Byte) -> Bool:
     return char == `e` or char == `E`
 
 
 @always_inline
-fn is_sign_char(char: Byte) -> Bool:
+def is_sign_char(char: Byte) -> Bool:
     return char == `+` or char == `-`
 
 
 @always_inline
-fn unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
+def unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
     """Don't ask me how this works.
 
     Safety:
@@ -310,7 +312,7 @@ fn unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
 
 
 @always_inline
-fn to_double(
+def to_double(
     var mantissa: UInt64, real_exponent: UInt64, negative: Bool
 ) -> Float64:
     comptime `1 << 52` = 1 << 52
@@ -321,7 +323,7 @@ fn to_double(
 
 
 @always_inline
-fn unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
+def unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
     """Don't ask me how this works.
 
     Safety:
@@ -334,7 +336,7 @@ fn unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
 
 
 @always_inline
-fn parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
+def parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
     if p.dist() <= 0:
         return False
     dig = isdigit(p[])
@@ -342,7 +344,7 @@ fn parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
 
 
 @always_inline
-fn significant_digits(p: BytePtr, digit_count: Int) -> Int:
+def significant_digits(p: BytePtr, digit_count: Int) -> Int:
     var start = p
     while start[] == `0` or start[] == `.`:
         start += 1

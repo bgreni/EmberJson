@@ -10,20 +10,20 @@ comptime Test = "test"
 
 
 @always_inline
-fn check_key(command: Object, key: String) raises:
+def check_key(command: Object, key: String) raises:
     if key not in command:
         raise Error('invalid patch operation expect "', key, '" key')
 
 
-fn parse_patches(s: String) raises -> Array:
+def parse_patches(s: String) raises -> Array:
     return Array(parse_string=s)
 
 
-fn patch(mut v: Value, s: String) raises:
+def patch(mut v: Value, s: String) raises:
     patch(v, parse_patches(s))
 
 
-fn patch(mut v: Value, commands: Array) raises:
+def patch(mut v: Value, commands: Array) raises:
     var cpy = v.copy()
 
     for command in commands:
@@ -34,7 +34,7 @@ fn patch(mut v: Value, commands: Array) raises:
     v = cpy^
 
 
-fn _apply_op(mut v: Value, command: Object) raises:
+def _apply_op(mut v: Value, command: Object) raises:
     check_key(command, "op")
 
     ref op = command["op"]
@@ -56,7 +56,7 @@ fn _apply_op(mut v: Value, command: Object) raises:
         raise Error("Unknown patch operation: " + op_str)
 
 
-fn _apply_add(mut v: Value, command: Object) raises:
+def _apply_add(mut v: Value, command: Object) raises:
     check_key(command, "path")
     check_key(command, "value")
 
@@ -86,7 +86,7 @@ fn _apply_add(mut v: Value, command: Object) raises:
         raise Error("Cannot add to non-container parent")
 
 
-fn _apply_remove(mut v: Value, command: Object) raises:
+def _apply_remove(mut v: Value, command: Object) raises:
     check_key(command, "path")
 
     ref path_str = command["path"].string()
@@ -109,7 +109,7 @@ fn _apply_remove(mut v: Value, command: Object) raises:
         raise Error("Cannot remove from non-container")
 
 
-fn _apply_replace(mut v: Value, command: Object) raises:
+def _apply_replace(mut v: Value, command: Object) raises:
     check_key(command, "path")
     check_key(command, "value")
 
@@ -141,7 +141,7 @@ fn _apply_replace(mut v: Value, command: Object) raises:
         raise Error("Cannot replace in non-container parent")
 
 
-fn _apply_move(mut v: Value, command: Object) raises:
+def _apply_move(mut v: Value, command: Object) raises:
     check_key(command, "from")
     check_key(command, "path")
 
@@ -168,7 +168,7 @@ fn _apply_move(mut v: Value, command: Object) raises:
     _apply_add(v, add_cmd)
 
 
-fn _apply_copy(mut v: Value, command: Object) raises:
+def _apply_copy(mut v: Value, command: Object) raises:
     check_key(command, "from")
     check_key(command, "path")
 
@@ -184,7 +184,7 @@ fn _apply_copy(mut v: Value, command: Object) raises:
     _apply_add(v, add_cmd)
 
 
-fn _apply_test(mut v: Value, command: Object) raises:
+def _apply_test(mut v: Value, command: Object) raises:
     check_key(command, "path")
     check_key(command, "value")
 
@@ -200,7 +200,7 @@ fn _apply_test(mut v: Value, command: Object) raises:
 # --- Helpers ---
 
 
-fn _resolve_parent_ptr(
+def _resolve_parent_ptr(
     mut root: Value, ptr: PointerIndex
 ) raises -> ref[root] Value:
     if len(ptr.tokens) == 0:
@@ -214,14 +214,14 @@ fn _resolve_parent_ptr(
     return resolve_pointer(root, parent_ptr_idx)
 
 
-fn _token_to_key(token: PointerToken) -> String:
+def _token_to_key(token: PointerToken) -> String:
     if token.isa[String]():
         return token[String]
     else:
         return String(token[Int])
 
 
-fn _parse_array_index(s: String, arr_len: Int) raises -> Int:
+def _parse_array_index(s: String, arr_len: Int) raises -> Int:
     if s == "0":
         return 0
     if s.startswith("0"):
