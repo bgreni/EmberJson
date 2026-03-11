@@ -16,10 +16,20 @@ from emberjson._deserialize.reflection import _Base
 ##########################################################
 
 
+comptime MergeValidatorSets[
+    T: _Base,
+    *Validators: Variadic.TypesOfTrait[Validator],
+] = ValidatorSet[
+    T,
+    *Variadic.concat_types[*Validators],
+]
+
+
 @fieldwise_init
 struct ValidatorSet[T: _Base, *validators: Validator](
-    JsonDeserializable, JsonSerializable
+    JsonDeserializable, JsonSerializable, Validator
 ):
+    comptime Type = Self.T
     var value: Self.T
 
     @staticmethod
@@ -28,13 +38,14 @@ struct ValidatorSet[T: _Base, *validators: Validator](
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
-        s.validate()
+        s.validate(s.value)
 
-    fn validate(self) raises:
+    @staticmethod
+    fn validate(value: Self.Type) raises:
         comptime for i in range(Variadic.size(Self.validators)):
             comptime VType = Self.validators[i]
             comptime assert _type_is_eq[VType.Type, Self.T]()
-            VType.validate(rebind[VType.Type](self.value))
+            VType.validate(rebind[VType.Type](value))
 
     fn write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)

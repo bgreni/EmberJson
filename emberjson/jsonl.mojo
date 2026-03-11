@@ -18,7 +18,7 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
         self.length = 0
 
     @always_inline
-    fn ptr(ref self) -> UnsafePointer[Byte, origin = origin_of(self.buf)]:
+    fn ptr(ref self) -> UnsafePointer[Byte, origin=origin_of(self.buf)]:
         return self.buf.unsafe_ptr()
 
     fn index(self, b: Byte) -> Int:

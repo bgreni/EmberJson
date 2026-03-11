@@ -1,6 +1,6 @@
 from emberjson import parse, minify, write_pretty
-from testing import assert_equal, TestSuite
-from sys.param_env import is_defined
+from std.testing import assert_equal, TestSuite
+from std.sys.param_env import is_defined
 
 
 @always_inline

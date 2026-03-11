@@ -1,4 +1,4 @@
-from testing import TestSuite, assert_equal
+from std.testing import TestSuite, assert_equal
 from emberjson._serialize import serialize, JsonSerializable, PrettySerializer
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer

@@ -1,6 +1,6 @@
 from emberjson import parse
-from testing import assert_equal, TestSuite
-from sys.param_env import is_defined
+from std.testing import assert_equal, TestSuite
+from std.sys.param_env import is_defined
 
 
 @always_inline
@@ -8,7 +8,7 @@ fn files_enabled() -> Bool:
     return not is_defined["DISABLE_TEST_FILES"]()
 
 
-def round_trip_test(filename: String):
+def round_trip_test(filename: String) raises:
     comptime if files_enabled():
         var d = String("./bench_data/data/roundtrip/")
         with open(String(d, filename, ".json"), "r") as f:

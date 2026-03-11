@@ -1,5 +1,5 @@
 from emberjson import parse, try_parse, ParseOptions
-from testing import assert_true, assert_equal, assert_raises, TestSuite
+from std.testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
 def test_compile_time() raises:
@@ -18,9 +18,9 @@ def test_compile_time() raises:
     ]
 }"""
     comptime j = try_parse(data)
-    assert_true(j)
+    assert_true(materialize[j]())
 
-    ref arr = j.value().object()["key"].array()
+    ref arr = materialize[j.value()]().object()["key"].array()
     assert_equal(arr[0].float(), 1.234)
     assert_equal(arr[1].float(), 352.329384920)
     assert_equal(arr[2].uint(), 123412512)

@@ -41,7 +41,7 @@ from ._parser_helper import (
 from std.memory.unsafe import bitcast
 from std.bit import count_leading_zeros
 from .slow_float_parse import from_chars_slow
-from std.sys.compile import is_compile_time
+from std.sys.compile import is_run_in_comptime_interpreter
 from .tables import (
     POWER_OF_TEN,
     full_multiplication,
@@ -157,7 +157,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     fn __init__(
         out self,
         *,
-        ptr: UnsafePointer[Byte, origin = Self.origin],
+        ptr: UnsafePointer[Byte, origin=Self.origin],
         length: Int,
     ):
         self.data = CheckedPointer(ptr, ptr, ptr + length)
@@ -427,7 +427,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var start = self.data
         # compile time interpreter is incompatible with the SIMD accelerated
         # path, so fallback to the serial implementation
-        if self.can_load_chunk() and not is_compile_time():
+        if self.can_load_chunk() and not is_run_in_comptime_interpreter():
             s = self.find(start)
             self.data += 1
         else:
@@ -441,7 +441,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         # compile time interpreter is incompatible with the SIMD accelerated
         # path, so fallback to the serial implementation
-        while self.can_load_chunk() and not is_compile_time():
+        while self.can_load_chunk() and not is_run_in_comptime_interpreter():
             var chunk = self.load_chunk()
             var nonspace = get_non_space_bits(chunk)
             if nonspace != 0:
@@ -963,7 +963,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var depth = 1
 
         while self.has_more():
-            while self.can_load_chunk() and not is_compile_time():
+            while (
+                self.can_load_chunk() and not is_run_in_comptime_interpreter()
+            ):
                 var chunk = self.load_chunk()
                 var relevant = chunk.eq(`"`) | chunk.eq(open) | chunk.eq(close)
                 var mask = pack_into_integer(relevant)
@@ -1023,7 +1025,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if self.data[] == `-`:  # '-'
             self.data += 1
 
-        while self.can_load_chunk() and not is_compile_time():
+        while self.can_load_chunk() and not is_run_in_comptime_interpreter():
             var chunk = self.load_chunk()
             var is_digit = chunk.ge(`0`) & chunk.le(`9`)  # '0' to '9'
             var invalid = ~is_digit
@@ -1048,7 +1050,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if self.data[] == `-`:  # '-'
             self.data += 1
 
-        while self.can_load_chunk() and not is_compile_time():
+        while self.can_load_chunk() and not is_run_in_comptime_interpreter():
             var chunk = self.load_chunk()
             var is_digit = chunk.ge(`0`) & chunk.le(`9`)
             var is_dot = chunk.eq(`.`)  # '.'

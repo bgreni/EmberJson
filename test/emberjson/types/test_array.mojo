@@ -2,7 +2,7 @@ from emberjson.array import Array
 from emberjson import Object
 from emberjson.value import Null, Value
 from emberjson import parse
-from testing import (
+from std.testing import (
     assert_equal,
     assert_true,
     assert_false,

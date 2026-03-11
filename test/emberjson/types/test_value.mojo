@@ -1,6 +1,6 @@
 from emberjson.value import Value, Null
 from emberjson import Object, Array, JSON, write_pretty
-from testing import (
+from std.testing import (
     assert_equal,
     assert_true,
     assert_raises,
@@ -198,7 +198,7 @@ def test_equality() raises:
     assert_equal(v2, v3)
     assert_not_equal(v1, v2)
 
-    def eq_self(v: Value):
+    def eq_self(v: Value) raises:
         assert_equal(v, v)
 
     eq_self(Value(123))

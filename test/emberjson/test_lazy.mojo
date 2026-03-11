@@ -1,4 +1,4 @@
-from testing import TestSuite, assert_equal, assert_true, assert_raises
+from std.testing import TestSuite, assert_equal, assert_true, assert_raises
 from emberjson._deserialize import Parser, deserialize
 from emberjson.lazy import (
     LazyString,

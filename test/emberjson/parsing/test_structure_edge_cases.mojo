@@ -7,7 +7,7 @@ from emberjson import (
     ParseOptions,
     StrictOptions,
 )
-from testing import assert_raises, assert_equal, assert_true, TestSuite
+from std.testing import assert_raises, assert_equal, assert_true, TestSuite
 
 
 def test_deep_nesting() raises:

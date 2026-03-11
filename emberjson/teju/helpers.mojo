@@ -10,9 +10,7 @@ comptime LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
 
 @always_inline
 fn remove_trailing_zeros(var m: UInt64, var e: Int32) -> Fields:
-    # Fastest algorithm for removing trailing zeroes:
     # https://github.com/jk-jeon/rtz_benchmark
-    # Adapted from Mojo stdlib Dragonbox implementation.
 
     var r = _rotr(m * 28999941890838049, 8)
     var b = r < 184467440738

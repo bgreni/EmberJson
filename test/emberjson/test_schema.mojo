@@ -13,6 +13,7 @@ from emberjson.schema import (
     Transform,
     MultipleOf,
     ValidatorSet,
+    MergeValidatorSets,
 )
 from emberjson import deserialize, serialize, Value
 from std.testing import assert_equal, assert_raises, TestSuite
@@ -306,6 +307,27 @@ def test_validator_set() raises:
                 String, Size[String, 0, 10], OneOf[String, "astring", "bstring"]
             ]
         ](s)
+
+    comptime S1 = ValidatorSet[
+        Int64, Range[Int64, 1, 30], MultipleOf[Int64(4)]
+    ].validators
+    comptime S2 = ValidatorSet[Int64, MultipleOf[Int64(2)]].validators
+    comptime VSet = MergeValidatorSets[Int64, S1, S2]
+    var setv = deserialize[VSet]("8")
+    assert_equal(setv[], 8)
+
+    with assert_raises():
+        _ = deserialize[VSet]("10")
+
+    comptime VSet2 = MergeValidatorSets[
+        Int64, VSet.validators, Variadic.types[MultipleOf[Int64(3)]]
+    ]
+
+    with assert_raises():
+        _ = deserialize[VSet2]("8")
+
+    var setv2 = deserialize[VSet2]("12")
+    assert_equal(setv2[], 12)
 
 
 def test_compound_type() raises:

@@ -1,6 +1,6 @@
 from emberjson.utils import write
 from emberjson import Value
-from testing import assert_equal, assert_true, TestSuite
+from std.testing import assert_equal, assert_true, TestSuite
 
 
 def test_string_builder_string() raises:

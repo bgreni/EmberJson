@@ -2,14 +2,14 @@ from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
 from emberjson import parse, JSON
-from testing import (
+from std.testing import (
     assert_true,
     assert_equal,
     assert_raises,
     assert_not_equal,
     TestSuite,
 )
-from collections import Dict
+from std.collections import Dict
 
 
 def test_object() raises:
@@ -146,11 +146,12 @@ def test_iter() raises:
         assert_equal(el, values[i])
         i += 1
 
-    def test_dict_literal():
-        var o: Object = {"key": 1234, "key2": False}
 
-        assert_equal(o["key"], 1234)
-        assert_equal(o["key2"], False)
+def test_dict_literal() raises:
+    var o: Object = {"key": 1234, "key2": False}
+
+    assert_equal(o["key"], 1234)
+    assert_equal(o["key2"], False)
 
 
 def test_parse_simple_object() raises:

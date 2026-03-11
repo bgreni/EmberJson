@@ -1,7 +1,7 @@
 from emberjson.teju import write_float
-from testing import assert_equal, TestSuite
+from std.testing import assert_equal, TestSuite
 from std.format import Writer
-from utils.numerics import FPUtils
+from std.utils.numerics import FPUtils
 
 
 fn get_smallest_subnormal[dtype: DType]() -> Scalar[dtype]:

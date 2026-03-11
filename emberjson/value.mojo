@@ -443,7 +443,7 @@ struct Value(JsonValue, Sized):
         comptime if name.startswith("/"):
             comptime index = PointerIndex.try_from_string(name)
             comptime assert Bool(index), "Failed to parse path: " + name
-            return self.get(index.value())
+            return self.get(materialize[index.value()]())
         else:
             if self.is_object():
                 return UnsafePointer(to=self.object()[name]).unsafe_origin_cast[
@@ -459,7 +459,7 @@ struct Value(JsonValue, Sized):
         comptime if name.startswith("/"):
             comptime index = PointerIndex.try_from_string(name)
             comptime assert Bool(index), "Failed to parse path: " + name
-            self.get(index.value()) = value^
+            self.get(materialize[index.value()]()) = value^
         else:
             if self.is_object():
                 self.object()[name] = value^

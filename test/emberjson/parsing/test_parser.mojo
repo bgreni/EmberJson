@@ -1,6 +1,6 @@
 from emberjson._deserialize.parser import Parser, ParseOptions
 from emberjson import JSON, Null, Array, Object, parse
-from testing import assert_true, assert_equal, assert_raises, TestSuite
+from std.testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
 def test_parse() raises:
