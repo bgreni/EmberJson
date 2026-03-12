@@ -16,17 +16,17 @@ from emberjson._deserialize.reflection import _Base
 ##########################################################
 
 
-comptime MergeValidatorSets[
+comptime MergeAllOf[
     T: _Base,
     *Validators: Variadic.TypesOfTrait[Validator],
-] = ValidatorSet[
+] = AllOf[
     T,
     *Variadic.concat_types[*Validators],
 ]
 
 
 @fieldwise_init
-struct ValidatorSet[T: _Base, *validators: Validator](
+struct AllOf[T: _Base, *validators: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
     comptime Type = Self.T
@@ -116,8 +116,55 @@ comptime Size[T: Sized & _Base, min: Int, max: Int] = Validated[
 ]
 
 
+@always_inline
+def __has_unique_elements[
+    T: _Base & Iterable
+](value: T) -> Bool where conforms_to(
+    T.IteratorType[origin_of(value)], Copyable
+) and conforms_to(T.IteratorType[origin_of(value)].Element, Equatable):
+    for i, a in enumerate(value):
+        for j, b in enumerate(value):
+            if i != j and trait_downcast[Equatable](a) == trait_downcast[
+                Equatable
+            ](b):
+                return False
+    return True
+
+
+comptime Unique[
+    T: _Base & Iterable, err_msg: String = "Value is not unique"
+] = Validated[T, __has_unique_elements[T], err_msg]
+
+
+@always_inline
+def __is_eq[T: Equatable, //, value: T](a: T) -> Bool:
+    return a == materialize[value]()
+
+
+comptime Eq[T: _Base & Equatable, //, value: T] = Validated[
+    T, __is_eq[value], "Value is not equal"
+]
+
+
+def __expect_raises[T: _Base, validator: Validator](value: T) -> Bool:
+    comptime VType = validator.Type
+    comptime assert _type_is_eq[VType, T]()
+    try:
+        validator.validate(rebind[VType](value))
+        return False
+    except:
+        return True
+
+
+comptime Not[T: _Base, validator: Validator] = Validated[
+    T, __expect_raises[T, validator], "Expected validator to fail"
+]
+
+comptime Ne[T: _Base & Equatable, //, value: T] = Not[T, Eq[value]]
+
+
 @fieldwise_init
-struct OneOf[T: _Base & Equatable, *accepted: T](
+struct OneOf[T: _Base & Equatable, *accepted: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
     var value: Self.T
@@ -133,11 +180,98 @@ struct OneOf[T: _Base & Equatable, *accepted: T](
 
     @staticmethod
     def validate(value: Self.Type) raises:
+        var matched = False
         comptime for i in range(Variadic.size(Self.accepted)):
-            if value == materialize[Self.accepted[i]]():
-                return
+            var current_match = False
+            try:
+                comptime VType = Self.accepted[i]
+                comptime assert _type_is_eq[VType.Type, Self.T]()
+                VType.validate(rebind[VType.Type](value))
+                current_match = True
+            except:
+                pass
 
-        raise Error("Value not in options")
+            if current_match:
+                if matched:
+                    raise Error("Multiple validators matched")
+                matched = True
+
+        if not matched:
+            raise Error("Value didn't match any validators")
+
+    def write_json(self, mut writer: Some[Serializer]):
+        serialize(self.value, writer)
+
+    def __getitem__(self) -> ref[self.value] Self.T:
+        return self.value
+
+
+@fieldwise_init
+struct AnyOf[T: _Base & Equatable, *accepted: Validator](
+    JsonDeserializable, JsonSerializable, Validator
+):
+    var value: Self.T
+    comptime Type = Self.T
+
+    @staticmethod
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = {deserialize[Self.T](p)}
+
+        s.validate(s.value)
+
+    @staticmethod
+    def validate(value: Self.Type) raises:
+        var matched = False
+        comptime for i in range(Variadic.size(Self.accepted)):
+            try:
+                comptime VType = Self.accepted[i]
+                comptime assert _type_is_eq[VType.Type, Self.T]()
+                VType.validate(rebind[VType.Type](value))
+                matched = True
+                break
+            except:
+                pass
+        if not matched:
+            raise Error("Value not in options")
+
+    def write_json(self, mut writer: Some[Serializer]):
+        serialize(self.value, writer)
+
+    def __getitem__(self) -> ref[self.value] Self.T:
+        return self.value
+
+
+@fieldwise_init
+struct NoneOf[T: _Base & Equatable, *rejected: Validator](
+    JsonDeserializable, JsonSerializable, Validator
+):
+    var value: Self.T
+    comptime Type = Self.T
+
+    @staticmethod
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = {deserialize[Self.T](p)}
+
+        s.validate(s.value)
+
+    @staticmethod
+    def validate(value: Self.Type) raises:
+        comptime for i in range(Variadic.size(Self.rejected)):
+            var matched = False
+            try:
+                comptime VType = Self.rejected[i]
+                comptime assert _type_is_eq[VType.Type, Self.T]()
+                VType.validate(rebind[VType.Type](value))
+                matched = True
+            except:
+                pass
+
+            if matched:
+                raise Error("Value matched a rejected validator")
 
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)

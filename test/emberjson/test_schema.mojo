@@ -12,10 +12,17 @@ from emberjson.schema import (
     Default,
     Transform,
     MultipleOf,
-    ValidatorSet,
-    MergeValidatorSets,
+    AllOf,
+    MergeAllOf,
+    Unique,
+    Eq,
+    Not,
+    Ne,
+    AnyOf,
+    NoneOf,
 )
 from emberjson import deserialize, serialize, Value
+from std.collections import Set, InlineArray
 from std.testing import assert_equal, assert_raises, TestSuite
 
 
@@ -103,18 +110,27 @@ def test_size_list() raises:
 
 def test_one_of() raises:
     # String options
-    var o1 = deserialize[OneOf[String, "red", "green", "blue"]]('"red"')
+    var o1 = deserialize[OneOf[String, Eq["red"], Eq["green"], Eq["blue"]]](
+        '"red"'
+    )
     assert_equal(o1[], "red")
 
-    with assert_raises(contains="Value not in options"):
-        _ = deserialize[OneOf[String, "red", "green", "blue"]]('"yellow"')
+    with assert_raises(contains="Value didn't match any validators"):
+        _ = deserialize[OneOf[String, Eq["red"], Eq["green"], Eq["blue"]]](
+            '"yellow"'
+        )
 
     # Int options
-    var o2 = deserialize[OneOf[Int, 1, 2, 3]]("2")
+    var o2 = deserialize[OneOf[Int, Eq[1], Eq[2], Eq[3]]]("2")
     assert_equal(o2[], 2)
 
-    with assert_raises(contains="Value not in options"):
-        _ = deserialize[OneOf[Int, 1, 2, 3]]("4")
+    with assert_raises(contains="Value didn't match any validators"):
+        _ = deserialize[OneOf[Int, Eq[1], Eq[2], Eq[3]]]("4")
+
+    with assert_raises(contains="Multiple validators matched"):
+        _ = deserialize[
+            OneOf[Int64, Eq[Int64(1)], Eq[Int64(4)], MultipleOf[Int64(2)]]
+        ]("4")
 
 
 def test_secret() raises:
@@ -288,38 +304,42 @@ def test_multiple_of() raises:
     assert_equal(serialize(m3), "[4,6,8,9]")
 
 
-def test_validator_set() raises:
+def test_all_of() raises:
     var s = '"astring"'
     var v = deserialize[
-        ValidatorSet[
-            String, Size[String, 3, 7], OneOf[String, "astring", "bstring"]
+        AllOf[
+            String,
+            Size[String, 3, 7],
+            OneOf[String, Eq["astring"], Eq["bstring"]],
         ]
     ](s)
     assert_equal(v[], "astring")
 
     s = '"a"'
     with assert_raises(contains="Value out of size range"):
-        _ = deserialize[ValidatorSet[String, Size[String, 3, 5]]](s)
+        _ = deserialize[AllOf[String, Size[String, 3, 5]]](s)
 
     with assert_raises():
         _ = deserialize[
-            ValidatorSet[
-                String, Size[String, 0, 10], OneOf[String, "astring", "bstring"]
+            AllOf[
+                String,
+                Size[String, 0, 10],
+                OneOf[String, Eq["astring"], Eq["bstring"]],
             ]
         ](s)
 
-    comptime S1 = ValidatorSet[
+    comptime S1 = AllOf[
         Int64, Range[Int64, 1, 30], MultipleOf[Int64(4)]
     ].validators
-    comptime S2 = ValidatorSet[Int64, MultipleOf[Int64(2)]].validators
-    comptime VSet = MergeValidatorSets[Int64, S1, S2]
+    comptime S2 = AllOf[Int64, MultipleOf[Int64(2)]].validators
+    comptime VSet = MergeAllOf[Int64, S1, S2]
     var setv = deserialize[VSet]("8")
     assert_equal(setv[], 8)
 
     with assert_raises():
         _ = deserialize[VSet]("10")
 
-    comptime VSet2 = MergeValidatorSets[
+    comptime VSet2 = MergeAllOf[
         Int64, VSet.validators, Variadic.types[MultipleOf[Int64(3)]]
     ]
 
@@ -336,6 +356,98 @@ def test_compound_type() raises:
     var v = deserialize[SecretCoercedString](s)
     assert_equal(v[][], "123")
     assert_equal(serialize(v), '"********"')
+
+
+def test_unique() raises:
+    # Valid unique list
+    var u1 = deserialize[Unique[List[Int]]]("[1, 2, 3]")
+    assert_equal(len(u1[]), 3)
+    assert_equal(u1[][0], 1)
+    assert_equal(u1[][1], 2)
+    assert_equal(u1[][2], 3)
+
+    # Duplicate elements
+    with assert_raises(contains="Value is not unique"):
+        _ = deserialize[Unique[List[Int]]]("[1, 2, 1]")
+
+    # Unique strings
+    var u2 = deserialize[Unique[List[String]]]('["a", "b", "c"]')
+    assert_equal(len(u2[]), 3)
+
+    with assert_raises(contains="Value is not unique"):
+        _ = deserialize[Unique[List[String]]]('["a", "b", "a"]')
+
+    # Empty list is unique
+    var u3 = deserialize[Unique[List[Int]]]("[]")
+    assert_equal(len(u3[]), 0)
+
+    # Serialization
+    var l = List[Int]()
+    l.append(1)
+    l.append(2)
+    l.append(3)
+    var u4 = Unique[List[Int]](l^)
+    assert_equal(serialize(u4), "[1,2,3]")
+
+    # Set (should always be unique, even if JSON has duplicates)
+    var u5 = deserialize[Unique[Set[Int]]]("[1, 2, 1, 2, 3]")
+    assert_equal(len(u5[]), 3)
+
+    # InlineArray
+    var u6 = deserialize[Unique[InlineArray[Int, 3]]]("[1, 2, 3]")
+    assert_equal(len(u6[]), 3)
+
+    with assert_raises(contains="Value is not unique"):
+        _ = deserialize[Unique[InlineArray[Int, 3]]]("[1, 2, 1]")
+
+
+def test_not_ne() raises:
+    # Not
+    var n1 = deserialize[Not[Int, Range[Int, 0, 10]]]("15")
+    assert_equal(n1[], 15)
+
+    with assert_raises(contains="Expected validator to fail"):
+        _ = deserialize[Not[Int, Range[Int, 0, 10]]]("5")
+
+    # Ne
+    var n2 = deserialize[Ne[10]]("5")
+    assert_equal(n2[], 5)
+
+    with assert_raises(contains="Expected validator to fail"):
+        _ = deserialize[Ne[10]]("10")
+
+    # Ne string
+    var n3 = deserialize[Ne["forbidden"]]('"allowed"')
+    assert_equal(n3[], "allowed")
+
+    with assert_raises(contains="Expected validator to fail"):
+        _ = deserialize[Ne["forbidden"]]('"forbidden"')
+
+
+def test_any_of() raises:
+    # Multiple matches - AnyOf should pass (unlike OneOf)
+    var a1 = deserialize[
+        AnyOf[Int64, Eq[Int64(1)], Eq[Int64(4)], MultipleOf[Int64(2)]]
+    ]("4")
+    assert_equal(a1[], 4)
+
+    # Single match
+    var a2 = deserialize[AnyOf[Int, Eq[1], Eq[2], Eq[3]]]("2")
+    assert_equal(a2[], 2)
+
+    # No matches
+    with assert_raises(contains="Value not in options"):
+        _ = deserialize[AnyOf[Int, Eq[1], Eq[2], Eq[3]]]("5")
+
+
+def test_none_of() raises:
+    # Value doesn't match any rejected
+    var n1 = deserialize[NoneOf[Int, Eq[1], Eq[2], Range[Int, 10, 20]]]("5")
+    assert_equal(n1[], 5)
+
+    # Value matches one of rejected
+    with assert_raises():
+        _ = deserialize[NoneOf[Int, Eq[1], Eq[2], Range[Int, 0, 10]]]("5")
 
 
 def main() raises:
