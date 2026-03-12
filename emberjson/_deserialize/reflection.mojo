@@ -17,6 +17,7 @@ from std.sys.intrinsics import unlikely, _type_is_eq
 from emberjson.utils import to_string
 from ._parser_helper import NULL, copy_to_string
 from std.hashlib.hasher import Hasher
+from std.sys import bit_width_of
 
 
 comptime non_struct_error = "Cannot deserialize non-struct type"

@@ -217,6 +217,62 @@ def test_integer_edge_cases() raises:
     var p_umax = Parser(s_umax)
     assert_equal(p_umax.expect_unsigned_integer(), 18446744073709551615)
 
+    # 128-bit boundaries
+    # Int128 Max
+    var s_128_max = "170141183460469231731687303715884105727"
+    var p_128_max = Parser(s_128_max)
+    assert_equal(
+        p_128_max.expect_integer[DType.int128](), Scalar[DType.int128].MAX
+    )
+
+    # Int128 Min
+    var s_128_min = "-170141183460469231731687303715884105728"
+    var p_128_min = Parser(s_128_min)
+    assert_equal(
+        p_128_min.expect_integer[DType.int128](), Scalar[DType.int128].MIN
+    )
+
+    # UInt128 Max
+    var s_u128_max = "340282366920938463463374607431768211455"
+    var p_u128_max = Parser(s_u128_max)
+    assert_equal(
+        p_u128_max.expect_unsigned_integer[DType.uint128](),
+        Scalar[DType.uint128].MAX,
+    )
+
+    # 256-bit boundaries
+    # Int256 Max
+    var s_256_max = "57896044618658097711785492504343953926634992332820282019728792003956564819967"
+    var p_256_max = Parser(s_256_max)
+    assert_equal(
+        p_256_max.expect_integer[DType.int256](), Scalar[DType.int256].MAX
+    )
+
+    # Int256 Min
+    var s_256_min = "-57896044618658097711785492504343953926634992332820282019728792003956564819968"
+    var p_256_min = Parser(s_256_min)
+    assert_equal(
+        p_256_min.expect_integer[DType.int256](), Scalar[DType.int256].MIN
+    )
+
+    # UInt256 Max
+    var s_u256_max = "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    var p_u256_max = Parser(s_u256_max)
+    assert_equal(
+        p_u256_max.expect_unsigned_integer[DType.uint256](),
+        Scalar[DType.uint256].MAX,
+    )
+
+    # Test exact overflow checking correctness (just above Max for uint128)
+    var p_u128_over = Parser("340282366920938463463374607431768211456")
+    with assert_raises():
+        _ = p_u128_over.expect_unsigned_integer[DType.uint128]()
+
+    # Test exact underflow checking correctness (just below Min for int128)
+    var p_128_under = Parser("-170141183460469231731687303715884105729")
+    with assert_raises():
+        _ = p_128_under.expect_integer[DType.int128]()
+
 
 def test_float_edge_cases() raises:
     # Negative zero
@@ -319,7 +375,6 @@ def test_expect_object_bytes() raises:
     var s = String('{"a": 1, "b": {"c": 2}}')
     var p = Parser(s)
     var span = p.expect_object_bytes()
-    var start = span.unsafe_ptr()
     var span_len = len(span)
     # Correct length is full string
     assert_equal(span_len, len(s))

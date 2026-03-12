@@ -54,15 +54,15 @@ def _deserialize_bytes[
     return _deserialize_impl[T](p)
 
 
-comptime ReadBytesdef[origin: ImmutOrigin] = def(
+comptime ReadBytesFn[origin: ImmutOrigin] = def(
     mut Parser[origin]
 ) raises -> Span[Byte, origin]
-comptime Parsedef[T: _Base, origin: ImmutOrigin] = def(
+comptime ParseFn[T: _Base, origin: ImmutOrigin] = def(
     Span[Byte, origin]
 ) raises -> T
 
 
-def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesdef[origin]:
+def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:
     comptime if conforms_to(T, JsonDeserializable) and downcast[
         T, JsonDeserializable
     ].deserialize_as_array():
@@ -75,8 +75,8 @@ def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesdef[origin]:
 struct Lazy[
     T: _Base,
     origin: ImmutOrigin,
-    parse_value: ReadBytesdef[origin] = __pick_byte_expect[T, origin](),
-    extract_value: Parsedef[T, origin] = _deserialize_bytes[T, origin],
+    parse_value: ReadBytesFn[origin] = __pick_byte_expect[T, origin](),
+    extract_value: ParseFn[T, origin] = _deserialize_bytes[T, origin],
 ](Hashable, JsonDeserializable, JsonSerializable, TrivialRegisterPassable):
     var _data: Span[Byte, Self.origin]
 

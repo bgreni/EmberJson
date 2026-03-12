@@ -40,6 +40,8 @@ from ._parser_helper import (
 )
 from std.memory.unsafe import bitcast
 from std.bit import count_leading_zeros
+from std.builtin.dtype import _uint_type_of_width
+from std.sys.info import bit_width_of
 from .slow_float_parse import from_chars_slow
 from std.sys.compile import is_run_in_comptime_interpreter
 from .tables import (
@@ -112,6 +114,7 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
 
     Fields:
         ignore_unicode: Do not decode escaped unicode characters for a slight increase in performance.
+        strict_mode: Flags to control strictness of parsing.
     """
 
     var ignore_unicode: Bool
@@ -127,8 +130,8 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
         self.strict_mode = strict_mode
 
 
-comptime IntegerParseResult[origin: ImmutOrigin] = Tuple[
-    UInt64, Bool, CheckedPointer[origin], Int, CheckedPointer[origin]
+comptime IntegerParseResult[origin: ImmutOrigin, acc_type: DType] = Tuple[
+    Scalar[acc_type], Bool, CheckedPointer[origin], Int, CheckedPointer[origin]
 ]
 
 
@@ -673,16 +676,24 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
 
     @always_inline
-    def _parse_integer_common(
-        mut self,
-    ) raises -> IntegerParseResult[Self.origin]:
+    def _parse_integer_common[
+        acc_type: DType
+    ](mut self,) raises -> IntegerParseResult[Self.origin, acc_type]:
         var neg = self.data[] == `-`
         var p = self.data + Int(neg or self.data[] == `+`)
 
         var start_digits = p
-        var i: UInt64 = 0
+        var i = Scalar[acc_type](0)
 
-        while parse_digit(p, i):
+        comptime MAX_VAL = Scalar[acc_type].MAX // 10
+        comptime MAX_REM = Scalar[acc_type].MAX % 10
+
+        while p.dist() > 0 and isdigit(p[]):
+            var dig = (p[] - `0`).cast[acc_type]()
+            if unlikely(i > MAX_VAL or (i == MAX_VAL and dig > MAX_REM)):
+                raise Error("integer overflow")
+            else:
+                i = i * 10 + dig
             p += 1
 
         var digit_count = ptr_dist(start_digits.p, p.p)
@@ -692,7 +703,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         ):
             raise Error("Invalid number")
 
-        if p.dist() > 0 and (p[] == `.` or is_exp_char(p[])):
+        if unlikely(p.dist() > 0 and (p[] == `.` or is_exp_char(p[]))):
             raise Error("Expected integer, found float")
 
         return i, neg, p, digit_count, start_digits
@@ -704,42 +715,21 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             type.is_signed()
         ), "Expected signed integer, found unsigned type: " + String(type)
 
-        var i, neg, p, digit_count, start_digits = self._parse_integer_common()
-
-        var longest_digit_count = select(neg, 19, 20)
-        comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
-        if unlikely(digit_count > longest_digit_count):
-            raise Error("integer overflow")
-        if unlikely(digit_count == longest_digit_count):
-            if neg:
-                if unlikely(i > SIGNED_OVERFLOW + 1):
-                    raise Error("integer overflow")
-
-                var res = Int64(~i + 1)
-
-                comptime if type != DType.int64:
-                    if res < Scalar[type].MIN.cast[DType.int64]():
-                        raise Error("integer overflow")
-                self.data = p
-                return res.cast[type]()
-            elif unlikely(start_digits[0] != `1` or i <= SIGNED_OVERFLOW):
-                raise Error("integer overflow")
+        comptime acc_type = _uint_type_of_width[bit_width_of[type]()]()
+        var i, neg, p, _, _ = self._parse_integer_common[acc_type]()
 
         self.data = p
-        if i > SIGNED_OVERFLOW:
-            raise Error("integer overflow")
 
-        var res = select(neg, Int64(~i + 1), Int64(i))
-
-        comptime if type != DType.int64:
-            comptime MIN = Int64(Scalar[type].MIN)
-            comptime MAX = Int64(Scalar[type].MAX)
-
-            if unlikely(res < MIN or res > MAX):
+        if neg:
+            comptime MIN_ABS = (~Scalar[type].MIN.cast[acc_type]()) + 1
+            if unlikely(i > MIN_ABS):
                 raise Error("integer overflow")
-            return res.cast[type]()
-
-        return res.cast[type]()
+            return (~i + 1).cast[type]()
+        else:
+            comptime MAX_ABS = Scalar[type].MAX.cast[acc_type]()
+            if unlikely(i > MAX_ABS):
+                raise Error("integer overflow")
+            return i.cast[type]()
 
     def expect_unsigned_integer[
         type: DType = DType.uint64
@@ -751,29 +741,13 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if unlikely(self.data[] == `-`):
             raise Error("Expected unsigned integer, found negative")
 
-        var i, neg, p, digit_count, start_digits = self._parse_integer_common()
+        comptime acc_type = _uint_type_of_width[bit_width_of[type]()]()
+        var i, neg, p, _, _ = self._parse_integer_common[acc_type]()
 
         if unlikely(neg):
             raise Error("Expected unsigned integer, found negative")
 
-        var longest_digit_count = 20
-        comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
-
-        if unlikely(digit_count > longest_digit_count):
-            raise Error("integer overflow")
-        if unlikely(digit_count == longest_digit_count):
-            if unlikely(start_digits[0] != `1` or i <= SIGNED_OVERFLOW):
-                raise Error("integer overflow")
-
         self.data = p
-
-        comptime if type != DType.uint64:
-            comptime MAX = UInt64(Scalar[type].MAX)
-
-            if unlikely(i > MAX):
-                raise Error("integer overflow")
-            return i.cast[type]()
-
         return i.cast[type]()
 
     def expect_float[

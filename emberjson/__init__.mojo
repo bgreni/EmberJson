@@ -98,4 +98,4 @@ def to_string[*, pretty: Bool = False](out s: String, j: JSON):
     comptime if pretty:
         s = write_pretty(j)
     else:
-        s = write(j)
+        s = serialize(j)

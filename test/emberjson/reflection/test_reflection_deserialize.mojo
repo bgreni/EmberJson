@@ -271,5 +271,22 @@ def test_missing_optional() raises:
     assert_false(o.b)
 
 
+struct LongInts(Movable):
+    var i128: Scalar[DType.int128]
+    var i256: Scalar[DType.int256]
+    var u128: Scalar[DType.uint128]
+    var u256: Scalar[DType.uint256]
+
+
+def test_long_ints() raises:
+    var s = '{"i128": -170141183460469231731687303715884105728, "i256": 57896044618658097711785492504343953926634992332820282019728792003956564819967, "u128": 340282366920938463463374607431768211455, "u256": 115792089237316195423570985008687907853269984665640564039457584007913129639935}'
+    var vals = deserialize[LongInts](s)
+
+    assert_equal(vals.i128, Scalar[DType.int128].MIN)
+    assert_equal(vals.i256, Scalar[DType.int256].MAX)
+    assert_equal(vals.u128, Scalar[DType.uint128].MAX)
+    assert_equal(vals.u256, Scalar[DType.uint256].MAX)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

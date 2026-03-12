@@ -80,6 +80,18 @@ def test_float16() raises:
     write_float[DType.float16](largest, sw)
     assert_equal(sw, "6.1e-05")
 
+    sw = String()
+    write_float[DType.float16](Float16(10.0), sw)
+    assert_equal(sw, "10.0")
+
+    sw = String()
+    write_float[DType.float16](Float16(-10.0), sw)
+    assert_equal(sw, "-10.0")
+
+    sw = String()
+    write_float[DType.float16](Float16(1.0), sw)
+    assert_equal(sw, "1.0")
+
 
 def test_float32() raises:
     var sw = String()
@@ -157,6 +169,18 @@ def test_float32() raises:
     write_float[DType.float32](largest, sw)
     assert_equal(sw, "1.1754942e-38")
 
+    sw = String()
+    write_float[DType.float32](Float32(10.0), sw)
+    assert_equal(sw, "10.0")
+
+    sw = String()
+    write_float[DType.float32](Float32(-10.0), sw)
+    assert_equal(sw, "-10.0")
+
+    sw = String()
+    write_float[DType.float32](Float32(1.0), sw)
+    assert_equal(sw, "1.0")
+
 
 def test_float64() raises:
     var sw = String()
@@ -215,6 +239,42 @@ def test_float64() raises:
     sw = String()
     write_float[DType.float64](Float64(2.2250738585072014e-308), sw)
     assert_equal(sw, "2.2250738585072014e-308")
+
+    sw = String()
+    write_float[DType.float64](Float64(1.0), sw)
+    assert_equal(sw, "1.0")
+
+    sw = String()
+    write_float[DType.float64](Float64(-1.0), sw)
+    assert_equal(sw, "-1.0")
+
+    sw = String()
+    write_float[DType.float64](Float64(10.0), sw)
+    assert_equal(sw, "10.0")
+
+    sw = String()
+    write_float[DType.float64](Float64(-10.0), sw)
+    assert_equal(sw, "-10.0")
+
+    sw = String()
+    write_float[DType.float64](Float64(0.0001), sw)
+    assert_equal(sw, "0.0001")
+
+    sw = String()
+    write_float[DType.float64](Float64(0.00001), sw)
+    assert_equal(sw, "1e-05")
+
+    sw = String()
+    write_float[DType.float64](Float64(1e15), sw)
+    assert_equal(sw, "1000000000000000.0")
+
+    sw = String()
+    write_float[DType.float64](Float64(1e16), sw)
+    assert_equal(sw, "1.0e16")
+
+    sw = String()
+    write_float[DType.float64](Float64(3.14), sw)
+    assert_equal(sw, "3.14")
 
 
 def main() raises:
