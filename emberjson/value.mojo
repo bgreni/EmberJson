@@ -165,7 +165,7 @@ struct Value(JsonValue, Sized):
     def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
-        s = p.parse()
+        s = p.parse_value()
 
     @implicit
     @always_inline
@@ -189,14 +189,16 @@ struct Value(JsonValue, Sized):
         __dict_literal__: (),
     ):
         debug_assert(len(keys) == len(values))
-        self = Object()
+        var obj = Object()
         for i in range(len(keys)):
-            self.object()[keys[i]] = values[i].copy()
+            obj[keys[i]] = values[i].copy()
+        self._data = obj^
 
     def __init__(out self, var *values: Value, __list_literal__: ()):
-        self = Array()
+        var arr = Array()
         for val in values:
-            self.array().append(val.copy())
+            arr.append(val.copy())
+        self._data = arr^
 
     def __eq__(self, other: Self) -> Bool:
         if (self.is_int() or self.is_uint()) and (
@@ -216,17 +218,17 @@ struct Value(JsonValue, Sized):
             != other._data._storage.get_discriminant()
         ):
             return False
-        elif self.isa[Float64]() and other.isa[Float64]():
+        elif self.isa[Float64]():
             return self.float() == other.float()
-        elif self.isa[String]() and other.isa[String]():
+        elif self.isa[String]():
             return self.string() == other.string()
-        elif self.isa[Bool]() and other.isa[Bool]():
+        elif self.isa[Bool]():
             return self.bool() == other.bool()
-        elif self.isa[Object]() and other.isa[Object]():
+        elif self.isa[Object]():
             return self.object() == other.object()
-        elif self.isa[Array]() and other.isa[Array]():
+        elif self.isa[Array]():
             return self.array() == other.array()
-        elif self.isa[Null]() and other.isa[Null]():
+        elif self.isa[Null]():
             return True
         abort("unreachable: Value.__eq__")
 

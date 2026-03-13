@@ -1,6 +1,6 @@
 from emberjson.teju import teju, fp_to_binary
 from std.builtin._format_float import _to_decimal
-from utils.numerics import FPUtils
+from std.utils.numerics import FPUtils
 from std.benchmark import (
     Bench,
     BenchId,
@@ -10,19 +10,19 @@ from std.benchmark import (
     BenchConfig,
 )
 from std.collections import List, Dict
-from python import Python
+from std.python import Python
 
 comptime BenchResults = Dict[String, Float64]
+comptime iters = 1_000_000
 
 
 @parameter
 def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
-    var bin = fp_to_binary(val)
-
     @always_inline
     @parameter
     def do():
-        for _ in range(1_000_000):
+        for _ in range(iters):
+            var bin = fp_to_binary(val)
             var dec = teju[dtype](bin)
             keep(dec)
 
@@ -38,7 +38,7 @@ def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
     def do():
-        for _ in range(1_000_000):
+        for _ in range(iters):
             var sig = FPUtils.get_mantissa_uint(casted)
             var exp = FPUtils.get_exponent_biased(casted)
             _to_decimal[casted.dtype](sig, exp)

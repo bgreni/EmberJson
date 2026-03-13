@@ -9,7 +9,7 @@ from std.benchmark import (
 )
 from std.format import Writer
 from std.collections import List, Dict
-from python import Python
+from std.python import Python
 
 comptime BenchResults = Dict[String, Float64]
 
