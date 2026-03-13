@@ -46,7 +46,7 @@ from .schema import (
     Default,
     Transform,
     MultipleOf,
-    ValidatorSet,
+    AllOf,
 )
 
 

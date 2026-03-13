@@ -469,10 +469,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var neg_power = power < 0
 
         pow = lut[POWER_OF_TEN](Int(abs(power)))
-
-        d = d / pow if neg_power else d * pow
-        if negative:
-            d = -d
+        d = select(neg_power, d / pow, d * pow)
+        d = select(negative, -d, d)
 
     @always_inline
     def compute_float64(
