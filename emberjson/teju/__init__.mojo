@@ -82,7 +82,11 @@ def write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
         writer.write(d)
         return
 
-    comptime buf_size = _get_buffer_size[dtype]()
+    if isinf(d) or isnan(d):
+        writer.write("null")
+        return
+
+    comptime buf_size = 64
     var buffer = StackArray[Byte, buf_size](uninitialized=True)
     var buf_idx = 0
 
@@ -165,9 +169,8 @@ def write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
             buf_idx += 1
 
         if abs_e < 10:
-            buffer.unsafe_get(buf_idx) = `0`
-            buffer.unsafe_get(buf_idx + 1) = Byte(abs_e) + `0`
-            buf_idx += 2
+            buffer.unsafe_get(buf_idx) = Byte(abs_e) + `0`
+            buf_idx += 1
         elif abs_e < 100:
             var pair = lut[DIGIT_PAIRS](abs_e)
             buffer.unsafe_get(buf_idx) = pair[0]
@@ -276,7 +279,7 @@ def teju[dtype: DType](binary: Fields, out dec: Fields):
         if (a + b) & 1 == 1:
             return Fields((a + b) // 2 + 1, f)
 
-        var m_c = 4 * m << UInt64(r)
+        var m_c = UInt64(4) * m << UInt64(r)
         var c_2 = mshift(m_c, u, l)
         var c = c_2 // 2
 

@@ -2,6 +2,7 @@ from emberjson.teju import write_float
 from std.testing import assert_equal, TestSuite
 from std.format import Writer
 from std.utils.numerics import FPUtils
+from std.utils.numerics import inf, nan
 
 
 def get_smallest_subnormal[dtype: DType]() -> Scalar[dtype]:
@@ -46,7 +47,7 @@ def test_float16() raises:
 
     sw = String()
     write_float[DType.float16](Float16(0.000061035), sw)
-    assert_equal(sw, "6.104e-05")
+    assert_equal(sw, "6.104e-5")
 
     # More f16 cases
     sw = String()
@@ -59,7 +60,7 @@ def test_float16() raises:
 
     sw = String()
     write_float[DType.float16](Float16(0.0000999), sw)
-    assert_equal(sw, "9.99e-05")
+    assert_equal(sw, "9.99e-5")
 
     sw = String()
     write_float[DType.float16](Float16(0.3), sw)
@@ -73,12 +74,12 @@ def test_float16() raises:
     var smallest = get_smallest_subnormal[DType.float16]()
     sw = String()
     write_float[DType.float16](smallest, sw)
-    assert_equal(sw, "6e-08")
+    assert_equal(sw, "6e-8")
 
     var largest = get_largest_subnormal[DType.float16]()
     sw = String()
     write_float[DType.float16](largest, sw)
-    assert_equal(sw, "6.1e-05")
+    assert_equal(sw, "6.1e-5")
 
     sw = String()
     write_float[DType.float16](Float16(10.0), sw)
@@ -139,7 +140,7 @@ def test_float32() raises:
 
     sw = String()
     write_float[DType.float32](Float32(0.00009999), sw)
-    assert_equal(sw, "9.999e-05")
+    assert_equal(sw, "9.999e-5")
 
     sw = String()
     write_float[DType.float32](Float32(1e15), sw)
@@ -262,7 +263,7 @@ def test_float64() raises:
 
     sw = String()
     write_float[DType.float64](Float64(0.00001), sw)
-    assert_equal(sw, "1e-05")
+    assert_equal(sw, "1e-5")
 
     sw = String()
     write_float[DType.float64](Float64(1e15), sw)
@@ -275,6 +276,20 @@ def test_float64() raises:
     sw = String()
     write_float[DType.float64](Float64(3.14), sw)
     assert_equal(sw, "3.14")
+
+
+def test_special_values() raises:
+    var sw = String()
+    write_float[DType.float64](inf[DType.float64](), sw)
+    assert_equal(sw, "null")
+
+    sw = String()
+    write_float[DType.float64](-inf[DType.float64](), sw)
+    assert_equal(sw, "null")
+
+    sw = String()
+    write_float[DType.float64](nan[DType.float64](), sw)
+    assert_equal(sw, "null")
 
 
 def main() raises:
