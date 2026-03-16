@@ -16,7 +16,7 @@ struct JsonStringStrategy(Movable, Strategy):
     comptime Value = String
 
     def value(self, mut rng: Rng) raises -> Self.Value:
-        var j: JSON
+        var j: Value
 
         if coin_flip(rng):
             j = self.gen_object(rng, 0)
@@ -92,7 +92,7 @@ def main() raises:
         @parameter
         def test_parse(s: String) raises:
             var rng = Rng(seed=Int(perf_counter_ns()))
-            var j: JSON = {}
+            var j: Value = {}
             if iters % 4 == 0:
                 var start = rng.rand_int(min=0, max=len(s))
                 var end = rng.rand_int(min=start, max=len(s))

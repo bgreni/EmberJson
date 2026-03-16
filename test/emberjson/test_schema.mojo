@@ -20,6 +20,9 @@ from emberjson.schema import (
     Ne,
     AnyOf,
     NoneOf,
+    MergeAnyOf,
+    MergeOneOf,
+    MergeNoneOf,
 )
 from emberjson import deserialize, serialize, Value
 from std.collections import Set, InlineArray
@@ -367,14 +370,14 @@ def test_unique() raises:
     assert_equal(u1[][2], 3)
 
     # Duplicate elements
-    with assert_raises(contains="Value is not unique"):
+    with assert_raises(contains="Values are not unique"):
         _ = deserialize[Unique[List[Int]]]("[1, 2, 1]")
 
     # Unique strings
     var u2 = deserialize[Unique[List[String]]]('["a", "b", "c"]')
     assert_equal(len(u2[]), 3)
 
-    with assert_raises(contains="Value is not unique"):
+    with assert_raises(contains="Values are not unique"):
         _ = deserialize[Unique[List[String]]]('["a", "b", "a"]')
 
     # Empty list is unique
@@ -397,7 +400,7 @@ def test_unique() raises:
     var u6 = deserialize[Unique[InlineArray[Int, 3]]]("[1, 2, 3]")
     assert_equal(len(u6[]), 3)
 
-    with assert_raises(contains="Value is not unique"):
+    with assert_raises(contains="Values are not unique"):
         _ = deserialize[Unique[InlineArray[Int, 3]]]("[1, 2, 1]")
 
 
@@ -448,6 +451,57 @@ def test_none_of() raises:
     # Value matches one of rejected
     with assert_raises():
         _ = deserialize[NoneOf[Int, Eq[1], Eq[2], Range[Int, 0, 10]]]("5")
+
+
+def test_merge_any_of() raises:
+    comptime S1 = AnyOf[Int64, Range[Int64, 0, 10]].accepted
+    comptime S2 = AnyOf[Int64, MultipleOf[Int64(2)]].accepted
+    comptime VSet = MergeAnyOf[Int64, S1, S2]
+
+    var v1 = deserialize[VSet]("4")  # matches both
+    assert_equal(v1[], 4)
+
+    var v2 = deserialize[VSet]("7")  # matches range only
+    assert_equal(v2[], 7)
+
+    var v3 = deserialize[VSet]("12")  # matches multiple of only
+    assert_equal(v3[], 12)
+
+    with assert_raises(contains="Value not in options"):
+        _ = deserialize[VSet]("11")
+
+
+def test_merge_one_of() raises:
+    comptime S1 = OneOf[Int64, MultipleOf[Int64(2)]].accepted
+    comptime S2 = OneOf[Int64, MultipleOf[Int64(3)]].accepted
+    comptime VSet = MergeOneOf[Int64, S1, S2]
+
+    var v1 = deserialize[VSet]("2")  # matches multiple of 2 only
+    assert_equal(v1[], 2)
+
+    var v2 = deserialize[VSet]("3")  # matches multiple of 3 only
+    assert_equal(v2[], 3)
+
+    with assert_raises(contains="Multiple validators matched"):
+        _ = deserialize[VSet]("6")  # matches both
+
+    with assert_raises(contains="Value didn't match any validators"):
+        _ = deserialize[VSet]("5")  # matches neither
+
+
+def test_merge_none_of() raises:
+    comptime S1 = NoneOf[Int64, Range[Int64, 0, 5]].rejected
+    comptime S2 = NoneOf[Int64, Range[Int64, 10, 15]].rejected
+    comptime VSet = MergeNoneOf[Int64, S1, S2]
+
+    var v1 = deserialize[VSet]("7")  # matches none
+    assert_equal(v1[], 7)
+
+    with assert_raises(contains="Value matched a rejected validator"):
+        _ = deserialize[VSet]("3")  # matches first range
+
+    with assert_raises(contains="Value matched a rejected validator"):
+        _ = deserialize[VSet]("12")  # matches second range
 
 
 def main() raises:

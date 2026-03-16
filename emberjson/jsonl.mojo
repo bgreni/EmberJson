@@ -1,11 +1,11 @@
 from std.pathlib import Path
-from .json import JSON
 from std.memory import ArcPointer, memset, Span, memcpy
 from .constants import `\n`, `\r`
 from std.os import PathLike
 from .simd import SIMD8_WIDTH
 from std.bit import count_leading_zeros
 from std.memory.unsafe import pack_bits
+from emberjson import Value
 
 
 struct _ReadBuffer(Copyable, Movable, Sized, Writable):
@@ -51,18 +51,18 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
 
 
 struct JSONLinesIter(Iterator):
-    comptime Element = JSON
+    comptime Element = Value
 
     var f: FileHandle
-    var next_object: JSON
+    var next_object: Value
     var read_buf: _ReadBuffer
 
     def __init__(out self, var file: FileHandle):
         self.f = file^
-        self.next_object = JSON()
+        self.next_object = Value()
         self.read_buf = _ReadBuffer()
 
-    def __next__(mut self, out j: JSON) raises StopIteration:
+    def __next__(mut self, out j: Value) raises StopIteration:
         var line: List[Byte]
         try:
             line = self._read_until_newline()
@@ -70,7 +70,7 @@ struct JSONLinesIter(Iterator):
             raise StopIteration()
 
         try:
-            j = JSON(parse_bytes=Span(ptr=line.unsafe_ptr(), length=len(line)))
+            j = Value(parse_bytes=Span(ptr=line.unsafe_ptr(), length=len(line)))
         except e:
             raise StopIteration()
 
@@ -141,7 +141,7 @@ def read_lines(p: Some[PathLike]) raises -> JSONLinesIter:
     return JSONLinesIter(open(p, "r"))
 
 
-def write_lines(p: Path, lines: List[JSON]) raises:
+def write_lines(p: Path, lines: List[Value]) raises:
     with open(p, "w") as f:
         for i in range(len(lines)):
             f.write(lines[i])

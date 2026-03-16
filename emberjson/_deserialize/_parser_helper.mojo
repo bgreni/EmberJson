@@ -1,4 +1,4 @@
-from emberjson.utils import BytePtr, CheckedPointer, select
+from emberjson.utils import BytePtr, CheckedPointer, select, ByteVec
 from std.memory import UnsafePointer, memcpy
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
 from std.builtin.dtype import _uint_type_of_width
@@ -19,8 +19,11 @@ from emberjson.constants import (
     `e`,
     `E`,
     `.`,
+    `a`,
+    `A`,
     `b`,
     `f`,
+    `F`,
     `n`,
     `r`,
     `t`,
@@ -146,8 +149,19 @@ struct StringBlock(TrivialRegisterPassable):
 
 
 @always_inline
-def hex_to_u32(p: BytePtr) -> UInt32:
-    var v = p.load[width=4]().cast[DType.uint32]()
+def is_hex_digits(c: ByteVec[4]) -> Bool:
+    return (
+        (c.ge(`0`) & c.le(`9`)) | (c.ge(`a`) & c.le(`f`)) | (c.ge(`A`) & c.le(`F`))
+    ).reduce_and()
+
+@always_inline
+def hex_to_u32(p: BytePtr) raises -> UInt32:
+    var bytes = p.load[width=4]()
+
+    if unlikely(not is_hex_digits(bytes)):
+        raise Error("Invalid hex digit encountered")
+
+    var v = bytes.cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
     comptime shifts = SIMD[DType.uint32, 4](12, 8, 4, 0)
     v <<= shifts
@@ -187,7 +201,7 @@ def handle_unicode_codepoint(
         p += 2
         var c2 = hex_to_u32(p)
 
-        if unlikely(Bool((c1 | c2) >> 16)):
+        if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
             raise Error("Bad unicode codepoint")
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000

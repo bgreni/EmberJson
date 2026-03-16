@@ -18,7 +18,11 @@ def parse_int(s: String) raises -> Int:
         var b = bytes[i]
         if b < 48 or b > 57:
             raise Error("Invalid integer: " + s)
+        old = res
         res = res * 10 + Int(b - 48)
+
+        if res < old:
+            raise Error("Integer overflow parsing JSON pointer ref")
     return res
 
 

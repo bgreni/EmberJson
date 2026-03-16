@@ -10,7 +10,6 @@ from .traits import JsonValue, PrettyPrintable
 from std.sys import size_of
 from std.sys.intrinsics import unlikely
 from std.sys.intrinsics import _type_is_eq
-from std.sys.compile import is_run_in_comptime_interpreter
 from std.utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
 from std.builtin.globals import global_constant

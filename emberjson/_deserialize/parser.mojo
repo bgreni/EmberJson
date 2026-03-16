@@ -43,7 +43,6 @@ from std.bit import count_leading_zeros
 from std.builtin.dtype import _uint_type_of_width
 from std.sys.info import bit_width_of
 from .slow_float_parse import from_chars_slow
-from std.sys.compile import is_run_in_comptime_interpreter
 from .tables import (
     POWER_OF_TEN,
     full_multiplication,
@@ -293,7 +292,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def parse_true(mut self) raises -> Bool:
-        if unlikely(self.bytes_remaining() < 3):
+        if unlikely(self.bytes_remaining() < 4):
             raise Error('Encountered EOF when expecting "true"')
         # Safety: Safe because we checked the amount of bytes remaining
         var w = self.data.p.bitcast[UInt32]()[]
@@ -305,7 +304,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     @always_inline
     def parse_false(mut self) raises -> Bool:
         self.data += 1
-        if unlikely(self.bytes_remaining() < 3):
+        if unlikely(self.bytes_remaining() < 4):
             raise Error('Encountered EOF when expecting "false"')
         # Safety: Safe because we checked the amount of bytes remaining
         var w = self.data.p.bitcast[UInt32]()[0]
@@ -361,7 +360,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 return copy_to_string[Self.options.ignore_unicode](
                     start.p, self.data.p, found_escaped
                 )
-            elif unlikely(self.data.p > self.data.end):
+            elif unlikely(self.data.p >= self.data.end):
                 # We got EOF before finding the end quote, so obviously this
                 # input is malformed
                 raise Error("Unexpected EOF")
@@ -430,7 +429,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var start = self.data
         # compile time interpreter is incompatible with the SIMD accelerated
         # path, so fallback to the serial implementation
-        if self.can_load_chunk() and not is_run_in_comptime_interpreter():
+        if self.can_load_chunk() and not __is_run_in_comptime_interpreter:
             s = self.find(start)
             self.data += 1
         else:
@@ -444,7 +443,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         # compile time interpreter is incompatible with the SIMD accelerated
         # path, so fallback to the serial implementation
-        while self.can_load_chunk() and not is_run_in_comptime_interpreter():
+        while self.can_load_chunk() and not __is_run_in_comptime_interpreter:
             var chunk = self.load_chunk()
             var nonspace = get_non_space_bits(chunk)
             if nonspace != 0:
@@ -565,7 +564,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     ) raises:
         if unlikely(
             digit_count > 19
-            and significant_digits(self.data.p, digit_count) > 19
+            and significant_digits(start_digits.p, digit_count) > 19
         ):
             return from_chars_slow(self.data)
 
@@ -578,8 +577,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def parse_number(mut self, out v: Value) raises:
+
+        if self.data[] == `+`:
+            raise Error('Expected digit of "-", found "+"')
+
         var neg = self.data[] == `-`
-        var p = self.data + Int(neg or self.data[] == `+`)
+        var p = self.data + Int(neg)
 
         var start_digits = p
         var i: UInt64 = 0
@@ -706,47 +709,30 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         return i, neg, p, digit_count, start_digits
 
-    def expect_integer[
-        type: DType = DType.int64
-    ](mut self) raises -> Scalar[type]:
-        comptime assert (
-            type.is_signed()
-        ), "Expected signed integer, found unsigned type: " + String(type)
-
+    def expect_int[type: DType = DType.int64](mut self) raises -> Scalar[type]:
         comptime acc_type = _uint_type_of_width[bit_width_of[type]()]()
+
         var i, neg, p, _, _ = self._parse_integer_common[acc_type]()
 
-        self.data = p
+        comptime if type.is_signed():
+            self.data = p
 
-        if neg:
-            comptime MIN_ABS = (~Scalar[type].MIN.cast[acc_type]()) + 1
-            if unlikely(i > MIN_ABS):
-                raise Error("integer overflow")
-            return (~i + 1).cast[type]()
+            if neg:
+                comptime MIN_ABS = (~Scalar[type].MIN.cast[acc_type]()) + 1
+                if unlikely(i > MIN_ABS):
+                    raise Error("integer overflow")
+                return (~i + 1).cast[type]()
+            else:
+                comptime MAX_ABS = Scalar[type].MAX.cast[acc_type]()
+                if unlikely(i > MAX_ABS):
+                    raise Error("integer overflow")
+                return i.cast[type]()
         else:
-            comptime MAX_ABS = Scalar[type].MAX.cast[acc_type]()
-            if unlikely(i > MAX_ABS):
-                raise Error("integer overflow")
+            if unlikely(neg):
+                raise Error("Expected unsigned integer, found negative")
+
+            self.data = p
             return i.cast[type]()
-
-    def expect_unsigned_integer[
-        type: DType = DType.uint64
-    ](mut self) raises -> Scalar[type]:
-        comptime assert (
-            type.is_unsigned()
-        ), "Expected unsigned integer, found signed type: " + String(type)
-
-        if unlikely(self.data[] == `-`):
-            raise Error("Expected unsigned integer, found negative")
-
-        comptime acc_type = _uint_type_of_width[bit_width_of[type]()]()
-        var i, neg, p, _, _ = self._parse_integer_common[acc_type]()
-
-        if unlikely(neg):
-            raise Error("Expected unsigned integer, found negative")
-
-        self.data = p
-        return i.cast[type]()
 
     def expect_float[
         type: DType = DType.float64
@@ -833,7 +819,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         raise Error("Expected Bool")
 
     def expect_null(mut self) raises:
-        if unlikely(self.bytes_remaining() < 3):
+        if unlikely(self.bytes_remaining() < 4):
             raise Error("Encountered EOF when expecting 'null'")
         # Safety: Safe because we checked the amount of bytes remaining
         var w = self.data.p.bitcast[UInt32]()[0]
@@ -936,7 +922,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         while self.has_more():
             while (
-                self.can_load_chunk() and not is_run_in_comptime_interpreter()
+                self.can_load_chunk() and not __is_run_in_comptime_interpreter
             ):
                 var chunk = self.load_chunk()
                 var relevant = chunk.eq(`"`) | chunk.eq(open) | chunk.eq(close)
@@ -992,12 +978,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         raise Error("Unexpected EOF while parsing structure")
 
-    def expect_integer_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_int_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
         if self.data[] == `-`:  # '-'
             self.data += 1
 
-        while self.can_load_chunk() and not is_run_in_comptime_interpreter():
+        while self.can_load_chunk() and not __is_run_in_comptime_interpreter:
             var chunk = self.load_chunk()
             var is_digit = chunk.ge(`0`) & chunk.le(`9`)  # '0' to '9'
             var invalid = ~is_digit
@@ -1022,7 +1008,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if self.data[] == `-`:  # '-'
             self.data += 1
 
-        while self.can_load_chunk() and not is_run_in_comptime_interpreter():
+        while self.can_load_chunk() and not __is_run_in_comptime_interpreter:
             var chunk = self.load_chunk()
             var is_digit = chunk.ge(`0`) & chunk.le(`9`)
             var is_dot = chunk.eq(`.`)  # '.'

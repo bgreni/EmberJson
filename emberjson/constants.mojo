@@ -23,6 +23,10 @@ comptime `\f` = _to_byte("\f")
 comptime `e` = _to_byte("e")
 comptime `E` = _to_byte("E")
 
+comptime `a` = _to_byte("a")
+comptime `A` = _to_byte("A")
+comptime `F` = _to_byte("F")
+
 comptime `/` = _to_byte("/")
 
 # fmt: off

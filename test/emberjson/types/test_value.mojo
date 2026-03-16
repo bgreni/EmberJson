@@ -75,7 +75,7 @@ def test_null() raises:
 
     assert_true(Value(None).is_null())
 
-    with assert_raises(contains="Expected 'null'"):
+    with assert_raises(contains="Encountered EOF when expecting 'null'"):
         _ = Value(parse_string="nil")
 
 
@@ -97,10 +97,8 @@ def test_integer() raises:
 
 
 def test_integer_leading_plus() raises:
-    var v = Value(parse_string="+123")
-    assert_true(v.is_int())
-    assert_equal(v.int(), 123)
-    assert_equal(v.uint(), 123)
+    with assert_raises():
+        _ = Value(parse_string="+123")
 
 
 def test_integer_negative() raises:
@@ -168,9 +166,8 @@ def test_special_case_floats() raises:
 
 
 def test_float_leading_plus() raises:
-    var v = Value(parse_string="+43.5")
-    assert_true(v.is_float())
-    assert_almost_equal(v.float(), 43.5)
+    with assert_raises():
+        _ = Value(parse_string="+43.5")
 
 
 def test_float_negative() raises:

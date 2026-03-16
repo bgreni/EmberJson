@@ -303,7 +303,7 @@ def teju[dtype: DType](binary: Fields, out dec: Fields):
             return remove_trailing_zeros(q, f + 1)
 
         var log2_m_c = mantissa_size + UInt64(r) + 1
-        var c_2 = mshift(log2_m_c, u, l)
+        var c_2 = mshift(UInt64(1) << log2_m_c, u, l)
         var c = c_2 // 2
 
         if c == a and not is_tie_uncentered(m_a, f):

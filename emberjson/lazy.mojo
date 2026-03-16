@@ -26,7 +26,7 @@ def _get_array_bytes[
 def _get_int_bytes[
     origin: ImmutOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_integer_bytes()
+    return p.expect_int_bytes()
 
 
 def _get_float_bytes[

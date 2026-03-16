@@ -9,6 +9,8 @@ from std.sys.intrinsics import _type_is_eq
 from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
 from emberjson.teju import write_float
+from emberjson.traits import PrettyPrintable
+from emberjson.utils import write_escaped_string
 
 
 # TODO: When we have parametric traits, we can make this generic over some Writer type
@@ -97,16 +99,20 @@ __extension _WriteBufferStack(Serializer):
             self.write(",")
 
 
-@fieldwise_init
-struct PrettySerializer[indent: String = "    "](Defaultable, Serializer):
-    var _data: String
+struct PrettySerializer[
+    T: Writer & Defaultable & Movable, indent: String = "    "
+](Defaultable, Serializer):
+    var _data: Self.T
     var _skip_indent: Bool
     var _depth: Int
 
     def __init__(out self):
-        self._data = ""
+        self._data = Self.T()
         self._skip_indent = False
         self._depth = 0
+
+    def finish(deinit self) -> Self.T:
+        return self._data^
 
     def write_string(mut self, string: StringSlice):
         self._data.write(string)
@@ -170,11 +176,31 @@ trait JsonSerializable:
         return False
 
 
-def serialize[T: AnyType, //](value: T, out writer: String):
-    writer = String()
-    var stack_writer = _WriteBufferStack(writer)
-    serialize(value, stack_writer)
-    stack_writer.flush()
+def serialize[
+    T: AnyType, //, *, pretty: Bool = False
+](value: T, out output: String):
+    output = String()
+    comptime if pretty:
+        # fallback to write_pretty impl for JSON types to make use of stack writer speedup
+        comptime if conforms_to(T, PrettyPrintable):
+            output = write_pretty(trait_downcast[PrettyPrintable](value))
+        else:
+            var writer = PrettySerializer[String]()
+            serialize(value, writer)
+            output = writer^.finish()
+    else:
+        var writer = _WriteBufferStack(output)
+        serialize(value, writer)
+        writer.flush()
+
+
+def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
+    comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
+
+    comptime if conforms_to(T, JsonSerializable):
+        trait_downcast[JsonSerializable](value).write_json(writer)
+    else:
+        _default_serialize(value, writer)
 
 
 def _default_serialize[
@@ -205,13 +231,18 @@ def _default_serialize[
         writer.end_object()
 
 
-def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
-    comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
+def __serialize_iterable[
+    T: Iterable & Sized
+](value: T, mut writer: Some[Serializer]) where conforms_to(
+    T.IteratorType[origin_of(value)], Copyable
+):
+    writer.begin_array()
 
-    comptime if conforms_to(T, JsonSerializable):
-        trait_downcast[JsonSerializable](value).write_json(writer)
-    else:
-        _default_serialize(value, writer)
+    for i, item in enumerate(value):
+        var add_comma = i != len(value) - 1
+        writer.write_item(item, add_comma)
+
+    writer.end_array()
 
 
 # ===============================================
@@ -221,7 +252,7 @@ def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
 
 __extension String(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        writer.write('"', self, '"')
+       write_escaped_string(self, writer)
 
     @staticmethod
     def serialize_as_array() -> Bool:
@@ -240,7 +271,6 @@ __extension Int(JsonSerializable):
 __extension SIMD(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
         comptime if size == 1:
-            # Let mojo stdlib handle more exotic float types and integers
             comptime if Self.dtype.is_floating_point():
                 write_float(rebind[Scalar[Self.dtype]](self), writer)
             else:
@@ -330,13 +360,7 @@ __extension Optional(JsonSerializable):
 
 __extension List(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        writer.begin_array()
-
-        for i in range(len(self)):
-            var add_comma = i != len(self) - 1
-            writer.write_item(self[i], add_comma)
-
-        writer.end_array()
+        __serialize_iterable(self, writer)
 
     @staticmethod
     def serialize_as_array() -> Bool:
@@ -345,13 +369,7 @@ __extension List(JsonSerializable):
 
 __extension InlineArray(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        writer.begin_array()
-
-        for i in range(Self.size):
-            var add_comma = i != Self.size - 1
-            writer.write_item(self[i], add_comma)
-
-        writer.end_array()
+        __serialize_iterable(self, writer)
 
     @staticmethod
     def serialize_as_array() -> Bool:
@@ -394,13 +412,7 @@ __extension Tuple(JsonSerializable):
 
 __extension Set(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        writer.begin_array()
-
-        for i, item in enumerate(self):
-            var add_comma = i != len(self) - 1
-            writer.write_item(item, add_comma)
-
-        writer.end_array()
+        __serialize_iterable(self, writer)
 
     @staticmethod
     def serialize_as_array() -> Bool:

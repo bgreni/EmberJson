@@ -131,40 +131,40 @@ def test_integer_strict_overflow() raises:
     # Int8 max is 127
     var s_ok = "127"
     var p_ok = Parser(s_ok)
-    assert_equal(p_ok.expect_integer[DType.int8](), 127)
+    assert_equal(p_ok.expect_int[DType.int8](), 127)
 
     var s_overflow = "128"
     var p_over = Parser(s_overflow)
     with assert_raises():
-        _ = p_over.expect_integer[DType.int8]()
+        _ = p_over.expect_int[DType.int8]()
 
     # Int8 min is -128
     var s_min = "-128"
     var p_min = Parser(s_min)
-    assert_equal(p_min.expect_integer[DType.int8](), -128)
+    assert_equal(p_min.expect_int[DType.int8](), -128)
 
     var s_under = "-129"
     var p_under = Parser(s_under)
     with assert_raises():
-        _ = p_under.expect_integer[DType.int8]()
+        _ = p_under.expect_int[DType.int8]()
 
 
 def test_unsigned_strict_overflow() raises:
     # UInt8 max is 255
     var s_ok = "255"
     var p_ok = Parser(s_ok)
-    assert_equal(p_ok.expect_unsigned_integer[DType.uint8](), 255)
+    assert_equal(p_ok.expect_int[DType.uint8](), 255)
 
     var s_over = "256"
     var p_over = Parser(s_over)
     with assert_raises():
-        _ = p_over.expect_unsigned_integer[DType.uint8]()
+        _ = p_over.expect_int[DType.uint8]()
 
     # Negative should fail
     var s_neg = "-5"
     var p_neg = Parser(s_neg)
     with assert_raises():
-        _ = p_neg.expect_unsigned_integer[DType.uint8]()
+        _ = p_neg.expect_int[DType.uint8]()
 
 
 def test_float_conversions() raises:
@@ -191,87 +191,78 @@ def test_integer_edge_cases() raises:
     # Leading zeros are invalid (except for just "0")
     var p_01 = Parser("01")
     with assert_raises():
-        _ = p_01.expect_integer()
+        _ = p_01.expect_int()
 
     # "0" is valid
     var p_0 = Parser("0")
-    assert_equal(p_0.expect_integer(), 0)
+    assert_equal(p_0.expect_int(), 0)
 
     # "-0" is valid and should be 0
     var p_neg0 = Parser("-0")
-    assert_equal(p_neg0.expect_integer(), 0)
+    assert_equal(p_neg0.expect_int(), 0)
 
     # 64-bit boundaries
     # Int64 Max: 9223372036854775807
     var s_max = "9223372036854775807"
     var p_max = Parser(s_max)
-    assert_equal(p_max.expect_integer(), 9223372036854775807)
+    assert_equal(p_max.expect_int[DType.int64](), 9223372036854775807)
 
     # Int64 Min: -9223372036854775808
     var s_min = "-9223372036854775808"
     var p_min = Parser(s_min)
-    assert_equal(p_min.expect_integer(), -9223372036854775808)
+    assert_equal(p_min.expect_int[DType.int64](), -9223372036854775808)
 
     # UInt64 Max: 18446744073709551615
     var s_umax = "18446744073709551615"
     var p_umax = Parser(s_umax)
-    assert_equal(p_umax.expect_unsigned_integer(), 18446744073709551615)
+    assert_equal(p_umax.expect_int[DType.uint64](), 18446744073709551615)
 
     # 128-bit boundaries
     # Int128 Max
     var s_128_max = "170141183460469231731687303715884105727"
     var p_128_max = Parser(s_128_max)
-    assert_equal(
-        p_128_max.expect_integer[DType.int128](), Scalar[DType.int128].MAX
-    )
+    assert_equal(p_128_max.expect_int[DType.int128](), Scalar[DType.int128].MAX)
 
     # Int128 Min
     var s_128_min = "-170141183460469231731687303715884105728"
     var p_128_min = Parser(s_128_min)
-    assert_equal(
-        p_128_min.expect_integer[DType.int128](), Scalar[DType.int128].MIN
-    )
+    assert_equal(p_128_min.expect_int[DType.int128](), Scalar[DType.int128].MIN)
 
     # UInt128 Max
     var s_u128_max = "340282366920938463463374607431768211455"
     var p_u128_max = Parser(s_u128_max)
     assert_equal(
-        p_u128_max.expect_unsigned_integer[DType.uint128](),
-        Scalar[DType.uint128].MAX,
+        p_u128_max.expect_int[DType.uint128](), Scalar[DType.uint128].MAX
     )
 
     # 256-bit boundaries
     # Int256 Max
     var s_256_max = "57896044618658097711785492504343953926634992332820282019728792003956564819967"
     var p_256_max = Parser(s_256_max)
-    assert_equal(
-        p_256_max.expect_integer[DType.int256](), Scalar[DType.int256].MAX
-    )
+    assert_equal(p_256_max.expect_int[DType.int256](), Scalar[DType.int256].MAX)
 
     # Int256 Min
     var s_256_min = "-57896044618658097711785492504343953926634992332820282019728792003956564819968"
     var p_256_min = Parser(s_256_min)
-    assert_equal(
-        p_256_min.expect_integer[DType.int256](), Scalar[DType.int256].MIN
-    )
+    assert_equal(p_256_min.expect_int[DType.int256](), Scalar[DType.int256].MIN)
 
     # UInt256 Max
     var s_u256_max = "115792089237316195423570985008687907853269984665640564039457584007913129639935"
     var p_u256_max = Parser(s_u256_max)
     assert_equal(
-        p_u256_max.expect_unsigned_integer[DType.uint256](),
+        p_u256_max.expect_int[DType.uint256](),
         Scalar[DType.uint256].MAX,
     )
 
     # Test exact overflow checking correctness (just above Max for uint128)
     var p_u128_over = Parser("340282366920938463463374607431768211456")
     with assert_raises():
-        _ = p_u128_over.expect_unsigned_integer[DType.uint128]()
+        _ = p_u128_over.expect_int[DType.uint128]()
 
     # Test exact underflow checking correctness (just below Min for int128)
     var p_128_under = Parser("-170141183460469231731687303715884105729")
     with assert_raises():
-        _ = p_128_under.expect_integer[DType.int128]()
+        _ = p_128_under.expect_int[DType.int128]()
 
 
 def test_float_edge_cases() raises:
@@ -386,33 +377,33 @@ def test_expect_object_bytes() raises:
     assert_equal(len(span2), len('{"a": 1}'))
 
 
-def test_expect_integer_bytes() raises:
+def test_expect_int_bytes() raises:
     var json = String(
         "12345, -67890, 1234567890123456789, -9876543210987654321"
     )
     var p = Parser(json)
-    var span1 = p.expect_integer_bytes()
+    var span1 = p.expect_int_bytes()
     assert_equal(len(span1), 5)
     # 12345
 
     p.expect(44)  # ,
     p.skip_whitespace()
 
-    var span2 = p.expect_integer_bytes()
+    var span2 = p.expect_int_bytes()
     assert_equal(len(span2), 6)
     # -67890
 
     p.expect(44)  # ,
     p.skip_whitespace()
 
-    var span3 = p.expect_integer_bytes()
+    var span3 = p.expect_int_bytes()
     assert_equal(len(span3), 19)
     # 1234567890123456789
 
     p.expect(44)  # ,
     p.skip_whitespace()
 
-    var span4 = p.expect_integer_bytes()
+    var span4 = p.expect_int_bytes()
     assert_equal(len(span4), 20)
     # -9876543210987654321
 
@@ -511,6 +502,19 @@ def test_expect_value_bytes() raises:
     var span8 = p.expect_value_bytes()
     assert_equal(len(span8), 4)
     assert_equal(StringSlice(unsafe_from_utf8=span8), "null")
+
+
+    with assert_raises(contains='Encountered EOF when expecting "true"'):
+        var p = Parser("tru")
+        _ = p.parse_true()
+
+    with assert_raises(contains='Encountered EOF when expecting "false"'):
+        var p = Parser("fals")
+        _ = p.parse_false()
+
+    with assert_raises(contains="Encountered EOF when expecting 'null'"):
+        var p = Parser("nul")
+        p.parse_null()
 
 
 def main() raises:

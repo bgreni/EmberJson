@@ -86,7 +86,7 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     def __bool__(self) -> Bool:
-        return len(self) == 0
+        return len(self) != 0
 
     @always_inline
     def __contains__(self, v: Value) -> Bool:

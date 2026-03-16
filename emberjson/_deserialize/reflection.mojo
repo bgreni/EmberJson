@@ -26,6 +26,20 @@ comptime non_struct_error = "Cannot deserialize non-struct type"
 comptime _Base = ImplicitlyDestructible & Movable
 
 
+trait Deserializer:
+    def expect_string(mut self) -> String:
+        ...
+
+    def expect_bool(mut self) -> Bool:
+        ...
+
+    def expect_int[dtype: DType](mut self) raises -> Scalar[dtype]:
+        ...
+
+    def expect_float[dtype: DType](mut self) -> Scalar[dtype]:
+        ...
+
+
 trait JsonDeserializable(_Base):
     @staticmethod
     def from_json[
@@ -203,7 +217,7 @@ __extension Int(JsonDeserializable):
     def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
-        s = Int(p.expect_integer())
+        s = Int(p.expect_int())
 
     @staticmethod
     def deserialize_as_array() -> Bool:
@@ -238,10 +252,7 @@ __extension SIMD(JsonDeserializable):
                 comptime if Self.dtype.is_floating_point():
                     return p.expect_float[Self.dtype]()
                 else:
-                    comptime if Self.dtype.is_signed():
-                        return p.expect_integer[Self.dtype]()
-                    else:
-                        return p.expect_unsigned_integer[Self.dtype]()
+                    return p.expect_int[Self.dtype]()
             else:
                 return Scalar[Self.dtype](p.expect_bool())
 
@@ -268,7 +279,7 @@ __extension IntLiteral(JsonDeserializable):
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
-        var i = p.expect_integer()
+        var i = p.expect_int()
         if i != s:
             raise Error("Expected: ", s, ", Received: ", i)
 

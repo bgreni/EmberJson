@@ -53,7 +53,7 @@ from .schema import (
 @always_inline
 def parse[
     options: ParseOptions = ParseOptions()
-](out j: JSON, s: StringSlice) raises:
+](out j: Value, s: StringSlice) raises:
     """Parses a JSON object from a String.
 
     Parameters:
@@ -75,7 +75,7 @@ def parse[
 @always_inline
 def try_parse[
     options: ParseOptions = ParseOptions()
-](s: String) -> Optional[JSON]:
+](s: String) -> Optional[Value]:
     try:
         return parse[options](s)
     except:
@@ -83,7 +83,7 @@ def try_parse[
 
 
 @always_inline
-def to_string[*, pretty: Bool = False](out s: String, j: JSON):
+def to_string[*, pretty: Bool = False](out s: String, j: Value):
     """Stringifies the given JSON object.
 
     Parameters:
@@ -95,7 +95,4 @@ def to_string[*, pretty: Bool = False](out s: String, j: JSON):
     Returns:
         The String representation of the JSON object.
     """
-    comptime if pretty:
-        s = write_pretty(j)
-    else:
-        s = serialize(j)
+    s = serialize[pretty=pretty](j)

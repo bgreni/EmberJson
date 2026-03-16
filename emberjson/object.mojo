@@ -204,7 +204,7 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     def __bool__(self) -> Bool:
-        return len(self) == 0
+        return len(self) != 0
 
     @always_inline
     def keys(ref self) -> _ObjectKeyIter[origin_of(self)]:
