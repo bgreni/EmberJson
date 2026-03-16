@@ -252,7 +252,7 @@ def __serialize_iterable[
 
 __extension String(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-       write_escaped_string(self, writer)
+        write_escaped_string(self, writer)
 
     @staticmethod
     def serialize_as_array() -> Bool:

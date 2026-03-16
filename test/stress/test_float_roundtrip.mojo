@@ -8,7 +8,7 @@ These tests are intentionally NOT under test/emberjson/ so the regular
 Expected runtimes (optimised build):
   Float16 exhaustive  — ~65 536 values     — < 1 second
   Float32 exhaustive  — ~4.3 B values      — ~1-2 minutes
-  Float64 stratified  — ~4 M samples       — ~5-10 seconds
+  Float64 stratified  — ~500 M samples     — ~1-2 minutes
 """
 
 from emberjson.teju import write_float
@@ -125,13 +125,14 @@ def test_float32_exhaustive() raises:
 
 
 def test_float64_stratified() raises:
-    """Samples ~4 million Float64 values spread evenly across all bit patterns.
+    """Samples ~500 million Float64 values spread evenly across all bit patterns.
 
     Covers every exponent range and many mantissa configurations without
     attempting the infeasible ~5 800-year exhaustive scan.
     """
-    comptime SAMPLES = UInt64(4_000_000)
+    comptime SAMPLES = UInt64(500_000_000)
     comptime STEP = UInt64.MAX // SAMPLES
+    comptime limit = STEP * SAMPLES
     print(
         "  float64: testing",
         SAMPLES,

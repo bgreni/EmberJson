@@ -503,7 +503,6 @@ def test_expect_value_bytes() raises:
     assert_equal(len(span8), 4)
     assert_equal(StringSlice(unsafe_from_utf8=span8), "null")
 
-
     with assert_raises(contains='Encountered EOF when expecting "true"'):
         var p = Parser("tru")
         _ = p.parse_true()

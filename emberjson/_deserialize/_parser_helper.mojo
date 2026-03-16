@@ -151,8 +151,11 @@ struct StringBlock(TrivialRegisterPassable):
 @always_inline
 def is_hex_digits(c: ByteVec[4]) -> Bool:
     return (
-        (c.ge(`0`) & c.le(`9`)) | (c.ge(`a`) & c.le(`f`)) | (c.ge(`A`) & c.le(`F`))
+        (c.ge(`0`) & c.le(`9`))
+        | (c.ge(`a`) & c.le(`f`))
+        | (c.ge(`A`) & c.le(`F`))
     ).reduce_and()
+
 
 @always_inline
 def hex_to_u32(p: BytePtr) raises -> UInt32:

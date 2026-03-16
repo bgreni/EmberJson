@@ -12,12 +12,11 @@ from ._parser_helper import (
 from emberjson.utils import select, StackArray, CheckedPointer, lut
 from std.memory.unsafe import bitcast
 from std.memory import UnsafePointer
+from std.builtin.dtype import _uint_type_of_width
+from std.sys.info import bit_width_of
+from std.utils.numerics import FPUtils
 
 
-comptime MANTISSA_EXPLICIT_BITS = 52
-comptime MINIMUM_EXPONENT: Int32 = -1023
-comptime INFINITE_POWER = 0x7FF
-comptime SIGN_INDEX = 63
 comptime MAX_DIGITS = 768
 comptime DECIMAL_POINT_RANGE = 2047
 
@@ -180,18 +179,33 @@ struct AdjustedMantissa(TrivialRegisterPassable):
         self.power2 = 0
 
 
-def from_chars_slow(out value: Float64, var first: CheckedPointer) raises:
+def from_chars_slow[
+    dtype: DType
+](out value: Scalar[dtype], var first: CheckedPointer) raises:
+    comptime mantissa_explicit_bits = FPUtils[dtype].mantissa_width()
+    comptime uint_dtype = _uint_type_of_width[bit_width_of[dtype]()]()
+
     var negative = first[] == `-`
     first += Int(negative or first[] == `+`)
-    var am = compute_float(parse_decimal(first))
-    var word = am.mantissa
-    word |= UInt64(am.power2) << MANTISSA_EXPLICIT_BITS
-    word = select(negative, word | (UInt64(1) << SIGN_INDEX), word)
+    var am = compute_float[dtype](parse_decimal(first))
 
-    value = bitcast[DType.float64](word)
+    var word = Scalar[uint_dtype](am.mantissa) | (
+        Scalar[uint_dtype](am.power2)
+        << Scalar[uint_dtype](mantissa_explicit_bits)
+    )
+    if negative:
+        word |= Scalar[uint_dtype](1) << (
+            Scalar[uint_dtype](bit_width_of[dtype]() - 1)
+        )
+    value = bitcast[dtype](word)
 
 
-def compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
+def compute_float[
+    dtype: DType
+](out answer: AdjustedMantissa, var d: Decimal) raises:
+    comptime mantissa_explicit_bits = FPUtils[dtype].mantissa_width()
+    comptime minimum_exponent = -FPUtils[dtype].exponent_bias()
+    comptime infinite_power = (1 << FPUtils[dtype].exponent_width()) - 1
     answer = AdjustedMantissa()
 
     if d.num_digits == 0 or d.decimal_point < -324:
@@ -212,11 +226,11 @@ def compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
 
     while d.decimal_point > 0:
         var n = d.decimal_point.cast[DType.uint32]()
-        var shift: UInt64 = select(
-            n < NUM_POWERS, POWERS.unsafe_get(n).cast[DType.uint64](), MAX_SHIFT
-        )
+        var shift: UInt64 = MAX_SHIFT
+        if n < NUM_POWERS:
+            shift = POWERS.unsafe_get(n).cast[DType.uint64]()
         d >>= shift
-        if d.decimal_point < -DECIMAL_POINT_RANGE:
+        if d.decimal_point < -DECIMAL_POINT_RANGE or d.num_digits == 0:
             return
         exp2 += shift.cast[DType.int32]()
 
@@ -228,11 +242,7 @@ def compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
             shift = select(d.digits.unsafe_get(0) < 2, UInt64(2), UInt64(1))
         else:
             var n: UInt32 = UInt32(-d.decimal_point)
-            shift = select(
-                n < NUM_POWERS,
-                POWERS.unsafe_get(n).cast[DType.uint64](),
-                MAX_SHIFT,
-            )
+            shift = POWERS.unsafe_get(n).cast[DType.uint64]() if n < NUM_POWERS else MAX_SHIFT
 
         d <<= shift
 
@@ -243,33 +253,35 @@ def compute_float(out answer: AdjustedMantissa, var d: Decimal) raises:
 
     exp2 -= 1
 
-    while MINIMUM_EXPONENT + 1 > exp2:
-        var n = UInt64((MINIMUM_EXPONENT + 1) - exp2)
+    while Int32(minimum_exponent) + 1 > exp2:
+        var n = UInt64(Int(Int32(minimum_exponent) + 1 - exp2))
         if n > MAX_SHIFT:
             n = MAX_SHIFT
         d >>= n
         exp2 += Int32(n)
 
-    if exp2 - MINIMUM_EXPONENT >= INFINITE_POWER:
+    if exp2 - Int32(minimum_exponent) >= Int32(infinite_power):
         raise Error("Infinite float")
 
-    comptime mantissa_size_in_bits = MANTISSA_EXPLICIT_BITS + 1
-    d <<= mantissa_size_in_bits
+    comptime mantissa_size_in_bits = mantissa_explicit_bits + 1
+    d <<= UInt64(mantissa_size_in_bits)
 
     var mantissa: UInt64 = d.round()
 
-    if mantissa >= (UInt64(1) << mantissa_size_in_bits):
+    if mantissa >= (UInt64(1) << UInt64(mantissa_size_in_bits)):
         d >>= 1
         exp2 += 1
         mantissa = d.round()
-        if exp2 - MINIMUM_EXPONENT >= INFINITE_POWER:
+        if exp2 - Int32(minimum_exponent) >= Int32(infinite_power):
             raise Error("Infinite float")
 
-    answer.power2 = Int(exp2 - MINIMUM_EXPONENT)
-    if mantissa < (UInt64(1) << MANTISSA_EXPLICIT_BITS):
+    answer.power2 = Int(exp2 - Int32(minimum_exponent))
+    if mantissa < (UInt64(1) << UInt64(mantissa_explicit_bits)):
         answer.power2 -= 1
 
-    answer.mantissa = mantissa & ((UInt64(1) << MANTISSA_EXPLICIT_BITS) - 1)
+    answer.mantissa = mantissa & (
+        (UInt64(1) << UInt64(mantissa_explicit_bits)) - 1
+    )
 
 
 def parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
@@ -323,7 +335,7 @@ def parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
         if neg_exp or p[] == `+`:
             p += 1
         var exp_number: Int32 = 0
-        while isdigit(p[]):
+        while p.dist() > 0 and isdigit(p[]):
             if exp_number < 0x10000:
                 exp_number = append_digit(exp_number, p[] - `0`)
             p += 1

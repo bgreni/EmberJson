@@ -75,6 +75,7 @@ from emberjson.constants import (
     `E`,
     `e`,
 )
+from std.utils.numerics import FPUtils
 
 
 #######################################################
@@ -500,7 +501,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             second_product = full_multiplication(
                 i, lut[POWER_OF_FIVE_128](index + 1)
             )
-            var upper_s = UInt64(second_product)
+            var upper_s = UInt64(second_product >> 64)
             lower += upper_s
             if upper_s > lower:
                 upper += 1
@@ -524,7 +525,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             if -real_exponent + 1 >= 64:
                 d = -0.0 if negative else 0.0
                 return
-            mantissa >>= (-real_exponent + 1).cast[DType.uint64]() + 1
+            mantissa >>= (-real_exponent + 1).cast[DType.uint64]()
+            mantissa += mantissa & 1
+            mantissa >>= 1
 
             real_exponent = select(mantissa < `1 << 52`, Int64(0), Int64(1))
             return to_double(
@@ -532,7 +535,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             )
 
         if unlikely(
-            lower <= 1 and power >= -4 and power <= 23 and (mantissa & 3 == 1)
+            lower == 0 and (upper & 0x1FF) == 0 and (mantissa & 3 == 1)
         ):
             comptime `64 - 53 - 2` = 64 - 53 - 2
             if (mantissa << (upperbit + `64 - 53 - 2`)) == upper:
@@ -566,7 +569,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             digit_count > 19
             and significant_digits(start_digits.p, digit_count) > 19
         ):
-            return from_chars_slow(self.data)
+            return from_chars_slow[DType.float64](self.data)
 
         if unlikely(exponent < smallest_power or exponent > largest_power):
             if likely(exponent < smallest_power or i == 0):
@@ -577,7 +580,6 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def parse_number(mut self, out v: Value) raises:
-
         if self.data[] == `+`:
             raise Error('Expected digit of "-", found "+"')
 
@@ -798,6 +800,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
             exponent += select(neg_exp, -exp_number, exp_number)
 
+        var number_start = self.data
         var f = self.write_float(neg, i, start_digits, digit_count, exponent)
 
         self.data = p
@@ -807,6 +810,16 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             # Check if casting caused infinity where original wasn't
             if unlikely(not isinf(f) and isinf(casted)):
                 raise Error("float overflow")
+            # Guard against double-rounding: if the float64 result lands exactly
+            # on a float32/float16 midpoint, the cast may choose the wrong
+            # neighbour. Re-parse with correctly-rounded big-decimal arithmetic.
+            comptime half_ulp_pos = 52 - FPUtils[type].mantissa_width() - 1
+            comptime midpoint_bit = UInt64(1) << UInt64(half_ulp_pos)
+            comptime midpoint_mask = (UInt64(1) << UInt64(half_ulp_pos + 1)) - 1
+            if unlikely(
+                (bitcast[DType.uint64](f) & midpoint_mask) == midpoint_bit
+            ):
+                return from_chars_slow[type](number_start)
             return casted
 
         return f.cast[type]()
