@@ -134,13 +134,16 @@ struct Validated[
 
 @always_inline
 def __is_in_range[
-    T: Comparable & _Base, min: T, max: T
+    T: Comparable & _Base, min: T, max: T, exclusive: Bool
 ](value: T,) -> Bool:
-    return value >= materialize[min]() and value <= materialize[max]()
+    comptime if exclusive:
+        return value > materialize[min]() and value < materialize[max]()
+    else:
+        return value >= materialize[min]() and value <= materialize[max]()
 
 
 comptime Range[T: Comparable & _Base, min: T, max: T] = Validated[
-    T, __is_in_range[T, min, max], "Value out of range"
+    T, __is_in_range[T, min, max, False], "Value out of range"
 ]
 """Validates a value to be within a given value range.
 
@@ -148,6 +151,17 @@ Parameters:
     T: The type of the value to validate.
     min: The minimum value.
     max: The maximum value.
+"""
+
+comptime ExclusiveRange[T: Comparable & _Base, min: T, max: T] = Validated[
+    T, __is_in_range[T, min, max, True], "Value out of range (exclusive)"
+]
+"""Validates a value to be strictly within a given range (exclusive bounds).
+
+Parameters:
+    T: The type of the value to validate.
+    min: The exclusive lower bound.
+    max: The exclusive upper bound.
 """
 
 
@@ -167,6 +181,53 @@ Parameters:
     T: The type of the value to validate.
     min: The minimum size.
     max: The maximum size.
+"""
+
+
+@always_inline
+def __is_non_empty[T: Sized & _Base](value: T) -> Bool:
+    return len(value) > 0
+
+
+comptime NonEmpty[T: Sized & _Base] = Validated[
+    T, __is_non_empty[T], "Value must not be empty"
+]
+"""Validates that a sized value is non-empty.
+
+Parameters:
+    T: The type of the value to validate.
+"""
+
+
+@always_inline
+def __starts_with[prefix: String](s: String) -> Bool:
+    return s.startswith(prefix)
+
+
+comptime StartsWith[prefix: String] = Validated[
+    String,
+    __starts_with[prefix],
+    "Value does not start with expected prefix",
+]
+"""Validates that a string starts with a given prefix.
+
+Parameters:
+    prefix: The required prefix.
+"""
+
+
+@always_inline
+def __ends_with[suffix: String](s: String) -> Bool:
+    return s.endswith(suffix)
+
+
+comptime EndsWith[suffix: String] = Validated[
+    String, __ends_with[suffix], "Value does not end with expected suffix"
+]
+"""Validates that a string ends with a given suffix.
+
+Parameters:
+    suffix: The required suffix.
 """
 
 
@@ -402,6 +463,44 @@ Validates a value to be a multiple of a given value.
 Parameters:
     base: The value to validate against.
 """
+
+@fieldwise_init
+struct Enum[T: _Base & Equatable, *accepted: T](JsonDeserializable, JsonSerializable, Validator):
+    """Validates a value against an enumerated set of allowed values.
+    A semantic alias for OneOf — use with Eq validators for enum-style validation.
+
+    Example:
+        comptime Color = Enum[String, "red", "green", "blue"]
+
+    Parameters:
+        T: The type of the value to validate.
+        accepted: The validators representing allowed values.
+    """
+    var value: Self.T
+    comptime Type = Self.T
+
+    @staticmethod
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = {deserialize[Self.T](p)}
+
+        s.validate(s.value)
+
+    @staticmethod
+    def validate(value: Self.Type) raises:
+        comptime for i in range(Variadic.size(Self.accepted)):
+            if value == materialize[Self.accepted[i]]():
+                return
+        raise Error("Value not in options")
+
+    def write_json(self, mut writer: Some[Serializer]):
+        serialize(self.value, writer)
+
+    def __getitem__(self) -> ref[self.value] Self.T:
+        return self.value
+
+
 
 ##########################################################
 # Secret

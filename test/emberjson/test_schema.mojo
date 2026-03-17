@@ -1,7 +1,23 @@
 from emberjson.schema import (
     Range,
+    ExclusiveRange,
     Size,
+    NonEmpty,
+    StartsWith,
+    EndsWith,
     OneOf,
+    AnyOf,
+    NoneOf,
+    Enum,
+    AllOf,
+    MergeAllOf,
+    MergeAnyOf,
+    MergeOneOf,
+    MergeNoneOf,
+    Eq,
+    Ne,
+    Not,
+    Unique,
     Secret,
     Clamp,
     Coerce,
@@ -12,17 +28,6 @@ from emberjson.schema import (
     Default,
     Transform,
     MultipleOf,
-    AllOf,
-    MergeAllOf,
-    Unique,
-    Eq,
-    Not,
-    Ne,
-    AnyOf,
-    NoneOf,
-    MergeAnyOf,
-    MergeOneOf,
-    MergeNoneOf,
 )
 from emberjson import deserialize, serialize, Value
 from std.collections import Set, InlineArray
@@ -502,6 +507,85 @@ def test_merge_none_of() raises:
 
     with assert_raises(contains="Value matched a rejected validator"):
         _ = deserialize[VSet]("12")  # matches second range
+
+
+def test_exclusive_range() raises:
+    var r1 = deserialize[ExclusiveRange[Int, 0, 10]]("5")
+    assert_equal(r1[], 5)
+
+    with assert_raises(contains="Value out of range (exclusive)"):
+        _ = deserialize[ExclusiveRange[Int, 0, 10]]("0")
+
+    with assert_raises(contains="Value out of range (exclusive)"):
+        _ = deserialize[ExclusiveRange[Int, 0, 10]]("10")
+
+    with assert_raises(contains="Value out of range (exclusive)"):
+        _ = deserialize[ExclusiveRange[Int, 0, 10]]("11")
+
+    var r2 = deserialize[ExclusiveRange[Float64, 0.0, 1.0]]("0.5")
+    assert_equal(r2[], 0.5)
+
+    with assert_raises(contains="Value out of range (exclusive)"):
+        _ = deserialize[ExclusiveRange[Float64, 0.0, 1.0]]("0.0")
+
+    with assert_raises(contains="Value out of range (exclusive)"):
+        _ = deserialize[ExclusiveRange[Float64, 0.0, 1.0]]("1.0")
+
+
+def test_non_empty() raises:
+    var s1 = deserialize[NonEmpty[String]]('"hello"')
+    assert_equal(s1[], "hello")
+
+    var l1 = deserialize[NonEmpty[List[Int]]]("[1]")
+    assert_equal(len(l1[]), 1)
+
+    with assert_raises(contains="Value must not be empty"):
+        _ = deserialize[NonEmpty[String]]('""')
+
+    with assert_raises(contains="Value must not be empty"):
+        _ = deserialize[NonEmpty[List[Int]]]("[]")
+
+    assert_equal(serialize(s1), '"hello"')
+
+
+def test_starts_ends_with() raises:
+    var s1 = deserialize[StartsWith["hello"]]('"hello world"')
+    assert_equal(s1[], "hello world")
+
+    with assert_raises(contains="Value does not start with expected prefix"):
+        _ = deserialize[StartsWith["hello"]]('"world"')
+
+    var s2 = deserialize[EndsWith[".json"]]('"config.json"')
+    assert_equal(s2[], "config.json")
+
+    with assert_raises(contains="Value does not end with expected suffix"):
+        _ = deserialize[EndsWith[".json"]]('"config.toml"')
+
+    assert_equal(serialize(s1), '"hello world"')
+    assert_equal(serialize(s2), '"config.json"')
+
+
+def test_enum() raises:
+    comptime Color = Enum[String, "red", "green", "blue"]
+
+    var c1 = deserialize[Color]('"red"')
+    assert_equal(c1[], "red")
+
+    var c2 = deserialize[Color]('"blue"')
+    assert_equal(c2[], "blue")
+
+    with assert_raises():
+        _ = deserialize[Color]('"yellow"')
+
+    assert_equal(serialize(c1), '"red"')
+
+    comptime Priority = Enum[Int, 1, 2, 3]
+
+    var p1 = deserialize[Priority]("2")
+    assert_equal(p1[], 2)
+
+    with assert_raises():
+        _ = deserialize[Priority]("5")
 
 
 def main() raises:
