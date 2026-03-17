@@ -1,11 +1,4 @@
-"""Security regression tests for EmberJson.
-
-Each test corresponds to a confirmed finding from SECURITY_REPORT.md.
-Tests are written to FAIL while the bug exists and PASS once fixed.
-Exception: tests for L-2 and L-3 assert the current buggy value to document
-the exact behaviour; their comments explain what the correct value should be.
-
-Severity legend: [C]=Critical, [H]=High, [M]=Medium, [L]=Low
+"""Series of tests that cover a series of bugs claude discovered
 """
 
 from emberjson import (
@@ -131,6 +124,14 @@ def test_m6_invalid_low_surrogate_range() raises:
 def test_h3_leading_plus_in_number() raises:
     with assert_raises():
         _ = parse('{"n": +42}')
+
+    with assert_raises():
+        _ = deserialize[Int64]("+42")
+
+    # Should trigger from_chars_slow
+    # Making sure it will also reject a leading plus
+    with assert_raises():
+        _ = deserialize[Float64]("+1.23456789012345678901")
 
 
 # ===========================================================================

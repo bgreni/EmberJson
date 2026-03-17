@@ -1,4 +1,5 @@
-from std.bit import pop_count
+from std.bit import pop_count, count_trailing_zeros
+from std.memory.unsafe import pack_bits
 from .constants import ` `, `\n`, `\t`, `\r`, `\b`, `\f`, `"`, `\\`
 from std.utils import Variant
 from std.utils.numerics import FPUtils
@@ -200,40 +201,90 @@ def constrain_json_type[T: Movable & Copyable]():
     comptime assert valid, "Invalid type for JSON"
 
 
-def write_escaped_string(s: String, mut writer: Some[Writer]):
-    writer.write('"')
-    var start = 0
-    var p = s.as_bytes()
-    var len = len(s)
+@always_inline
+def _handle_escape(c: Byte, mut writer: Some[Writer]):
+    if c == `"`:
+        writer.write(r"\"")
+    elif c == `\\`:
+        writer.write(r"\\")
+    elif c == `\b`:
+        writer.write(r"\b")
+    elif c == `\f`:
+        writer.write(r"\f")
+    elif c == `\n`:
+        writer.write(r"\n")
+    elif c == `\r`:
+        writer.write(r"\r")
+    elif c == `\t`:
+        writer.write(r"\t")
+    else:
+        writer.write(r"\u00")
+        _write_hex_byte(c, writer)
 
-    for i in range(len):
-        var c = p[i]
+
+@always_inline
+def _needs_escape(bytes: Span[Byte, _], n: Int) -> Bool:
+    var ptr = bytes.unsafe_ptr()
+    var i = 0
+    while i + SIMD8_WIDTH <= n:
+        var chunk = ptr.load[width=SIMD8_WIDTH](i)
+        if pack_bits(chunk.eq(`"`) | chunk.eq(`\\`) | chunk.lt(` `)) != 0:
+            return True
+        i += SIMD8_WIDTH
+    while i < n:
+        var c = ptr[i]
+        if c == `"` or c == `\\` or c < 32:
+            return True
+        i += 1
+    return False
+
+
+def write_escaped_string(s: String, mut writer: Some[Writer]):
+    var bytes = s.as_bytes()
+    var n = len(s)
+
+    # Fast path: no escaping needed — single batched write
+    if not _needs_escape(bytes, n):
+        writer.write('"', s, '"')
+        return
+
+    # Slow path: string contains characters that need escaping
+    writer.write('"')
+    var ptr = bytes.unsafe_ptr()
+    var i = 0
+    var start = 0
+
+    while i + SIMD8_WIDTH <= n:
+        var chunk = ptr.load[width=SIMD8_WIDTH](i)
+        var escape_bits = pack_bits(
+            chunk.eq(`"`) | chunk.eq(`\\`) | chunk.lt(` `)
+        )
+        if escape_bits == 0:
+            i += SIMD8_WIDTH
+            continue
+        var bits = escape_bits
+        while bits != 0:
+            var pos = Int(count_trailing_zeros(bits))
+            if i + pos > start:
+                writer.write(
+                    StringSlice(unsafe_from_utf8=bytes[start : i + pos])
+                )
+            start = i + pos + 1
+            _handle_escape(ptr[i + pos], writer)
+            bits &= bits - 1
+        i += SIMD8_WIDTH
+
+    while i < n:
+        var c = ptr[i]
         if c == `"` or c == `\\` or c < 32:
             if i > start:
-                writer.write(StringSlice(unsafe_from_utf8=p[start:i]))
-
+                writer.write(StringSlice(unsafe_from_utf8=bytes[start:i]))
             start = i + 1
-            if c == `"`:
-                writer.write(r"\"")
-            elif c == `\\`:
-                writer.write(r"\\")
-            elif c == `\b`:
-                writer.write(r"\b")
-            elif c == `\f`:
-                writer.write(r"\f")
-            elif c == `\n`:
-                writer.write(r"\n")
-            elif c == `\r`:
-                writer.write(r"\r")
-            elif c == `\t`:
-                writer.write(r"\t")
-            else:
-                # Control chars
-                writer.write(r"\u00")
-                _write_hex_byte(c, writer)
+            _handle_escape(c, writer)
+        i += 1
 
-    if start < len:
-        writer.write(StringSlice(unsafe_from_utf8=p[start:len]))
+    if start < n:
+        writer.write(StringSlice(unsafe_from_utf8=bytes[start:n]))
 
     writer.write('"')
 

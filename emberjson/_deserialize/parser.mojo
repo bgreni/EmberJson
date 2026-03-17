@@ -483,7 +483,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             return self.compute_float_fast(power, i, negative)
 
         if unlikely(i == 0 or power < -342):
-            return -0.0 if negative else 0.0
+            return select(negative, -0.0, 0.0)
 
         var lz = count_leading_zeros(i)
         i <<= lz
@@ -523,7 +523,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         if unlikely(real_exponent <= 0):
             if -real_exponent + 1 >= 64:
-                d = -0.0 if negative else 0.0
+                d = select(negative, -0.0, 0.0)
                 return
             mantissa >>= (-real_exponent + 1).cast[DType.uint64]()
             mantissa += mantissa & 1
@@ -682,8 +682,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     def _parse_integer_common[
         acc_type: DType
     ](mut self,) raises -> IntegerParseResult[Self.origin, acc_type]:
+
+        if unlikely(self.data[] == `+`):
+            raise Error('Expected digit of "-", found "+"')
+            
         var neg = self.data[] == `-`
-        var p = self.data + Int(neg or self.data[] == `+`)
+        var p = self.data + Int(neg)
 
         var start_digits = p
         var i = Scalar[acc_type](0)

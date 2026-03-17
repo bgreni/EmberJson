@@ -15,6 +15,7 @@ from std.memory import UnsafePointer
 from std.builtin.dtype import _uint_type_of_width
 from std.sys.info import bit_width_of
 from std.utils.numerics import FPUtils
+from std.sys.intrinsics import unlikely
 
 
 comptime MAX_DIGITS = 768
@@ -185,8 +186,11 @@ def from_chars_slow[
     comptime mantissa_explicit_bits = FPUtils[dtype].mantissa_width()
     comptime uint_dtype = _uint_type_of_width[bit_width_of[dtype]()]()
 
+    if unlikely(first[] == `+`):
+        raise Error('Expected digit of "-", found "+"')
+
     var negative = first[] == `-`
-    first += Int(negative or first[] == `+`)
+    first += Int(negative)
     var am = compute_float[dtype](parse_decimal(first))
 
     var word = Scalar[uint_dtype](am.mantissa) | (

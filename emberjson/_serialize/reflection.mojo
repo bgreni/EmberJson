@@ -237,9 +237,9 @@ def __serialize_iterable[
     T.IteratorType[origin_of(value)], Copyable
 ):
     writer.begin_array()
-
+    var len = len(value)
     for i, item in enumerate(value):
-        var add_comma = i != len(value) - 1
+        var add_comma = i != len - 1
         writer.write_item(item, add_comma)
 
     writer.end_array()
@@ -252,6 +252,7 @@ def __serialize_iterable[
 
 __extension String(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
+        # TODO: make this faster
         write_escaped_string(self, writer)
 
     @staticmethod
@@ -361,6 +362,13 @@ __extension Optional(JsonSerializable):
 __extension List(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
         __serialize_iterable(self, writer)
+        # writer.begin_array()
+
+        # for i in range(len(self)):
+        #     var add_comma = i != len(self) - 1
+        #     writer.write_item(self[i], add_comma)
+
+        # writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:
