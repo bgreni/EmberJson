@@ -464,8 +464,11 @@ Parameters:
     base: The value to validate against.
 """
 
+
 @fieldwise_init
-struct Enum[T: _Base & Equatable, *accepted: T](JsonDeserializable, JsonSerializable, Validator):
+struct Enum[T: _Base & Equatable, *accepted: T](
+    JsonDeserializable, JsonSerializable, Validator
+):
     """Validates a value against an enumerated set of allowed values.
     A semantic alias for OneOf — use with Eq validators for enum-style validation.
 
@@ -476,6 +479,7 @@ struct Enum[T: _Base & Equatable, *accepted: T](JsonDeserializable, JsonSerializ
         T: The type of the value to validate.
         accepted: The validators representing allowed values.
     """
+
     var value: Self.T
     comptime Type = Self.T
 
@@ -499,7 +503,6 @@ struct Enum[T: _Base & Equatable, *accepted: T](JsonDeserializable, JsonSerializ
 
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
-
 
 
 ##########################################################
@@ -760,3 +763,48 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) -> OutT](
 
     def __getitem__(self) -> ref[self.value] Self.OutT:
         return self.value
+
+
+##########################################################
+# Cross-field validation
+##########################################################
+
+# @fieldwise_init
+# struct DependsOn[Parent: _Base, T: _Base, Field: StaticString, V: Validator](
+#     JsonDeserializable, JsonSerializable, Validator
+# ):
+#     """
+#     Validates a value to depend on another field.
+
+#     Parameters:
+#         T: The type of the value to validate.
+#         Field: The name of the field to depend on.
+#         V: The validator to apply to the dependent field.
+#     """
+
+#     var value: Self.T
+#     comptime Type = Self.T
+
+#     @staticmethod
+#     def __field_in_parent() -> Bool:
+#         comptime fields = struct_field_names[Self.Parent]()
+#         comptime for i in range(struct_field_count[Self.Parent]):
+
+
+#     @staticmethod
+#     def from_json[
+#         origin: ImmutOrigin, options: ParseOptions, //
+#     ](mut p: Parser[origin, options], out s: Self) raises:
+#         s = {deserialize[Self.T](p)}
+
+#         s.validate(s.value, p)
+
+#     @staticmethod
+#     def validate(value: Self.Type, mut p: Parser) raises:
+#         ...
+
+#     def write_json(self, mut writer: Some[Serializer]):
+#         serialize(self.value, writer)
+
+#     def __getitem__(self) -> ref[self.value] Self.T:
+#         return self.value

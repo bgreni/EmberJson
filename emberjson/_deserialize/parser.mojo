@@ -682,10 +682,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     def _parse_integer_common[
         acc_type: DType
     ](mut self,) raises -> IntegerParseResult[Self.origin, acc_type]:
-
         if unlikely(self.data[] == `+`):
             raise Error('Expected digit of "-", found "+"')
-            
+
         var neg = self.data[] == `-`
         var p = self.data + Int(neg)
 

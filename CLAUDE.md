@@ -81,3 +81,5 @@ try_deserialize[T](json_string)      # → Optional[T]
 ## Mojo Version
 
 Requires `mojo >=0.26.2.0.dev2026020205,<0.27` (MAX nightly channel). Platforms: osx-arm64, linux-aarch64, linux-64.
+
+A full reference for the Mojo APIs https://docs.modular.com/llms-mojo.txt
