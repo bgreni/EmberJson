@@ -28,6 +28,7 @@ from emberjson.schema import (
     Default,
     Transform,
     MultipleOf,
+    CrossFieldValidator,
 )
 from emberjson import deserialize, serialize, Value
 from std.collections import Set, InlineArray
@@ -587,6 +588,27 @@ def test_enum() raises:
     with assert_raises():
         _ = deserialize[Priority]("5")
 
+
+struct TestStruct(Movable):
+    var a: Int
+    var b: Int
+
+def test_cross_field_validator() raises:
+
+    def validate_greater(a: Int, b: Int) raises:
+        if a <= b:
+            raise Error("a must be greater than b")
+
+    var s1 = deserialize[
+        CrossFieldValidator[TestStruct, "a", "b", validate_greater]
+    ]('{"a": 5, "b": 3}')
+    assert_equal(s1[].a, 5)
+    assert_equal(s1[].b, 3)
+
+    with assert_raises(contains="a must be greater than b"):
+        _ = deserialize[
+            CrossFieldValidator[TestStruct, "a", "b", validate_greater]
+        ]('{"a": 2, "b": 3}')
 
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
