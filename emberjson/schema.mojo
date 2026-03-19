@@ -10,7 +10,11 @@ from emberjson import (
 )
 from std.sys.intrinsics import _type_is_eq
 from emberjson._deserialize.reflection import _Base
-from std.reflection import get_base_type_name, struct_field_type_by_name, struct_field_index_by_name
+from std.reflection import (
+    get_base_type_name,
+    struct_field_type_by_name,
+    struct_field_index_by_name,
+)
 
 ##########################################################
 # Value Validation
@@ -51,7 +55,6 @@ comptime MergeNoneOf[
 ]
 
 
-@fieldwise_init
 struct AllOf[T: _Base, *validators: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
@@ -64,6 +67,10 @@ struct AllOf[T: _Base, *validators: Validator](
 
     comptime Type = Self.T
     var value: Self.T
+
+    def __init__(out self, var value: Self.T) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -94,7 +101,7 @@ trait Validator:
     def validate(value: Self.Type) raises:
         ...
 
-@fieldwise_init
+
 struct Validated[
     T: _Base,
     validator: def(T) -> Bool,
@@ -110,6 +117,10 @@ struct Validated[
 
     comptime Type = Self.T
     var value: Self.T
+
+    def __init__(out self, var value: Self.T) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -303,7 +314,6 @@ Parameters:
 """
 
 
-@fieldwise_init
 struct OneOf[T: _Base & Equatable, *accepted: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
@@ -317,6 +327,10 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
 
     var value: Self.T
     comptime Type = Self.T
+
+    def __init__(out self, var value: Self.T) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -354,7 +368,6 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
         return self.value
 
 
-@fieldwise_init
 struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
@@ -368,6 +381,10 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
 
     var value: Self.T
     comptime Type = Self.T
+
+    def __init__(out self, var value: Self.T) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -399,7 +416,6 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
         return self.value
 
 
-@fieldwise_init
 struct NoneOf[T: _Base & Equatable, *rejected: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
@@ -413,6 +429,10 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
 
     var value: Self.T
     comptime Type = Self.T
+
+    def __init__(out self, var value: Self.T) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -464,7 +484,6 @@ Parameters:
 """
 
 
-@fieldwise_init
 struct Enum[T: _Base & Equatable, *accepted: T](
     JsonDeserializable, JsonSerializable, Validator
 ):
@@ -481,6 +500,10 @@ struct Enum[T: _Base & Equatable, *accepted: T](
 
     var value: Self.T
     comptime Type = Self.T
+
+    def __init__(out self, var value: Self.T) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -770,35 +793,45 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) -> OutT](
 @always_inline("builtin")
 def __field_in_parent[Parent: _Base, F: StringLiteral]() -> Bool:
     # Bit a hack until I have a better way to do this
-    return Int(
-        mlir_value=__mlir_attr[
-            `#kgen.struct_field_index_by_name<`,
-            Parent,
-            `, `,
-            F.value,
-            `> : index`,
-        ]
-    ) >= 0
+    return (
+        Int(
+            mlir_value=__mlir_attr[
+                `#kgen.struct_field_index_by_name<`,
+                Parent,
+                `, `,
+                F.value,
+                `> : index`,
+            ]
+        )
+        >= 0
+    )
 
-@fieldwise_init
+
 struct CrossFieldValidator[
     Parent: _Base,
     F1: StringLiteral where __field_in_parent[Parent, F1](),
     F2: StringLiteral where __field_in_parent[Parent, F2](),
-    V: def(struct_field_type_by_name[Parent, F1]().T, struct_field_type_by_name[Parent, F2]().T) raises](
-    JsonDeserializable, JsonSerializable, Validator
-):
+    V: def(
+        struct_field_type_by_name[Parent, F1]().T,
+        struct_field_type_by_name[Parent, F2]().T,
+    ) raises,
+](JsonDeserializable, JsonSerializable, Validator):
     """
     Validates a value to depend on another field.
 
     Parameters:
-        T: The type of the value to validate.
-        Field: The name of the field to depend on.
-        V: The validator to apply to the dependent field.
+        Parent: Parent type of the fields we want to validate.
+        F1: The name of the first field.
+        F2: The name of the second field.
+        V: The validator function to apply to the dependent field.
     """
 
     var value: Self.Parent
     comptime Type = Self.Parent
+
+    def __init__(out self, var value: Self.Parent) raises:
+        self.value = value^
+        Self.validate(self.value)
 
     @staticmethod
     def from_json[
@@ -812,8 +845,13 @@ struct CrossFieldValidator[
         comptime f1 = struct_field_index_by_name[Self.Type, Self.F1]()
         comptime f2 = struct_field_index_by_name[Self.Type, Self.F2]()
         Self.V(
-            rebind[struct_field_type_by_name[Self.Type, Self.F1]().T](__struct_field_ref(f1, value)),
-             rebind[struct_field_type_by_name[Self.Type, Self.F2]().T](__struct_field_ref(f2, value)))
+            rebind[struct_field_type_by_name[Self.Type, Self.F1]().T](
+                __struct_field_ref(f1, value)
+            ),
+            rebind[struct_field_type_by_name[Self.Type, Self.F2]().T](
+                __struct_field_ref(f2, value)
+            ),
+        )
 
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)

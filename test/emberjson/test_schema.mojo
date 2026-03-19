@@ -589,12 +589,13 @@ def test_enum() raises:
         _ = deserialize[Priority]("5")
 
 
+@fieldwise_init
 struct TestStruct(Movable):
     var a: Int
     var b: Int
 
-def test_cross_field_validator() raises:
 
+def test_cross_field_validator() raises:
     def validate_greater(a: Int, b: Int) raises:
         if a <= b:
             raise Error("a must be greater than b")
@@ -609,6 +610,60 @@ def test_cross_field_validator() raises:
         _ = deserialize[
             CrossFieldValidator[TestStruct, "a", "b", validate_greater]
         ]('{"a": 2, "b": 3}')
+
+
+def test_direct_construction_validates() raises:
+    # Validated (via Range) — out-of-range value raises
+    with assert_raises(contains="Value out of range"):
+        _ = Range[Int, 0, 10](15)
+
+    # Validated (via Size) — too-short value raises
+    with assert_raises(contains="Value out of size range"):
+        _ = Size[String, 3, 5](String("ab"))
+
+    # Validated (via NonEmpty) — empty value raises
+    with assert_raises(contains="Value must not be empty"):
+        _ = NonEmpty[String](String(""))
+
+    # Validated (via StartsWith) — wrong prefix raises
+    with assert_raises(contains="Value does not start with expected prefix"):
+        _ = StartsWith["hello"](String("world"))
+
+    # Validated (via EndsWith) — wrong suffix raises
+    with assert_raises(contains="Value does not end with expected suffix"):
+        _ = EndsWith[".json"](String("config.toml"))
+
+    # AllOf — value failing a validator raises
+    with assert_raises(contains="Value out of size range"):
+        _ = AllOf[String, Size[String, 3, 5]](String("ab"))
+
+    # OneOf — value matching no validators raises
+    with assert_raises(contains="Value didn't match any validators"):
+        _ = OneOf[String, Eq["red"], Eq["green"]](String("yellow"))
+
+    # AnyOf — value matching no validators raises
+    with assert_raises(contains="Value not in options"):
+        _ = AnyOf[Int, Eq[1], Eq[2]](5)
+
+    # NoneOf — value matching a rejected validator raises
+    with assert_raises(contains="Value matched a rejected validator"):
+        _ = NoneOf[Int, Range[Int, 0, 10]](5)
+
+    # Enum — value not in accepted set raises
+    comptime Color = Enum[String, "red", "green", "blue"]
+    with assert_raises(contains="Value not in options"):
+        _ = Color(String("yellow"))
+
+    # CrossFieldValidator — failing cross-field check raises
+    def validate_greater(a: Int, b: Int) raises:
+        if a <= b:
+            raise Error("a must be greater than b")
+
+    with assert_raises(contains="a must be greater than b"):
+        _ = CrossFieldValidator[TestStruct, "a", "b", validate_greater](
+            TestStruct(2, 3)
+        )
+
 
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
