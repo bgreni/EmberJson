@@ -188,7 +188,9 @@ struct Value(JsonValue, Sized):
         var values: List[Value],
         __dict_literal__: (),
     ):
-        debug_assert(len(keys) == len(values))
+        assert len(keys) == len(
+            values
+        ), "Keys and values must have the same length"
         var obj = Object()
         for i in range(len(keys)):
             obj[keys[i]] = values[i].copy()

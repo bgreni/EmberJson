@@ -45,5 +45,5 @@ comptime `1` = _to_byte("1")
 
 @always_inline
 def _to_byte(s: StringSlice) -> Byte:
-    debug_assert(s.byte_length() == 1, "expected one character string")
+    assert s.byte_length() == 1, "expected one character string"
     return s.as_bytes()[0]

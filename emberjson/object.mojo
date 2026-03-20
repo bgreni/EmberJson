@@ -132,7 +132,9 @@ struct Object(JsonValue, Sized):
         var values: List[Value],
         __dict_literal__: (),
     ):
-        debug_assert(len(keys) == len(values))
+        assert len(keys) == len(
+            values
+        ), "Keys and values must have the same length"
         self._data = Self.Type(capacity=len(keys))
         for i in range(len(keys)):
             self._data.append(KeyValuePair(keys[i], values[i].copy()))

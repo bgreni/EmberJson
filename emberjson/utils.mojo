@@ -112,7 +112,7 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
 
     @always_inline("nodebug")
     def expect_remaining(self, i: Int):
-        debug_assert(
+        assert (
             self.dist() + 1 >= i,
             "Expected at least: ",
             i,

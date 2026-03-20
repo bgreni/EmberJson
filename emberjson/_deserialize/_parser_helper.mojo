@@ -43,7 +43,7 @@ comptime NULL: UInt32 = _to_uint32("null")
 
 
 def _to_uint32(s: StaticString) -> UInt32:
-    debug_assert(s.byte_length() > 3, "string is too small")
+    assert s.byte_length() > 3, "string is too small"
     return s.unsafe_ptr().bitcast[UInt32]()[0]
 
 
