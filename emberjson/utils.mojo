@@ -110,18 +110,6 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
             return v
         return self.p.load[width=SIMD8_WIDTH]()
 
-    @always_inline("nodebug")
-    def expect_remaining(self, i: Int):
-        assert (
-            self.dist() + 1 >= i,
-            "Expected at least: ",
-            i,
-            " bytes remaining, received: ",
-            self.dist() + 1,
-            "\ninput:\n\n",
-            StringSlice(ptr=self.start, length=Int(self.end) - Int(self.start)),
-        )
-
 
 comptime DefaultPrettyIndent = 4
 

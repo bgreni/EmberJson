@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
 preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
@@ -29,7 +29,7 @@ gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = "==0.26.3.0.dev2026031215"
+mojo = ">=0.26.2.0,<0.27"
 
 
 [package]
@@ -40,11 +40,11 @@ version = "0.3.1"
 backend = { name = "pixi-build-mojo", version = "0.1.*" }
 
 [package.host-dependencies]
-mojo-compiler = ">=0.26.2.0.dev2026020205,<0.27"
+mojo-compiler = ">=0.26.2.0,<0.27"
 
 [package.build-dependencies]
-mojo-compiler = ">=0.26.2.0.dev2026020205,<0.27"
+mojo-compiler = ">=0.26.2.0,<0.27"
 
 [package.run-dependencies]
-mojo-compiler = ">=0.26.2.0.dev2026020205,<0.27"
+mojo-compiler = ">=0.26.2.0,<0.27"
 

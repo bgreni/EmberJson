@@ -96,7 +96,7 @@ def main() raises:
             if iters % 4 == 0:
                 var start = rng.rand_int(min=0, max=len(s))
                 var end = rng.rand_int(min=start, max=len(s))
-                var corrupted = s[start:end]
+                var corrupted = s[byte=start:end]
                 try:
                     j = parse(corrupted)
                 except:

@@ -130,9 +130,8 @@ def _default_deserialize[
     comptime if is_array:
         p.expect(`[`)
         comptime for i in range(field_count):
-            ref field = __struct_field_ref(i, s)
-            comptime TField = downcast[type_of(field), _Base]
-            field = _deserialize_impl[TField](p)
+            ref field = trait_downcast[_Base](__struct_field_ref(i, s))
+            field = _deserialize_impl[type_of(field)](p)
             p.skip_whitespace()
             if i < field_count - 1:
                 p.expect(`,`)
@@ -158,10 +157,9 @@ def _default_deserialize[
                         raise Error("Duplicate key: ", name)
                     seen_i = True
                     matched = True
-                    ref field = __struct_field_ref(i, s)
-                    comptime TField = downcast[type_of(field), _Base]
+                    ref field = trait_downcast[_Base](__struct_field_ref(i, s))
 
-                    field = _deserialize_impl[TField](p)
+                    field = _deserialize_impl[type_of(field)](p)
 
             if unlikely(not matched):
                 raise Error("Unexpected field: ", ident)
@@ -175,8 +173,10 @@ def _default_deserialize[
                 comptime if __is_optional[field_types[i]]() or __is_default[
                     field_types[i]
                 ]():
-                    ref field = __struct_field_ref(i, s)
-                    field = downcast[type_of(field), Defaultable]()
+                    ref field = trait_downcast[_Base & Defaultable](
+                        __struct_field_ref(i, s)
+                    )
+                    field = type_of(field)()
                 else:
                     comptime name = field_names[i]
                     raise Error("Missing key: ", name)
