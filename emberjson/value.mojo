@@ -42,6 +42,10 @@ struct Null(JsonValue, TrivialRegisterPassable):
         writer.write("null")
 
     @always_inline
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("Null()")
+
+    @always_inline
     def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
     ):
@@ -386,6 +390,26 @@ struct Value(JsonValue, Sized):
             writer.write(self.array())
         else:
             abort("Unreachable: write_to")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        if self.is_int():
+            self.int().write_repr_to(writer)
+        elif self.is_uint():
+            self.uint().write_repr_to(writer)
+        elif self.is_float():
+            self.float().write_repr_to(writer)
+        elif self.is_string():
+            self.string().write_repr_to(writer)
+        elif self.is_bool():
+            self.bool().write_repr_to(writer)
+        elif self.is_null():
+            self.null().write_repr_to(writer)
+        elif self.is_object():
+            self.object().write_repr_to(writer)
+        elif self.is_array():
+            self.array().write_repr_to(writer)
+        else:
+            abort("Unreachable: write_repr_to")
 
     def _pretty_to_as_element(
         self, mut writer: Some[Writer], indent: String, curr_depth: UInt

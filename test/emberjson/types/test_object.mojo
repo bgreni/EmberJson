@@ -167,14 +167,41 @@ def test_parse_simple_object() raises:
 
 
 def test_setter_object_generic() raises:
-    var ob: JSON = Object()
+    var ob: Value = Object()
     ob.object()["key"] = "foo"
     assert_true("key" in ob)
     assert_equal(ob.object()["key"], "foo")
 
 
+def test_repr_empty() raises:
+    assert_equal(repr(Object()), "Object{}")
+
+
+def test_repr_single_key() raises:
+    var ob: Object = {"key": 42}
+    assert_equal(repr(ob), 'Object{"key":SIMD[DType.int64, 1](42)}')
+
+
+def test_repr_multiple_keys() raises:
+    var ob: Object = {"a": 1, "b": "hello"}
+    assert_equal(
+        repr(ob),
+        """Object{"a":SIMD[DType.int64, 1](1),"b":'hello'}""",
+    )
+
+
+def test_repr_nested() raises:
+    var inner: Object = {"x": True}
+    var outer = Object()
+    outer["inner"] = inner.copy()
+    assert_equal(
+        repr(outer),
+        'Object{"inner":Object{"x":True}}',
+    )
+
+
 def test_nested_access_generic() raises:
-    var nested: JSON = {"key": [True, None, {"inner2": False}]}
+    var nested: Value = {"key": [True, None, {"inner2": False}]}
 
     assert_equal(nested["key"][2]["inner2"].bool(), False)
 

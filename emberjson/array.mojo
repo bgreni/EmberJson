@@ -124,6 +124,14 @@ struct Array(JsonValue, Sized):
                 writer.write(",")
         writer.write("]")
 
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("Array(")
+        for i in range(len(self._data)):
+            self._data[i].write_repr_to(writer)
+            if i != len(self._data) - 1:
+                writer.write(", ")
+        writer.write(")")
+
     @always_inline
     def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)

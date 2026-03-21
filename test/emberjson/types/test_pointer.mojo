@@ -1,4 +1,4 @@
-from emberjson import JSON, Value, PointerIndex
+from emberjson import Value, PointerIndex
 from std.testing import assert_equal, assert_raises, assert_true, TestSuite
 
 
@@ -19,7 +19,7 @@ def test_rfc6901() raises:
         ' "0123": 9'
         "}"
     )
-    var j = JSON(parse_string=json_str)
+    var j = Value(parse_string=json_str)
 
     assert_equal(j.get("").object()["foo"].array()[0].string(), "bar")
 
@@ -38,7 +38,7 @@ def test_rfc6901() raises:
 
 
 def test_errors() raises:
-    var j = JSON(parse_string='{"a": 1}')
+    var j = Value(parse_string='{"a": 1}')
 
     with assert_raises():
         _ = j.get("a")  # No leading /
@@ -51,7 +51,7 @@ def test_errors() raises:
 
 
 def test_array_idx() raises:
-    var j = JSON(parse_string="[10, 20]")
+    var j = Value(parse_string="[10, 20]")
     assert_equal(j.get("/0").int(), 10)
     assert_equal(j.get("/1").int(), 20)
 
@@ -69,7 +69,7 @@ def test_explicit_pointer_index() raises:
     # Verify that we can construct a PointerIndex explicitly and reuse it
     var ptr = PointerIndex("/foo/1")
 
-    var j = JSON(parse_string='{"foo": ["bar", "baz"]}')
+    var j = Value(parse_string='{"foo": ["bar", "baz"]}')
     ref val = j.get(ptr)
     assert_equal(val.string(), "baz")
 
@@ -79,7 +79,7 @@ def test_explicit_pointer_index() raises:
 
 
 def test_getattr_method() raises:
-    var j = JSON(parse_string='{"foo": {"bar": 1}}')
+    var j = Value(parse_string='{"foo": {"bar": 1}}')
     assert_equal(j.`/foo/bar`, 1)
 
     j.`/foo` = [1, 2, 3]
@@ -98,7 +98,7 @@ def test_getattr_method() raises:
 
 
 def test_unicode_keys() raises:
-    var j = JSON(
+    var j = Value(
         parse_string='{"🔥": "fire", "🚀": "rocket", "key with spaces": 1}'
     )
     assert_equal(j.get("/🔥").string(), "fire")
@@ -110,7 +110,7 @@ def test_unicode_keys() raises:
 
 def test_value_sugar() raises:
     # Test __getattr__ chaining on Value with mixed arrays/objects
-    var j = JSON(
+    var j = Value(
         parse_string=(
             '{"users": [{"name": "alice", "id": 1}, {"name": "bob", "id": 2}]}'
         )

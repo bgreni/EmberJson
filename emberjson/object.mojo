@@ -250,13 +250,22 @@ struct Object(JsonValue, Sized):
             writer.write("\n")
             done += 1
 
-    @always_inline
     def write_to(self, mut writer: Some[Writer]):
         writer.write("{")
         for i in range(len(self._data)):
             write_escaped_string(self._data[i].key, writer)
             writer.write(":")
             writer.write(self._data[i].value)
+            if i < len(self._data) - 1:
+                writer.write(",")
+        writer.write("}")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("Object{")
+        for i in range(len(self._data)):
+            write_escaped_string(self._data[i].key, writer)
+            writer.write(":")
+            self._data[i].value.write_repr_to(writer)
             if i < len(self._data) - 1:
                 writer.write(",")
         writer.write("}")

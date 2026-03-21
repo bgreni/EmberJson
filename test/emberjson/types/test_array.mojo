@@ -142,6 +142,32 @@ def test_stringify_array_generic() raises:
     assert_equal(String(arr), '[123,"foo",false,null]')
 
 
+def test_repr_empty() raises:
+    assert_equal(repr(Array()), "Array()")
+
+
+def test_repr_single() raises:
+    var arr = Array(42)
+    assert_equal(repr(arr), "Array(SIMD[DType.int64, 1](42))")
+
+
+def test_repr_multiple() raises:
+    var arr = Array(1, "foo", None)
+    assert_equal(
+        repr(arr),
+        "Array(SIMD[DType.int64, 1](1), 'foo', Null())",
+    )
+
+
+def test_repr_nested() raises:
+    var inner = Array(1, 2)
+    var outer = Array(inner.copy(), "end")
+    assert_equal(
+        repr(outer),
+        "Array(Array(SIMD[DType.int64, 1](1), SIMD[DType.int64, 1](2)), 'end')",
+    )
+
+
 def test_iter_count() raises:
     var arr = Array(Value(1), Value(2), Value(3))
     var count = 0

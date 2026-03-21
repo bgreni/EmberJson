@@ -1,5 +1,5 @@
 from emberjson.value import Value, Null
-from emberjson import Object, Array, JSON, write_pretty
+from emberjson import Object, Array, write_pretty
 from std.testing import (
     assert_equal,
     assert_true,
@@ -239,6 +239,56 @@ def test_pretty() raises:
 }"""
 
     assert_equal(expected, write_pretty(v))
+
+
+def test_repr_null() raises:
+    assert_equal(repr(Null()), "Null()")
+
+
+def test_repr_value_int() raises:
+    var v = Value(Int64(42))
+    assert_equal(repr(v), "SIMD[DType.int64, 1](42)")
+
+
+def test_repr_value_uint() raises:
+    var v = Value(UInt64(99))
+    assert_equal(repr(v), "SIMD[DType.uint64, 1](99)")
+
+
+def test_repr_value_float() raises:
+    var v = Value(Float64(3.14))
+    assert_equal(repr(v), "SIMD[DType.float64, 1](3.14)")
+
+
+def test_repr_value_string() raises:
+    var v = Value("hello")
+    assert_equal(repr(v), "'hello'")
+
+
+def test_repr_value_bool() raises:
+    assert_equal(repr(Value(True)), "True")
+    assert_equal(repr(Value(False)), "False")
+
+
+def test_repr_value_null() raises:
+    var v = Value(None)
+    assert_equal(repr(v), "Null()")
+
+
+def test_repr_value_array() raises:
+    var v: Value = [1, 2, 3]
+    assert_equal(
+        repr(v),
+        (
+            "Array(SIMD[DType.int64, 1](1), SIMD[DType.int64, 1](2),"
+            " SIMD[DType.int64, 1](3))"
+        ),
+    )
+
+
+def test_repr_value_object() raises:
+    var v: Value = {"key": 42}
+    assert_equal(repr(v), 'Object{"key":SIMD[DType.int64, 1](42)}')
 
 
 def test_booling() raises:
