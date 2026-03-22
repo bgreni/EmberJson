@@ -59,8 +59,10 @@ struct Null(JsonValue, TrivialRegisterPassable):
         writer.write(self)
 
     @staticmethod
-    def from_json(mut json: Parser, out s: Self) raises:
-        s = json.parse_null()
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = p.parse_null()
 
 
 struct Value(JsonValue, Sized):

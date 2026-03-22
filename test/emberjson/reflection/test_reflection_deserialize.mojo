@@ -15,6 +15,7 @@ from emberjson._deserialize import (
 from emberjson import JsonDeserializable
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
+from emberjson import Value, Object, Array, Null
 
 
 struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
@@ -36,6 +37,10 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var set: Set[Int]
     var ap: ArcPointer[Int]
     var op: OwnedPointer[Int]
+    var v: Value
+    var obj: Object
+    var arr: Array
+    var n: Null
 
     def __init__(out self):
         self.a = ""
@@ -56,6 +61,10 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
         self.set = {}
         self.ap = ArcPointer[Int](0)
         self.op = OwnedPointer[Int](0)
+        self.v = None
+        self.obj = Object()
+        self.arr = Array()
+        self.n = Null()
 
 
 def test_deserialize() raises:
@@ -79,7 +88,11 @@ def test_deserialize() raises:
     "ina": [1.0, 2.0, 3.0],
     "set": [1, 2, 3],
     "ap": 42,
-    "op": 42
+    "op": 42,
+    "v": {"variant": "test"},
+    "obj": {"key": 123},
+    "arr": [1, 2, "three"],
+    "n": null
 }
 """
     )
@@ -103,6 +116,11 @@ def test_deserialize() raises:
     assert_equal(foo.set, {1, 2, 3})
     assert_equal(foo.ap[], 42)
     assert_equal(foo.op[], 42)
+    assert_equal(foo.v["variant"].string(), "test")
+    assert_equal(foo.obj["key"].int(), 123)
+    assert_equal(foo.arr[0].int(), 1)
+    assert_equal(foo.arr[2].string(), "three")
+    assert_false(foo.n)
 
 
 @fieldwise_init
@@ -142,7 +160,11 @@ def test_ctime_deserialize() raises:
     "ina": [1.0, 2.0, 3.0],
     "set": [1, 2, 3],
     "ap": 42,
-    "op": 42
+    "op": 42,
+    "v": {"variant": "test"},
+    "obj": {"key": 123},
+    "arr": [1, 2, "three"],
+    "n": null
 }
 """
     )
@@ -171,6 +193,11 @@ def test_ctime_deserialize() raises:
     assert_equal(foo.set, {1, 2, 3})
     assert_equal(foo.ap[], 42)
     assert_equal(foo.op[], 42)
+    assert_equal(foo.v["variant"].string(), "test")
+    assert_equal(foo.obj["key"].int(), 123)
+    assert_equal(foo.arr[0].int(), 1)
+    assert_equal(foo.arr[2].string(), "three")
+    assert_false(foo.n)
 
 
 struct Baz(Movable):
@@ -213,6 +240,10 @@ def test_unexpected_keys() raises:
         }
     },
     "op": 42,
+    "v": {"variant": "test"},
+    "obj": {"key": 123},
+    "arr": [1, 2, "three"],
+    "n": null,
     "extra_bool": false
 }
 """

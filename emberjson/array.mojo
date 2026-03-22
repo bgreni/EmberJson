@@ -173,5 +173,7 @@ struct Array(JsonValue, Sized):
         return Python.list(self._data)
 
     @staticmethod
-    def from_json(mut json: Parser, out s: Self) raises:
-        s = json.parse_array()
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = p.parse_array()

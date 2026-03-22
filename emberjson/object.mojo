@@ -283,5 +283,7 @@ struct Object(JsonValue, Sized):
         return d
 
     @staticmethod
-    def from_json(mut json: Parser, out s: Self) raises:
-        s = json.parse_object()
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = p.parse_object()
