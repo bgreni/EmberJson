@@ -18,15 +18,9 @@ Use the `parse` function to parse a JSON value from a string. It accepts a
 `ParseOptions` struct as a parameter to alter parsing behaviour.
 
 ```mojo
+from emberjson import parse, ParseOptions
 
-from emberjson import parse
-
-struct ParseOptions:
-    # ignore unicode for a small performance boost
-    var ignore_unicode: Bool
-
-...
-
+# Use custom options
 var json = parse[ParseOptions(ignore_unicode=True)](r'["\uD83D\uDD25"]')
 ```
 
@@ -92,7 +86,8 @@ print(json.is_object()) # prints True
 print(json.object()["key"].int()) # prints 123
 
 # array
-var array = parse('[123, 4.5, "string", True, null]').array()
+var value = parse('[123, 4.5, "string", true, null]')
+ref array = value.array()
 
 # array style access
 print(array[3].bool()) # prints True
@@ -127,16 +122,24 @@ To customize behavior, implement the `JsonSerializable` and/or `JsonDeserializab
 #### Deserialization
 
 The target struct must implement the `Movable` trait.
+As well as the `Defaultable` trait if any of its fields
+have non-trivial destructors.
 
 ```mojo
 from emberjson import deserialize, try_deserialize
 
 @fieldwise_init
-struct User(Movable):
+struct User(Defaultable, Movable):
     var id: Int
     var name: String
     var is_active: Bool
     var scores: List[Float64]
+
+    def __init__(out self):
+        self.id = 0
+        self.name = ""
+        self.is_active = False
+        self.scores = List[Float64]()
 
 def main() raises:
     var json_str = '{"id": 1, "name": "Mojo", "is_active": true, "scores": [9.9, 8.5]}'
@@ -154,14 +157,22 @@ Nested structs and `Optional` fields are handled automatically. Missing JSON key
 
 ```mojo
 @fieldwise_init
-struct Address(Movable):
+struct Address(Defaultable, Movable):
     var city: String
     var zip: Optional[String]
 
+    def __init__(out self):
+        self.city = ""
+        self.zip = None
+
 @fieldwise_init
-struct Person(Movable):
+struct Person(Defaultable, Movable):
     var name: String
     var address: Address
+
+    def __init__(out self):
+        self.name = ""
+        self.address = Address()
 
 def main() raises:
     var json_str = '{"name": "Mojo", "address": {"city": "SF"}}'
@@ -354,11 +365,17 @@ Validators work as struct field types, enforcing constraints during deserializat
 from emberjson import *
 
 @fieldwise_init
-struct Config(Movable):
+struct Config(Defaultable, Movable):
     var name: NonEmpty[String]
     var port: Range[Int, 1, 65535]
     var timeout: Default[Int, 30]
     var password: Secret[String]
+
+    def __init__(out self):
+        self.name = "default"
+        self.port = 80
+        self.timeout = Default[Int, 30]()
+        self.password = ""
 
 def main() raises:
     var cfg = deserialize[Config](
@@ -379,9 +396,13 @@ from emberjson import *
 from emberjson.schema import CrossFieldValidator
 
 @fieldwise_init
-struct DateRange(Movable):
+struct DateRange(Defaultable, Movable):
     var start: Int
     var end: Int
+
+    def __init__(out self):
+        self.start = 0
+        self.end = 0
 
 def validate_order(start: Int, end: Int) raises:
     if start >= end:
@@ -399,22 +420,27 @@ def main() raises:
 
 EmberJSON supports [RFC 6901](https://tools.ietf.org/html/rfc6901) JSON Pointer for traversing documents with a string path.
 
-The `pointer()` method works on `JSON` documents or `Value` types and returns a **reference** to the target value, allowing in-place modification.
+The `get()` method works on `Value` types and returns a reference
+to the nested value. It also supports syntactic sugar via backticks.
 
 ```mojo
-var j = JSON(parse_string='{"foo": ["bar", "baz"]}')
+var j = Value(parse_string='{"foo": ["bar", "baz"]}')
 
 # Access nested values
-print(j.pointer("/foo/1").string())  # prints "baz"
+print(j.get("/foo/1").string())  # prints "baz"
 
-# Modify values in-place
-j.pointer("/foo/1") = "modified"
-print(j.pointer("/foo/1").string())  # prints "modified"
+# Syntactic sugar via backticks
+print(j.`/foo/1`.string())
+
+# Modify values
+j.get("/foo/1") = "modified"
+# or
+j.`/foo/1` = "modified"
 
 # RFC 6901 Escaping (~1 for /, ~0 for ~) covers special characters
-var j2 = JSON(parse_string='{"a/b": 1, "m~n": 2}')
-print(j2.pointer("/a~1b").int()) # prints 1
-print(j2.pointer("/m~0n").int()) # prints 2
+var j2 = Value(parse_string='{"a/b": 1, "m~n": 2}')
+print(j2.get("/a~1b").int()) # prints 1
+print(j2.get("/m~0n").int()) # prints 2
 ```
 
 #### Syntactic Sugar
@@ -483,7 +509,7 @@ def main() raises:
     var all_values = read_lines("data.jsonl").collect()
 
     # Write: save a list of values as JSONL
-    var lines = List[Value](Value(1), Value(2), Value(3))
+    var lines: List[Value] = [Value(1), Value(2), Value(3)]
     write_lines(Path("output.jsonl"), lines)
 ```
 

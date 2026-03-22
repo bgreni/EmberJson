@@ -2,6 +2,7 @@ from std.testing import TestSuite, assert_equal
 from emberjson._serialize import serialize, JsonSerializable, PrettySerializer
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
+from emberjson import Value, Object, Array, Null
 
 
 @fieldwise_init
@@ -26,6 +27,10 @@ struct Foo[I: IntLiteral, F: FloatLiteral]:
     var set: Set[Int]
     var arc_ptr: ArcPointer[Int]
     var owned_ptr: OwnedPointer[Int]
+    var v: Value
+    var v_obj: Object
+    var v_arr: Array
+    var n: Null
 
 
 @fieldwise_init
@@ -56,13 +61,17 @@ def test_serialize() raises:
         {1, 2, 3},
         ArcPointer(1234),
         OwnedPointer(4321),
+        Value({"variant": "test"}),
+        Object({"key": 123}),
+        Array(1, 2, "three"),
+        Null(),
     )
 
     assert_equal(
         serialize(f),
         (
             '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
-            ' key":1234},"il":45,"fl":7.43,"tup":[1,2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321}'
+            ' key":1234},"il":45,"fl":7.43,"tup":[1,2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321,"v":{"variant":"test"},"v_obj":{"key":123},"v_arr":[1,2,"three"],"n":null}'
         ),
     )
 
@@ -84,6 +93,10 @@ def test_ctime_serialize() raises:
         {1, 2, 3},
         ArcPointer(1234),
         OwnedPointer(4321),
+        Value({"variant": "test"}),
+        Object({"key": 123}),
+        Array(1, 2, "three"),
+        Null(),
     )
 
     comptime serialized = serialize(f)
@@ -93,7 +106,7 @@ def test_ctime_serialize() raises:
         (
             '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
             ' key":1234},"il":45,"fl":7.43,"tup":[1'
-            ',2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321}'
+            ',2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321,"v":{"variant":"test"},"v_obj":{"key":123},"v_arr":[1,2,"three"],"n":null}'
         ),
     )
 
@@ -271,11 +284,15 @@ def test_pretty_serialize() raises:
         {1, 2, 3},
         ArcPointer(1234),
         OwnedPointer(4321),
+        Value({"variant": "test"}),
+        Object({"key": 123}),
+        Array(1, 2, "three"),
+        Null(),
     )
 
     var serialized = serialize[pretty=True](f)
 
-    var expected = '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n        "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n        5.345\n    ],\n    "l": [\n        32,\n        42,\n        353\n    ],\n    "arr": [\n        false,\n        true,\n        true\n    ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n    "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n    ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n    "arc_ptr": 1234,\n    "owned_ptr": 4321\n}'
+    var expected = '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n        "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n        5.345\n    ],\n    "l": [\n        32,\n        42,\n        353\n    ],\n    "arr": [\n        false,\n        true,\n        true\n    ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n    "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n    ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n    "arc_ptr": 1234,\n    "owned_ptr": 4321,\n    "v": {"variant":"test"},\n    "v_obj": {"key":123},\n    "v_arr": [1,2,"three"],\n    "n": null\n}'
 
     assert_equal(serialized, expected)
 
