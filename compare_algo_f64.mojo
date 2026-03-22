@@ -168,7 +168,7 @@ def compare_implementations() raises:
                 var speedup = stdlib_time / teju_time
                 speedup_str = String(speedup)
                 if len(speedup_str) > 5:
-                    speedup_str = String(speedup_str[0:5])
+                    speedup_str = String(speedup_str[byte=0:5])
                 speedup_str += "x"
 
             var t_str = pad_right(format_float(teju_time), 9)
@@ -197,10 +197,10 @@ def format_float(val: Float64) -> String:
         var base = String(parts[0])
         var exp = String(parts[1])
         if len(base) > 6:
-            base = String(base[0:6])
+            base = String(base[byte=0:6])
         return base + "e" + exp
     if len(s) > 8:
-        return String(s[0:8])
+        return String(s[byte=0:8])
     return s
 
 

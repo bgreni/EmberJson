@@ -171,10 +171,10 @@ def print_relative_performance(
             var speedup = new_val / old_val
 
             var sign = "+" if diff_pct >= 0 else ""
-            var diff_str = String(sign + String(diff_pct)[0:5] + "%")
-            var speedup_str = String(String(speedup)[0:4] + "x")
-            var old_str = String(String(old_val)[0:6])
-            var new_str = String(String(new_val)[0:6])
+            var diff_str = String(sign + String(diff_pct)[byte=0:5] + "%")
+            var speedup_str = String(String(speedup)[byte=0:4] + "x")
+            var old_str = String(String(old_val)[byte=0:6])
+            var new_str = String(String(new_val)[byte=0:6])
 
             # Pad output manually (inefficient but works without formatting lib)
             var pad_len = 10
@@ -205,7 +205,7 @@ def print_relative_performance(
                 "| "
                 + name_pad
                 + " | N/A        | "
-                + String(new_val)[0:6]
+                + String(new_val)[byte=0:6]
                 + "     | N/A        | N/A         |"
             )
 

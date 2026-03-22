@@ -31,9 +31,6 @@ def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
     def do():
-        var casted = val.cast[
-            DType.float64 if dtype == DType.float64 else DType.float32
-        ]()
         for _ in range(1000):
             var writer = String()
             writer.write(val)
@@ -122,10 +119,10 @@ def format_float(val: Float64) -> String:
         var base = String(parts[0])
         var exp = String(parts[1])
         if len(base) > 6:
-            base = String(base[0:6])
+            base = String(base[byte=0:6])
         return base + "e" + exp
     if len(s) > 8:
-        return String(s[0:8])
+        return String(s[byte=0:8])
     return s
 
 
@@ -156,7 +153,7 @@ def print_comparison(var results: BenchResults, names: List[String]) raises:
                 var speedup = s_val / t_val
                 speedup_str = String(speedup)
                 if len(speedup_str) > 5:
-                    speedup_str = String(speedup_str[0:5])
+                    speedup_str = String(speedup_str[byte=0:5])
                 speedup_str += "x"
 
             var t_str = pad_right(format_float(t_val), 9)
