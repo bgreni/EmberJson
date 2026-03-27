@@ -13,13 +13,15 @@ from std.python import Python
 
 comptime BenchResults = Dict[String, Float64]
 
+comptime ITERS = 10000
+
 
 @parameter
 def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
     def do():
-        for _ in range(1000):
+        for _ in range(ITERS):
             var writer = String()
             write_float[dtype](val, writer)
 
@@ -31,7 +33,7 @@ def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
     @parameter
     def do():
-        for _ in range(1000):
+        for _ in range(ITERS):
             var writer = String()
             writer.write(val)
 

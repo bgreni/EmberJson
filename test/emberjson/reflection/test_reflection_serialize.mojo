@@ -221,7 +221,14 @@ def test_deep_hierarchy() raises:
 
     var company = Company("Tech Corp", hq^, depts^, 1990)
 
-    var expected = '{"name":"Tech Corp","hq":{"street":"1 Infinite Loop","city":"Cupertino","zip":95014},"departments":{"Engineering":{"name":"Engineering","manager":{"name":"Alice","age":30,"address":{"street":"Test St","city":"Test City","zip":12345},"tags":["mgr"]},"employees":[{"name":"Bob","age":25,"address":{"street":"Emp St","city":"Emp City","zip":54321},"tags":["dev"]}]}},"founded_year":1990}'
+    var expected = (
+        '{"name":"Tech Corp","hq":{"street":"1 Infinite'
+        ' Loop","city":"Cupertino","zip":95014},"departments":{"Engineering":{"name":"Engineering","manager":{"name":"Alice","age":30,"address":{"street":"Test'
+        ' St","city":"Test'
+        ' City","zip":12345},"tags":["mgr"]},"employees":[{"name":"Bob","age":25,"address":{"street":"Emp'
+        ' St","city":"Emp'
+        ' City","zip":54321},"tags":["dev"]}]}},"founded_year":1990}'
+    )
     assert_equal(serialize(company^), expected)
 
 
@@ -292,7 +299,18 @@ def test_pretty_serialize() raises:
 
     var serialized = serialize[pretty=True](f)
 
-    var expected = '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n        "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n        5.345\n    ],\n    "l": [\n        32,\n        42,\n        353\n    ],\n    "arr": [\n        false,\n        true,\n        true\n    ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n    "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n    ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n    "arc_ptr": 1234,\n    "owned_ptr": 4321,\n    "v": {"variant":"test"},\n    "v_obj": {"key":123},\n    "v_arr": [1,2,"three"],\n    "n": null\n}'
+    var expected = (
+        '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n   '
+        '     "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n     '
+        '   5.345\n    ],\n    "l": [\n        32,\n        42,\n        353\n '
+        '   ],\n    "arr": [\n        false,\n        true,\n        true\n   '
+        ' ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n   '
+        ' "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n   '
+        ' ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n   '
+        ' "arc_ptr": 1234,\n    "owned_ptr": 4321,\n    "v":'
+        ' {"variant":"test"},\n    "v_obj": {"key":123},\n    "v_arr":'
+        ' [1,2,"three"],\n    "n": null\n}'
+    )
 
     assert_equal(serialized, expected)
 
