@@ -430,7 +430,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var start = self.data
         # compile time interpreter is incompatible with the SIMD accelerated
         # path, so fallback to the serial implementation
-        if self.can_load_chunk() and not __is_run_in_comptime_interpreter:
+        if self.can_load_chunk():
             s = self.find(start)
             self.data += 1
         else:
@@ -444,7 +444,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         # compile time interpreter is incompatible with the SIMD accelerated
         # path, so fallback to the serial implementation
-        while self.can_load_chunk() and not __is_run_in_comptime_interpreter:
+        while self.can_load_chunk():
             var chunk = self.load_chunk()
             var nonspace = get_non_space_bits(chunk)
             if nonspace != 0:
@@ -938,7 +938,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         while self.has_more():
             while (
-                self.can_load_chunk() and not __is_run_in_comptime_interpreter
+                self.can_load_chunk()
             ):
                 var chunk = self.load_chunk()
                 var relevant = chunk.eq(`"`) | chunk.eq(open) | chunk.eq(close)
@@ -999,7 +999,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if self.data[] == `-`:  # '-'
             self.data += 1
 
-        while self.can_load_chunk() and not __is_run_in_comptime_interpreter:
+        while self.can_load_chunk():
             var chunk = self.load_chunk()
             var is_digit = chunk.ge(`0`) & chunk.le(`9`)  # '0' to '9'
             var invalid = ~is_digit
@@ -1024,7 +1024,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         if self.data[] == `-`:  # '-'
             self.data += 1
 
-        while self.can_load_chunk() and not __is_run_in_comptime_interpreter:
+        while self.can_load_chunk():
             var chunk = self.load_chunk()
             var is_digit = chunk.ge(`0`) & chunk.le(`9`)
             var is_dot = chunk.eq(`.`)  # '.'
