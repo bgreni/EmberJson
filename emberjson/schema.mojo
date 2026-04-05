@@ -82,7 +82,7 @@ struct AllOf[T: _Base, *validators: Validator](
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime for i in range(Variadic.size(Self.validators)):
+        comptime for i in range(Variadic.size_types[Self.validators]):
             comptime VType = Self.validators[i]
             comptime assert _type_is_eq[VType.Type, Self.T]()
             VType.validate(rebind[VType.Type](value))
@@ -343,7 +343,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
     @staticmethod
     def validate(value: Self.Type) raises:
         var matched = False
-        comptime for i in range(Variadic.size(Self.accepted)):
+        comptime for i in range(Variadic.size_types[Self.accepted]):
             var current_match = False
             try:
                 comptime VType = Self.accepted[i]
@@ -397,7 +397,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     @staticmethod
     def validate(value: Self.Type) raises:
         var matched = False
-        comptime for i in range(Variadic.size(Self.accepted)):
+        comptime for i in range(Variadic.size_types[Self.accepted]):
             try:
                 comptime VType = Self.accepted[i]
                 comptime assert _type_is_eq[VType.Type, Self.T]()
@@ -444,7 +444,7 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime for i in range(Variadic.size(Self.rejected)):
+        comptime for i in range(Variadic.size_types[Self.rejected]):
             var matched = False
             try:
                 comptime VType = Self.rejected[i]
@@ -515,7 +515,7 @@ struct Enum[T: _Base & Equatable, *accepted: T](
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime for i in range(Variadic.size(Self.accepted)):
+        comptime for i in range(Variadic.size[Self.accepted]):
             if value == materialize[Self.accepted[i]]():
                 return
         raise Error("Value not in options")

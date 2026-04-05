@@ -65,7 +65,7 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     def __init__(out self, var *values: Value, __list_literal__: () = ()):
-        self._data = Self.Type(elements=values^)
+        self._data = Self.Type(*values^, __list_literal__ = ())
 
     @always_inline
     def __init__(out self: Array, *, parse_string: String) raises:
