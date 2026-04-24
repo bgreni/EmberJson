@@ -10,10 +10,6 @@ from emberjson.schema import (
     NoneOf,
     Enum,
     AllOf,
-    MergeAllOf,
-    MergeAnyOf,
-    MergeOneOf,
-    MergeNoneOf,
     Eq,
     Ne,
     Not,
@@ -337,19 +333,24 @@ def test_all_of() raises:
             ]
         ](s)
 
-    comptime S1 = AllOf[
-        Int64, Range[Int64, 1, 30], MultipleOf[Int64(4)]
-    ].validators
-    comptime S2 = AllOf[Int64, MultipleOf[Int64(2)]].validators
-    comptime VSet = MergeAllOf[Int64, S1, S2]
+    comptime VSet = AllOf[
+        Int64,
+        Range[Int64, 1, 30],
+        MultipleOf[Int64(4)],
+        MultipleOf[Int64(2)],
+    ]
     var setv = deserialize[VSet]("8")
     assert_equal(setv[], 8)
 
     with assert_raises():
         _ = deserialize[VSet]("10")
 
-    comptime VSet2 = MergeAllOf[
-        Int64, VSet.validators, Variadic.types[MultipleOf[Int64(3)]]
+    comptime VSet2 = AllOf[
+        Int64,
+        Range[Int64, 1, 30],
+        MultipleOf[Int64(4)],
+        MultipleOf[Int64(2)],
+        MultipleOf[Int64(3)],
     ]
 
     with assert_raises():
@@ -459,57 +460,6 @@ def test_none_of() raises:
         _ = deserialize[NoneOf[Int, Eq[1], Eq[2], Range[Int, 0, 10]]]("5")
 
 
-def test_merge_any_of() raises:
-    comptime S1 = AnyOf[Int64, Range[Int64, 0, 10]].accepted
-    comptime S2 = AnyOf[Int64, MultipleOf[Int64(2)]].accepted
-    comptime VSet = MergeAnyOf[Int64, S1, S2]
-
-    var v1 = deserialize[VSet]("4")  # matches both
-    assert_equal(v1[], 4)
-
-    var v2 = deserialize[VSet]("7")  # matches range only
-    assert_equal(v2[], 7)
-
-    var v3 = deserialize[VSet]("12")  # matches multiple of only
-    assert_equal(v3[], 12)
-
-    with assert_raises(contains="Value not in options"):
-        _ = deserialize[VSet]("11")
-
-
-def test_merge_one_of() raises:
-    comptime S1 = OneOf[Int64, MultipleOf[Int64(2)]].accepted
-    comptime S2 = OneOf[Int64, MultipleOf[Int64(3)]].accepted
-    comptime VSet = MergeOneOf[Int64, S1, S2]
-
-    var v1 = deserialize[VSet]("2")  # matches multiple of 2 only
-    assert_equal(v1[], 2)
-
-    var v2 = deserialize[VSet]("3")  # matches multiple of 3 only
-    assert_equal(v2[], 3)
-
-    with assert_raises(contains="Multiple validators matched"):
-        _ = deserialize[VSet]("6")  # matches both
-
-    with assert_raises(contains="Value didn't match any validators"):
-        _ = deserialize[VSet]("5")  # matches neither
-
-
-def test_merge_none_of() raises:
-    comptime S1 = NoneOf[Int64, Range[Int64, 0, 5]].rejected
-    comptime S2 = NoneOf[Int64, Range[Int64, 10, 15]].rejected
-    comptime VSet = MergeNoneOf[Int64, S1, S2]
-
-    var v1 = deserialize[VSet]("7")  # matches none
-    assert_equal(v1[], 7)
-
-    with assert_raises(contains="Value matched a rejected validator"):
-        _ = deserialize[VSet]("3")  # matches first range
-
-    with assert_raises(contains="Value matched a rejected validator"):
-        _ = deserialize[VSet]("12")  # matches second range
-
-
 def test_exclusive_range() raises:
     var r1 = deserialize[ExclusiveRange[Int, 0, 10]]("5")
     assert_equal(r1[], 5)
@@ -567,7 +517,7 @@ def test_starts_ends_with() raises:
 
 
 def test_enum() raises:
-    comptime Color = Enum[String, "red", "green", "blue"]
+    comptime Color = Enum["red", "green", "blue"]
 
     var c1 = deserialize[Color]('"red"')
     assert_equal(c1[], "red")
@@ -580,7 +530,7 @@ def test_enum() raises:
 
     assert_equal(serialize(c1), '"red"')
 
-    comptime Priority = Enum[Int, 1, 2, 3]
+    comptime Priority = Enum[1, 2, 3]
 
     var p1 = deserialize[Priority]("2")
     assert_equal(p1[], 2)
@@ -650,7 +600,7 @@ def test_direct_construction_validates() raises:
         _ = NoneOf[Int, Range[Int, 0, 10]](5)
 
     # Enum — value not in accepted set raises
-    comptime Color = Enum[String, "red", "green", "blue"]
+    comptime Color = Enum["red", "green", "blue"]
     with assert_raises(contains="Value not in options"):
         _ = Color(String("yellow"))
 

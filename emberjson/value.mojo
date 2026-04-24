@@ -192,7 +192,7 @@ struct Value(JsonValue, Sized):
         out self,
         var keys: List[String],
         var values: List[Value],
-        __dict_literal__: (),
+        __dict_literal__: NoneType,
     ):
         assert len(keys) == len(
             values
@@ -202,7 +202,7 @@ struct Value(JsonValue, Sized):
             obj[keys[i]] = values[i].copy()
         self._data = obj^
 
-    def __init__(out self, var *values: Value, __list_literal__: ()):
+    def __init__(out self, var *values: Value, __list_literal__: NoneType):
         var arr = Array()
         for val in values:
             arr.append(val.copy())
@@ -246,7 +246,7 @@ struct Value(JsonValue, Sized):
         if self.is_object():
             return len(self.object())
         if self.is_string():
-            return len(self.string())
+            return self.string().byte_length()
         return -1
 
     def __contains__(self, v: Value) raises -> Bool:

@@ -7,7 +7,7 @@ from std.testing.prop.strategy import Strategy, Rng
 from std.testing.prop import PropTest, PropTestConfig
 from std.benchmark import keep
 from std.time import perf_counter_ns
-from std.sys.param_env import is_defined
+from std.sys import is_defined
 from std.testing import assert_equal
 
 

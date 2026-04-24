@@ -140,8 +140,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var size: Int
 
     @implicit
-    def __init__(out self: Parser[origin_of(s), Self.options], s: String):
-        self = {ptr = s.unsafe_ptr(), length = s.byte_length()}
+    def __init__(out self: Parser[Self.origin, Self.options],ref[Self.origin] s: String):
+        self = {StringSlice(s)}
 
     @implicit
     def __init__(

@@ -1,6 +1,6 @@
 from emberjson import read_lines, Object
 from std.testing import *
-from std.sys.param_env import is_defined
+from std.sys import is_defined
 
 
 def test_read_lines() raises:

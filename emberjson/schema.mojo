@@ -21,40 +21,6 @@ from std.reflection import (
 ##########################################################
 
 
-comptime MergeAllOf[
-    T: _Base,
-    *Validators: Variadic.TypesOfTrait[Validator],
-] = AllOf[
-    T,
-    *Variadic.concat_types[*Validators],
-]
-
-
-comptime MergeAnyOf[
-    T: _Base & Equatable,
-    *Validators: Variadic.TypesOfTrait[Validator],
-] = AnyOf[
-    T,
-    *Variadic.concat_types[*Validators],
-]
-
-comptime MergeOneOf[
-    T: _Base & Equatable,
-    *Validators: Variadic.TypesOfTrait[Validator],
-] = OneOf[
-    T,
-    *Variadic.concat_types[*Validators],
-]
-
-comptime MergeNoneOf[
-    T: _Base & Equatable,
-    *Validators: Variadic.TypesOfTrait[Validator],
-] = NoneOf[
-    T,
-    *Variadic.concat_types[*Validators],
-]
-
-
 struct AllOf[T: _Base, *validators: Validator](
     JsonDeserializable, JsonSerializable, Validator
 ):
@@ -82,7 +48,7 @@ struct AllOf[T: _Base, *validators: Validator](
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime for i in range(Variadic.size_types[Self.validators]):
+        comptime for i in range(len(Self.validators)):
             comptime VType = Self.validators[i]
             comptime assert _type_is_eq[VType.Type, Self.T]()
             VType.validate(rebind[VType.Type](value))
@@ -104,7 +70,7 @@ trait Validator:
 
 struct Validated[
     T: _Base,
-    validator: def(T) -> Bool,
+    validator: def(T) thin -> Bool,
     err_msg: String = "Value is not valid",
 ](JsonDeserializable, JsonSerializable, Validator):
     """Validates a value by applying the given function.
@@ -176,13 +142,22 @@ Parameters:
 
 
 @always_inline
+def _sized_len[T: _Base](value: T) -> Int:
+    comptime if _type_is_eq[T, String]():
+        return rebind[String](value).byte_length()
+    else:
+        return trait_downcast[Sized](value).__len__()
+
+
+@always_inline
 def __is_in_size_range[
-    T: Sized & _Base, min: Int, max: Int
+    T: _Base, min: Int, max: Int
 ](value: T,) -> Bool:
-    return len(value) >= min and len(value) <= max
+    var n = _sized_len(value)
+    return n >= min and n <= max
 
 
-comptime Size[T: Sized & _Base, min: Int, max: Int] = Validated[
+comptime Size[T: _Base, min: Int, max: Int] = Validated[
     T, __is_in_size_range[T, min, max], "Value out of size range"
 ]
 """Validates a value to be within a given size range.
@@ -195,11 +170,11 @@ Parameters:
 
 
 @always_inline
-def __is_non_empty[T: Sized & _Base](value: T) -> Bool:
-    return len(value) > 0
+def __is_non_empty[T: _Base](value: T) -> Bool:
+    return _sized_len(value) > 0
 
 
-comptime NonEmpty[T: Sized & _Base] = Validated[
+comptime NonEmpty[T: _Base] = Validated[
     T, __is_non_empty[T], "Value must not be empty"
 ]
 """Validates that a sized value is non-empty.
@@ -343,7 +318,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
     @staticmethod
     def validate(value: Self.Type) raises:
         var matched = False
-        comptime for i in range(Variadic.size_types[Self.accepted]):
+        comptime for i in range(len(Self.accepted)):
             var current_match = False
             try:
                 comptime VType = Self.accepted[i]
@@ -397,7 +372,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     @staticmethod
     def validate(value: Self.Type) raises:
         var matched = False
-        comptime for i in range(Variadic.size_types[Self.accepted]):
+        comptime for i in range(len(Self.accepted)):
             try:
                 comptime VType = Self.accepted[i]
                 comptime assert _type_is_eq[VType.Type, Self.T]()
@@ -444,7 +419,7 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime for i in range(Variadic.size_types[Self.rejected]):
+        comptime for i in range(len(Self.rejected)):
             var matched = False
             try:
                 comptime VType = Self.rejected[i]
@@ -484,7 +459,7 @@ Parameters:
 """
 
 
-struct Enum[T: _Base & Equatable, *accepted: T](
+struct Enum[T: _Base & Equatable, //, *accepted: T](
     JsonDeserializable, JsonSerializable, Validator
 ):
     """Validates a value against an enumerated set of allowed values.
@@ -515,7 +490,7 @@ struct Enum[T: _Base & Equatable, *accepted: T](
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime for i in range(Variadic.size[Self.accepted]):
+        comptime for i in range(len(Self.accepted)):
             if value == materialize[Self.accepted[i]]():
                 return
         raise Error("Value not in options")
@@ -602,7 +577,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
 
 
 @fieldwise_init
-struct Coerce[Target: _Base, func: def(Value) raises -> Target](
+struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
     JsonDeserializable, JsonSerializable
 ):
     """
@@ -760,7 +735,7 @@ struct Default[T: _Base, default: T](
 
 
 @fieldwise_init
-struct Transform[InT: _Base, OutT: _Base, func: def(InT) -> OutT](
+struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
     JsonDeserializable, JsonSerializable
 ):
     """
@@ -814,7 +789,7 @@ struct CrossFieldValidator[
     V: def(
         struct_field_type_by_name[Parent, F1]().T,
         struct_field_type_by_name[Parent, F2]().T,
-    ) raises,
+    ) thin raises,
 ](JsonDeserializable, JsonSerializable, Validator):
     """
     Validates a value to depend on another field.

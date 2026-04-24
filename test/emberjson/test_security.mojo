@@ -156,7 +156,7 @@ def test_l3_coerce_string_null() raises:
 def test_l2_lazy_string_not_decoded() raises:
     var s = r'"hello\nworld"'  # JSON string containing \n escape
     var p = Parser(s)
-    var lazy = deserialize[LazyString[origin_of(s)]](p^)
+    var lazy = deserialize[LazyString[origin_of(s)]](p)
 
     var raw = lazy.unsafe_as_string_slice()
     # raw contains "hello\nworld" (12 chars — literal backslash-n, not decoded)
@@ -165,7 +165,7 @@ def test_l2_lazy_string_not_decoded() raises:
 
     # Contrast: .get() DOES decode the escape correctly
     var p2 = Parser(s)
-    var lazy2 = deserialize[LazyString[origin_of(s)]](p2^)
+    var lazy2 = deserialize[LazyString[origin_of(s)]](p2)
     assert_equal(lazy2.get(), "hello\nworld")
 
 

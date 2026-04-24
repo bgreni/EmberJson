@@ -130,7 +130,7 @@ struct Object(JsonValue, Sized):
         out self,
         var keys: List[String],
         var values: List[Value],
-        __dict_literal__: (),
+        __dict_literal__: NoneType,
     ):
         assert len(keys) == len(
             values

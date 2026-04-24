@@ -229,7 +229,7 @@ def _needs_escape(bytes: Span[Byte, _], n: Int) -> Bool:
 
 def write_escaped_string(s: String, mut writer: Some[Writer]):
     var bytes = s.as_bytes()
-    var n = len(s)
+    var n = s.byte_length()
 
     # Fast path: no escaping needed — single batched write
     if not _needs_escape(bytes, n):

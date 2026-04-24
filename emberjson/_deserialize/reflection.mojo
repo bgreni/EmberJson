@@ -54,12 +54,13 @@ trait JsonDeserializable(_Base):
 
 @always_inline
 def try_deserialize[T: _Base](s: String) -> Optional[T]:
-    return try_deserialize[T](Parser(s))
+    var p = Parser(s)
+    return try_deserialize[T](p)
 
 
 def try_deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
-](var p: Parser[origin, options]) -> Optional[T]:
+](mut p: Parser[origin, options]) -> Optional[T]:
     try:
         return _deserialize_impl[T](p)
     except:
@@ -68,17 +69,18 @@ def try_deserialize[
 
 @always_inline
 def deserialize[T: _Base](s: String, out res: T) raises:
-    res = deserialize[T](Parser(s))
+    var p = Parser(s)
+    res = deserialize[T](p)
 
 
-@always_inline
+# @always_inline
 def deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
-@always_inline
+# @always_inline
 def deserialize[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](var p: Parser[origin, options], out res: T) raises:
