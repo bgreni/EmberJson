@@ -56,10 +56,10 @@ def _deserialize_bytes[
 
 comptime ReadBytesFn[origin: ImmutOrigin] = def(
     mut Parser[origin]
-) raises -> Span[Byte, origin]
+) thin raises -> Span[Byte, origin]
 comptime ParseFn[T: _Base, origin: ImmutOrigin] = def(
     Span[Byte, origin]
-) raises -> T
+) thin raises -> T
 
 
 def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:

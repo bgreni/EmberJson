@@ -162,7 +162,7 @@ def print_relative_performance(
         var new_val = item.value
 
         var name_pad = name
-        while len(name_pad) < 45:
+        while name_pad.byte_length() < 45:
             name_pad = name_pad + " "
 
         if name in old_results:
@@ -178,13 +178,13 @@ def print_relative_performance(
 
             # Pad output manually (inefficient but works without formatting lib)
             var pad_len = 10
-            while len(old_str) < pad_len:
+            while old_str.byte_length() < pad_len:
                 old_str = old_str + " "
-            while len(new_str) < pad_len:
+            while new_str.byte_length() < pad_len:
                 new_str = new_str + " "
-            while len(diff_str) < pad_len:
+            while diff_str.byte_length() < pad_len:
                 diff_str = diff_str + " "
-            while len(speedup_str) < 11:
+            while speedup_str.byte_length() < 11:
                 speedup_str = speedup_str + " "
 
             print(
@@ -260,7 +260,7 @@ def write_report(report: String) raises:
             except:
                 pass
 
-        if len(cpu_info) == 0:
+        if cpu_info.byte_length() == 0:
             cpu_info = (
                 String(platform.machine()) + " " + String(platform.processor())
             )
