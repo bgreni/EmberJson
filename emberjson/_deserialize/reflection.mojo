@@ -1,8 +1,5 @@
 from std.reflection import (
-    struct_field_count,
-    struct_field_types,
-    struct_field_names,
-    is_struct_type,
+    reflect,
     get_base_type_name,
 )
 
@@ -98,9 +95,9 @@ def __is_default[T: AnyType]() -> Bool:
 
 
 def __all_dtors_are_trivial[T: AnyType]() -> Bool:
-    comptime field_types = struct_field_types[T]()
-    comptime for i in range(struct_field_count[T]()):
-        comptime type = field_types[i]
+    comptime r = reflect[T]()
+    comptime for i in range(r.field_count()):
+        comptime type = r.field_types()[i]
         if not downcast[type, ImplicitlyDestructible].__del__is_trivial:
             return False
     return True
@@ -125,14 +122,15 @@ def _default_deserialize[
         )
         __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
 
-    comptime field_count = struct_field_count[T]()
-    comptime field_names = struct_field_names[T]()
-    comptime field_types = struct_field_types[T]()
+    comptime r = reflect[T]()
+    comptime field_count = r.field_count()
+    comptime field_names = r.field_names()
+    comptime field_types = r.field_types()
 
     comptime if is_array:
         p.expect(`[`)
         comptime for i in range(field_count):
-            ref field = trait_downcast[_Base](__struct_field_ref(i, s))
+            ref field = trait_downcast[_Base](r.field_ref[i](s))
             field = _deserialize_impl[type_of(field)](p)
             p.skip_whitespace()
             if i < field_count - 1:
@@ -159,7 +157,7 @@ def _default_deserialize[
                         raise Error("Duplicate key: ", name)
                     seen_i = True
                     matched = True
-                    ref field = trait_downcast[_Base](__struct_field_ref(i, s))
+                    ref field = trait_downcast[_Base](r.field_ref[i](s))
 
                     field = _deserialize_impl[type_of(field)](p)
 
@@ -176,7 +174,7 @@ def _default_deserialize[
                     field_types[i]
                 ]():
                     ref field = trait_downcast[_Base & Defaultable](
-                        __struct_field_ref(i, s)
+                        r.field_ref[i](s)
                     )
                     field = type_of(field)()
                 else:
@@ -189,7 +187,7 @@ def _default_deserialize[
 def _deserialize_impl[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out s: T) raises:
-    comptime assert is_struct_type[T](), non_struct_error
+    comptime assert reflect[T]().is_struct(), non_struct_error
 
     comptime if conforms_to(T, JsonDeserializable):
         s = downcast[T, JsonDeserializable].from_json(p)

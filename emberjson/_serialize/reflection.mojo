@@ -1,8 +1,5 @@
 from std.reflection import (
-    struct_field_count,
-    struct_field_names,
-    struct_field_types,
-    is_struct_type,
+    reflect,
 )
 from std.collections import Set
 from std.sys.intrinsics import _type_is_eq
@@ -183,7 +180,7 @@ def serialize[
     comptime if pretty:
         # fallback to write_pretty impl for JSON types to make use of stack writer speedup
         comptime if conforms_to(T, PrettyPrintable):
-            output = write_pretty(trait_downcast[PrettyPrintable](value))
+            output = write_pretty(value)
         else:
             var writer = PrettySerializer[String]()
             serialize(value, writer)
@@ -195,10 +192,10 @@ def serialize[
 
 
 def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
-    comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
+    comptime assert reflect[T]().is_struct(), "Cannot serialize MLIR type"
 
     comptime if conforms_to(T, JsonSerializable):
-        trait_downcast[JsonSerializable](value).write_json(writer)
+        value.write_json(writer)
     else:
         _default_serialize(value, writer)
 
@@ -206,11 +203,11 @@ def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
 def _default_serialize[
     T: AnyType, //, is_array: Bool = False
 ](value: T, mut writer: Some[Serializer]):
-    comptime assert is_struct_type[T](), "Cannot serialize MLIR type"
-
-    comptime field_count = struct_field_count[T]()
-    comptime field_names = struct_field_names[T]()
-    comptime types = struct_field_types[T]()
+    comptime r = reflect[T]()
+    comptime assert r.is_struct(), "Cannot serialize MLIR type"
+    comptime field_count = r.field_count()
+    comptime field_names = r.field_names()
+    comptime field_types = r.field_types()
 
     comptime if is_array:
         writer.begin_array()
@@ -223,7 +220,7 @@ def _default_serialize[
             writer.write_key(name)
 
         comptime add_comma = i != field_count - 1
-        writer.write_item[add_comma](__struct_field_ref(i, value))
+        writer.write_item[add_comma](r.field_ref[i](value))
 
     comptime if is_array:
         writer.end_array()

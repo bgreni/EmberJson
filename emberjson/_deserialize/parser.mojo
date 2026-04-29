@@ -140,7 +140,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     var size: Int
 
     @implicit
-    def __init__(out self: Parser[Self.origin, Self.options],ref[Self.origin] s: String):
+    def __init__(
+        out self: Parser[Self.origin, Self.options], ref[Self.origin] s: String
+    ):
         self = {StringSlice(s)}
 
     @implicit
@@ -937,9 +939,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var depth = 1
 
         while self.has_more():
-            while (
-                self.can_load_chunk()
-            ):
+            while self.can_load_chunk():
                 var chunk = self.load_chunk()
                 var relevant = chunk.eq(`"`) | chunk.eq(open) | chunk.eq(close)
                 var mask = pack_into_integer(relevant)

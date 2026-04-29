@@ -29,7 +29,7 @@ gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=0.26.3.0.dev2026032105,<0.27"
+mojo = ">=1.0.0b1.dev2026042917,<2"
 
 
 [package]
@@ -40,11 +40,11 @@ version = "0.3.2"
 backend = { name = "pixi-build-mojo", version = "0.1.*" }
 
 [package.host-dependencies]
-mojo-compiler = ">=0.26.3.0.dev2026032105,<0.27"
+mojo-compiler = ">=1.0.0b1.dev2026042917,<2"
 
 [package.build-dependencies]
-mojo-compiler = ">=0.26.3.0.dev2026032105,<0.27"
+mojo-compiler = ">=1.0.0b1.dev2026042917,<2"
 
 [package.run-dependencies]
-mojo-compiler = ">=0.26.3.0.dev2026032105,<0.27"
+mojo-compiler = ">=1.0.0b1.dev2026042917,<2"
 

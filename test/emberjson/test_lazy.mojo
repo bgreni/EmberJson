@@ -75,7 +75,10 @@ def test_lazy_string() raises:
     assert_equal(s_short.unsafe_as_string_slice(), "short")
 
     # Test long string (longer than SIMD width, usually 32 bytes)
-    var long_str = '"this is a very long string that should trigger the SIMD path in the parser logic 1234567890"'
+    var long_str = (
+        '"this is a very long string that should trigger the SIMD path in the'
+        ' parser logic 1234567890"'
+    )
     var p_long = Parser(long_str)
     var s_long = deserialize[LazyString[origin_of(long_str)]](p_long)
     assert_equal(
@@ -95,9 +98,7 @@ def test_lazy_string() raises:
     # Test escaped backslash
     var backslash = '"has \\\\ backslash"'
     var p_backslash = Parser(backslash)
-    var s_backslash = deserialize[LazyString[origin_of(backslash)]](
-        p_backslash
-    )
+    var s_backslash = deserialize[LazyString[origin_of(backslash)]](p_backslash)
     assert_equal(s_backslash.get(), "has \\ backslash")
 
     var mixed = '"foo \\" bar \\\\ baz"'

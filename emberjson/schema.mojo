@@ -10,11 +10,7 @@ from emberjson import (
 )
 from std.sys.intrinsics import _type_is_eq
 from emberjson._deserialize.reflection import _Base
-from std.reflection import (
-    get_base_type_name,
-    struct_field_type_by_name,
-    struct_field_index_by_name,
-)
+from std.reflection import get_base_type_name, reflect
 
 ##########################################################
 # Value Validation
@@ -224,9 +220,7 @@ def __has_unique_elements[
 ) and conforms_to(T.IteratorType[origin_of(value)].Element, Equatable):
     for i, a in enumerate(value):
         for j, b in enumerate(value):
-            if i != j and trait_downcast[Equatable](a) == trait_downcast[
-                Equatable
-            ](b):
+            if i != j and a == b:
                 return False
     return True
 
@@ -787,8 +781,8 @@ struct CrossFieldValidator[
     F1: StringLiteral where __field_in_parent[Parent, F1](),
     F2: StringLiteral where __field_in_parent[Parent, F2](),
     V: def(
-        struct_field_type_by_name[Parent, F1]().T,
-        struct_field_type_by_name[Parent, F2]().T,
+        reflect[Parent]().field_type[F1]().T,
+        reflect[Parent]().field_type[F2]().T,
     ) thin raises,
 ](JsonDeserializable, JsonSerializable, Validator):
     """
@@ -817,15 +811,12 @@ struct CrossFieldValidator[
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime f1 = struct_field_index_by_name[Self.Type, Self.F1]()
-        comptime f2 = struct_field_index_by_name[Self.Type, Self.F2]()
+        comptime r = reflect[Self.Type]()
+        comptime f1 = r.field_index[Self.F1]()
+        comptime f2 = r.field_index[Self.F2]()
         Self.V(
-            rebind[struct_field_type_by_name[Self.Type, Self.F1]().T](
-                __struct_field_ref(f1, value)
-            ),
-            rebind[struct_field_type_by_name[Self.Type, Self.F2]().T](
-                __struct_field_ref(f2, value)
-            ),
+            rebind[r.field_type[Self.F1]().T](r.field_ref[f1](value)),
+            rebind[r.field_type[Self.F2]().T](r.field_ref[f2](value)),
         )
 
     def write_json(self, mut writer: Some[Serializer]):
