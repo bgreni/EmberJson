@@ -94,8 +94,8 @@ def main() raises:
             var rng = Rng(seed=Int(perf_counter_ns()))
             var j: Value = {}
             if iters % 4 == 0:
-                var start = rng.rand_int(min=0, max=len(s))
-                var end = rng.rand_int(min=start, max=len(s))
+                var start = rng.rand_int(min=0, max=s.byte_length())
+                var end = rng.rand_int(min=start, max=s.byte_length())
                 var corrupted = s[byte=start:end]
                 try:
                     j = parse(corrupted)

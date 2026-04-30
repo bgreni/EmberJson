@@ -120,10 +120,10 @@ def format_float(val: Float64) -> String:
         var parts = s.split("e")
         var base = String(parts[0])
         var exp = String(parts[1])
-        if len(base) > 6:
+        if base.byte_length() > 6:
             base = String(base[byte=0:6])
         return base + "e" + exp
-    if len(s) > 8:
+    if s.byte_length() > 8:
         return String(s[byte=0:8])
     return s
 
@@ -154,7 +154,7 @@ def print_comparison(var results: BenchResults, names: List[String]) raises:
             if t_val > 0:
                 var speedup = s_val / t_val
                 speedup_str = String(speedup)
-                if len(speedup_str) > 5:
+                if speedup_str.byte_length() > 5:
                     speedup_str = String(speedup_str[byte=0:5])
                 speedup_str += "x"
 
@@ -180,7 +180,7 @@ def print_comparison(var results: BenchResults, names: List[String]) raises:
 
 def pad_right(s: String, width: Int) -> String:
     var res = s
-    while len(res) < width:
+    while res.byte_length() < width:
         res = res + " "
     return res
 
