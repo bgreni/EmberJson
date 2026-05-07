@@ -192,7 +192,7 @@ def serialize[
 
 
 def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
-    comptime assert reflect[T]().is_struct(), "Cannot serialize MLIR type"
+    comptime assert reflect[T].is_struct(), "Cannot serialize MLIR type"
 
     comptime if conforms_to(T, JsonSerializable):
         value.write_json(writer)
@@ -203,7 +203,7 @@ def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
 def _default_serialize[
     T: AnyType, //, is_array: Bool = False
 ](value: T, mut writer: Some[Serializer]):
-    comptime r = reflect[T]()
+    comptime r = reflect[T]
     comptime assert r.is_struct(), "Cannot serialize MLIR type"
     comptime field_count = r.field_count()
     comptime field_names = r.field_names()
