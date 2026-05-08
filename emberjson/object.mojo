@@ -8,12 +8,24 @@ from std.python import PythonObject, Python
 from std.os import abort
 from std.memory import UnsafePointer
 from std.hashlib.hasher import Hasher
+from std.hashlib import hash
 
 
 @fieldwise_init
 struct KeyValuePair(Copyable, Hashable):
+    # `key_hash` is cached so duplicate-key checks and lookups can short-circuit
+    # on a UInt64 compare before falling back to a String compare on collision.
+    # This is what lets `Object` keep a single `List` allocation while still
+    # making "no duplicate keys" a structural invariant.
+    var key_hash: UInt64
     var key: String
     var value: Value
+
+    @always_inline
+    def __init__(out self, var key: String, var value: Value):
+        self.key_hash = hash(key)
+        self.key = key^
+        self.value = value^
 
 
 struct _ObjectIter[origin: Origin](Sized, TrivialRegisterPassable):
@@ -122,7 +134,9 @@ struct Object(JsonValue, Sized):
     @always_inline
     @implicit
     def __init__(out self, var d: Dict[String, Value]):
-        self._data = Self.Type()
+        # A `Dict` already enforces unique keys, so we can append directly
+        # without going through `_upsert`.
+        self._data = Self.Type(capacity=len(d))
         for item in d.items():
             self._data.append(KeyValuePair(item.key, item.value.copy()))
 
@@ -137,31 +151,37 @@ struct Object(JsonValue, Sized):
         ), "Keys and values must have the same length"
         self._data = Self.Type(capacity=len(keys))
         for i in range(len(keys)):
-            self._data.append(KeyValuePair(keys[i], values[i].copy()))
+            self._upsert(keys[i], values[i].copy())
 
     @always_inline
     def __init__(out self, *, parse_string: String) raises:
         var p = Parser(parse_string)
         self = p.parse_object()
 
-    @always_inline
-    def _add_unchecked(mut self, var key: String, var item: Value):
-        """Can call this when we know the key doesn't exist."""
-        self._data.append(KeyValuePair(key^, item^))
+    def _upsert(mut self, var key: String, var item: Value):
+        """Single insertion path: replace the value if `key` already exists,
+        otherwise append. This is the only way values enter `_data`, so the
+        "no duplicate keys" invariant is structural for any `Object` mutation
+        path that goes through public methods or the parser.
+        """
+        var h = hash(key)
+        for i in range(len(self._data)):
+            if self._data[i].key_hash == h and self._data[i].key == key:
+                self._data[i].value = item^
+                return
+        self._data.append(KeyValuePair(h, key^, item^))
 
+    @always_inline
     def __setitem__(mut self, var key: String, var item: Value):
         """Sets a key-value pair.
         If the key already exists, its value is updated.
         """
-        for i in range(len(self._data)):
-            if self._data[i].key == key:
-                self._data[i].value = item^
-                return
-        self._data.append(KeyValuePair(key^, item^))
+        self._upsert(key^, item^)
 
     def pop(mut self, key: String) raises:
+        var h = hash(key)
         for i in range(len(self._data)):
-            if self._data[i].key == key:
+            if self._data[i].key_hash == h and self._data[i].key == key:
                 _ = self._data.pop(i)
                 return
         raise Error("KeyError: " + key)
@@ -169,15 +189,17 @@ struct Object(JsonValue, Sized):
     def __getitem__(
         ref self, key: String
     ) raises -> ref[self._data[0].value] Value:
+        var h = hash(key)
         for i in range(len(self._data)):
-            if self._data[i].key == key:
+            if self._data[i].key_hash == h and self._data[i].key == key:
                 return self._data[i].value
         raise Error("KeyError: " + key)
 
     @always_inline
     def __contains__(self, key: String) -> Bool:
+        var h = hash(key)
         for i in range(len(self._data)):
-            if self._data[i].key == key:
+            if self._data[i].key_hash == h and self._data[i].key == key:
                 return True
         return False
 
@@ -186,17 +208,22 @@ struct Object(JsonValue, Sized):
         return len(self._data)
 
     def __eq__(self, other: Self) -> Bool:
+        # Both sides have unique keys (enforced by `_upsert`), so equal length
+        # plus every key of `self` matched in `other` is sufficient — no need
+        # for a reverse pass.
         if len(self) != len(other):
             return False
-
-        # Iterate over keys because self.__iter__ returns keys
-        for key in self:
-            if key not in other:
-                return False
-            try:
-                if self[key] != other[key]:
-                    return False
-            except:
+        for i in range(len(self._data)):
+            ref entry = self._data[i]
+            var found = False
+            for j in range(len(other._data)):
+                ref oe = other._data[j]
+                if entry.key_hash == oe.key_hash and entry.key == oe.key:
+                    if entry.value != oe.value:
+                        return False
+                    found = True
+                    break
+            if not found:
                 return False
         return True
 

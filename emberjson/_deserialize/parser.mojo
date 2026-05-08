@@ -267,7 +267,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     self.skip_whitespace()
                     has_comma = True
 
-                # In case of duplicate keys, first one wins
+                # Strict mode rejects duplicate keys outright. In lenient mode
+                # (`ALLOW_DUPLICATE_KEYS`), `_upsert` collapses duplicates with
+                # last-write-wins semantics — matching how dict literals and
+                # `__setitem__` behave, and what RFC 8259 recommends.
                 comptime if (
                     not StrictOptions.ALLOW_DUPLICATE_KEYS
                     in Self.options.strict_mode
@@ -275,7 +278,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     if ident in obj:
                         raise Error("Duplicate key: ", ident)
 
-                obj._add_unchecked(ident^, v^)
+                obj._upsert(ident^, v^)
 
                 if self.data[] == `}`:
                     comptime if (

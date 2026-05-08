@@ -187,6 +187,19 @@ def print_relative_performance(
             while speedup_str.byte_length() < 11:
                 speedup_str = speedup_str + " "
 
+            # Color the diff/speedup columns. Apply after padding so the visual
+            # column widths stay aligned (ANSI escapes are zero-width).
+            # Threshold: ±1% to avoid coloring obvious noise.
+            comptime ANSI_GREEN = "\x1b[32m"
+            comptime ANSI_RED = "\x1b[31m"
+            comptime ANSI_RESET = "\x1b[0m"
+            if diff_pct > 1.0:
+                diff_str = ANSI_GREEN + diff_str + ANSI_RESET
+                speedup_str = ANSI_GREEN + speedup_str + ANSI_RESET
+            elif diff_pct < -1.0:
+                diff_str = ANSI_RED + diff_str + ANSI_RESET
+                speedup_str = ANSI_RED + speedup_str + ANSI_RESET
+
             print(
                 "| "
                 + name_pad

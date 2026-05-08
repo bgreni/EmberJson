@@ -30,14 +30,10 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
 
     def clear(mut self, n: Int):
         self.length -= n
-
-        memcpy(
-            dest=self.ptr(),
-            src=self.ptr() + n,
-            count=self.length,
-        )
-
-        memset(self.ptr() + self.length, 0, Self.BUFFER_SIZE - self.length)
+        var p = self.ptr()
+        for i in range(self.length):
+            p[i] = p[i + n]
+        memset(p + self.length, 0, Self.BUFFER_SIZE - self.length)
 
     def clear(mut self):
         memset(self.ptr(), 0, Self.BUFFER_SIZE)
@@ -63,16 +59,27 @@ struct JSONLinesIter(Iterator):
         self.read_buf = _ReadBuffer()
 
     def __next__(mut self, out j: Value) raises StopIteration:
-        var line: List[Byte]
-        try:
-            line = self._read_until_newline()
-        except e:
-            raise StopIteration()
+        # Loop so blank lines and malformed lines don't truncate the stream:
+        # only true EOF (signalled by `_read_until_newline` raising) ends
+        # iteration. Blank lines return an empty buffer; malformed lines fail
+        # to parse — both are skipped so subsequent valid records still surface.
+        while True:
+            var line: List[Byte]
+            try:
+                line = self._read_until_newline()
+            except e:
+                raise StopIteration()
 
-        try:
-            j = Value(parse_bytes=Span(ptr=line.unsafe_ptr(), length=len(line)))
-        except e:
-            raise StopIteration()
+            if len(line) == 0:
+                continue
+
+            try:
+                j = Value(
+                    parse_bytes=Span(ptr=line.unsafe_ptr(), length=len(line))
+                )
+                return
+            except e:
+                continue
 
     def __iter__(var self) -> Self:
         return self^
@@ -115,6 +122,12 @@ struct JSONLinesIter(Iterator):
                     line.resize(old_len + count, 0)
                     memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=count)
                     self.read_buf.clear()
+                # Distinguish a true EOF from a blank line. A blank line returns
+                # an empty buffer via the `\n` branch above; only here, with no
+                # buffered bytes and no accumulated line content, are we really
+                # past the end of the file.
+                if len(line) == 0:
+                    raise Error("EOF")
                 return line^
 
             newline_ind = self.read_buf.index(`\n`)
@@ -145,5 +158,4 @@ def write_lines(p: Path, lines: List[Value]) raises:
     with open(p, "w") as f:
         for i in range(len(lines)):
             f.write(lines[i])
-            if i < len(lines) - 1:
-                f.write("\n")
+            f.write("\n")

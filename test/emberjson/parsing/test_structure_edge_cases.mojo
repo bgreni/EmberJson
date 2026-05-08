@@ -35,20 +35,21 @@ def test_empty_structures() raises:
 
 
 def test_duplicate_keys() raises:
-    # first one wins
+    # Lenient parsing collapses duplicates with last-write-wins, matching dict
+    # literal and `__setitem__` semantics (and RFC 8259's recommendation).
     var s = '{"a": 1, "a": 2}'
     var json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](s)
-    assert_equal(json.object()["a"].int(), 1)
-    assert_equal(len(json.object()), 2)
+    assert_equal(json.object()["a"].int(), 2)
+    assert_equal(len(json.object()), 1)
 
     with assert_raises():
         _ = parse(s)
 
     s = '{"a": 1, "b": 2, "a": "foo"}'
     json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](s)
-    assert_equal(json.object()["a"].int(), 1)
+    assert_equal(json.object()["a"].string(), "foo")
     assert_equal(json.object()["b"].int(), 2)
-    assert_equal(len(json.object()), 3)
+    assert_equal(len(json.object()), 2)
 
 
 def test_trailing_commas() raises:
