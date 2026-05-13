@@ -109,7 +109,7 @@ def _default_deserialize[
     is_array: Bool,
 ](mut p: Parser[origin, options], out s: T) raises:
     comptime if conforms_to(T, Defaultable):
-        s = downcast[T, Defaultable]()
+        s = {}
     else:
         # If we use mark_initialized with a struct that has something like a pointer
         # field that doesn't become initialized it will cause a crash if parsing fails.

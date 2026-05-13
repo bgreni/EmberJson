@@ -139,6 +139,8 @@ Parameters:
 
 @always_inline
 def _sized_len[T: _Base](value: T) -> Int:
+    comptime assert _type_is_eq[T, String]() or conforms_to(T, Sized)
+
     comptime if _type_is_eq[T, String]():
         return rebind[String](value).byte_length()
     else:

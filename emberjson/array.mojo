@@ -172,7 +172,10 @@ struct Array(JsonValue, Sized):
         l = self._data.copy()
 
     def to_python_object(self) raises -> PythonObject:
-        return Python.list(self._data)
+        var l = Python.list()
+        for ref item in self._data:
+            l.append(item.to_python_object())
+        return l
 
     @staticmethod
     def from_json[
