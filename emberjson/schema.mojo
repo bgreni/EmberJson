@@ -783,8 +783,8 @@ struct CrossFieldValidator[
     F1: StringLiteral where __field_in_parent[Parent, F1](),
     F2: StringLiteral where __field_in_parent[Parent, F2](),
     V: def(
-        reflect[Parent].field_type[F1].T,
-        reflect[Parent].field_type[F2].T,
+        reflect[Parent]().field_type[F1]().T,
+        reflect[Parent]().field_type[F2]().T,
     ) thin raises,
 ](JsonDeserializable, JsonSerializable, Validator):
     """
@@ -813,12 +813,12 @@ struct CrossFieldValidator[
 
     @staticmethod
     def validate(value: Self.Type) raises:
-        comptime r = reflect[Self.Type]
+        comptime r = reflect[Self.Type]()
         comptime f1 = r.field_index[Self.F1]()
         comptime f2 = r.field_index[Self.F2]()
         Self.V(
-            rebind[r.field_type[Self.F1].T](r.field_ref[f1](value)),
-            rebind[r.field_type[Self.F2].T](r.field_ref[f2](value)),
+            rebind[r.field_type[Self.F1]().T](r.field_ref[f1](value)),
+            rebind[r.field_type[Self.F2]().T](r.field_ref[f2](value)),
         )
 
     def write_json(self, mut writer: Some[Serializer]):

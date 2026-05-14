@@ -83,16 +83,16 @@ def deserialize[
 
 @always_inline
 def __is_optional[T: AnyType]() -> Bool:
-    return reflect[T].base_name() == "Optional"
+    return reflect[T]().base_name() == "Optional"
 
 
 @always_inline
 def __is_default[T: AnyType]() -> Bool:
-    return reflect[T].base_name() == "Default"
+    return reflect[T]().base_name() == "Default"
 
 
 def __all_dtors_are_trivial[T: AnyType]() -> Bool:
-    comptime r = reflect[T]
+    comptime r = reflect[T]()
     comptime for i in range(r.field_count()):
         comptime type = r.field_types()[i]
         if not downcast[type, ImplicitlyDestructible].__del__is_trivial:
@@ -119,7 +119,7 @@ def _default_deserialize[
         )
         __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
 
-    comptime r = reflect[T]
+    comptime r = reflect[T]()
     comptime field_count = r.field_count()
     comptime field_names = r.field_names()
     comptime field_types = r.field_types()
@@ -184,7 +184,7 @@ def _default_deserialize[
 def _deserialize_impl[
     origin: ImmutOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out s: T) raises:
-    comptime assert reflect[T].is_struct(), non_struct_error
+    comptime assert reflect[T]().is_struct(), non_struct_error
 
     comptime if conforms_to(T, JsonDeserializable):
         s = downcast[T, JsonDeserializable].from_json(p)
@@ -379,7 +379,7 @@ __extension Dict(JsonDeserializable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         comptime assert (
             _type_is_eq[Self.K, String]()
-            or reflect[Self.K].base_name() == "LazyString"
+            or reflect[Self.K]().base_name() == "LazyString"
         ), "Dict must have string keys"
         p.expect(`{`)
         s = Self()
