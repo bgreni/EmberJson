@@ -352,20 +352,36 @@ __extension Optional(JsonDeserializable):
         return False
 
 
+def _drop_deletable[T: ImplicitlyDeletable](var x: T):
+    pass
+
+
 __extension List(JsonDeserializable):
     @staticmethod
     def from_json[
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
-        p.expect(`[`)
         s = Self()
 
-        while p.peek() != `]`:
-            s.append(_deserialize_impl[downcast[Self.T, _Base]](p))
-            p.skip_whitespace()
-            if p.peek() != `]`:
-                p.expect(`,`)
-        p.expect(`]`)
+        try:
+            p.expect(`[`)
+
+            while p.peek() != `]`:
+                s.append(_deserialize_impl[downcast[Self.T, _Base]](p))
+                p.skip_whitespace()
+                if p.peek() != `]`:
+                    p.expect(`,`)
+            p.expect(`]`)
+        except e:
+            comptime if conforms_to(Self.T, ImplicitlyDeletable):
+                s^.destroy_with(
+                    _drop_deletable[downcast[Self.T, ImplicitlyDeletable]]
+                )
+            else:
+                comptime assert (
+                    False
+                ), "List deserialize requires ImplicitlyDeletable elements"
+            raise e^
 
     @staticmethod
     def deserialize_as_array() -> Bool:

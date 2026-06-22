@@ -1,8 +1,7 @@
 from emberjson import Value, minify as minify_mojo, parse as parse_mojo
-from python import PythonObject, Python
-from python.bindings import PythonModuleBuilder
-import math
-from os import abort
+from std.python import PythonObject, Python
+from std.python.bindings import PythonModuleBuilder
+from std.os import abort
 
 
 def _try_to_int(key: PythonObject) -> Optional[Int]:
@@ -80,4 +79,4 @@ def parse(obj: PythonObject) raises -> PythonObject:
 
 
 def minify(obj: PythonObject) raises -> PythonObject:
-    return minify_mojo(String(obj)).to_python_object()
+    return PythonObject(minify_mojo(String(obj)))
