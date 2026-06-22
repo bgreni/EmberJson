@@ -1127,7 +1127,9 @@ def minify(s: String, out out_str: String) raises:
                 block = StringBlock.find(p)
 
             length += Int(block.quote_index() + 1)
-            out_str += StringSlice[ptr.origin](ptr=ptr, length=length)
+            out_str += StringSlice(
+                unsafe_from_utf8=Span[Byte, ptr.origin](ptr=ptr, length=length)
+            )
             ptr += length
 
         else:
@@ -1137,5 +1139,9 @@ def minify(s: String, out out_str: String) raises:
             var valid_bits = count_trailing_zeros(~get_non_space_bits(chunk))
             if quotes != 0:
                 valid_bits = min(valid_bits, count_trailing_zeros(quotes))
-            out_str += StringSlice[ptr.origin](ptr=ptr, length=Int(valid_bits))
+            out_str += StringSlice(
+                unsafe_from_utf8=Span[Byte, ptr.origin](
+                    ptr=ptr, length=Int(valid_bits)
+                )
+            )
             ptr += valid_bits

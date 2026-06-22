@@ -40,7 +40,11 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
         self.length = 0
 
     def write_to(self, mut writer: Some[Writer]):
-        writer.write(StringSlice(ptr=self.ptr(), length=self.length))
+        writer.write(
+            StringSlice(
+                unsafe_from_utf8=Span(ptr=self.ptr(), length=self.length)
+            )
+        )
 
     def __len__(self) -> Int:
         return self.length

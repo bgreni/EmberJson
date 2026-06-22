@@ -101,7 +101,9 @@ def write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
         buf_idx += 1
         buffer.unsafe_get(buf_idx) = `0`
         buf_idx += 1
-        var str_slice = StringSlice(ptr=buffer.unsafe_ptr(), length=buf_idx)
+        var str_slice = StringSlice(
+            unsafe_from_utf8=Span(ptr=buffer.unsafe_ptr(), length=buf_idx)
+        )
         writer.write(str_slice)
         return
 
@@ -226,7 +228,9 @@ def write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
             buffer.unsafe_get(buf_idx) = `0`
             buf_idx += 1
 
-    var str_slice = StringSlice(ptr=buffer.unsafe_ptr(), length=buf_idx)
+    var str_slice = StringSlice(
+        unsafe_from_utf8=Span(ptr=buffer.unsafe_ptr(), length=buf_idx)
+    )
     writer.write(str_slice)
 
 

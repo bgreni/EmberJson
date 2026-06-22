@@ -5,14 +5,14 @@ preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
-version = "0.3.2"
+version = "0.3.3"
 license = "MIT"
 license-file = "LICENSE"
 homepage = "https://github.com/bgreni/EmberJson"
 repository = "https://github.com/bgreni/EmberJson"
 
 [tasks]
-build = { cmd = "mojo package emberjson -o emberjson.mojopkg" }
+build = { cmd = "mojo precompile emberjson -o emberjson.mojoc" }
 format = { cmd = "mojo format -l 80 ." }
 test = { cmd = "python run_tests.py" }
 build_bench = "mojo build bench.mojo"
@@ -29,22 +29,23 @@ gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=1.0.0b1.dev2026042917,<2"
+mojo = ">=1.0.0b2.dev2026052706,<2"
+
 
 
 [package]
 name = "emberjson"
-version = "0.3.2"
+version = "0.3.3"
 
 [package.build]
 backend = { name = "pixi-build-mojo", version = "0.1.*" }
 
 [package.host-dependencies]
-mojo-compiler = ">=1.0.0b1.dev2026042917,<2"
+mojo-compiler = ">=1.0.0b2.dev2026052706,<2"
 
 [package.build-dependencies]
-mojo-compiler = ">=1.0.0b1.dev2026042917,<2"
+mojo-compiler = ">=1.0.0b2.dev2026052706,<2"
 
 [package.run-dependencies]
-mojo-compiler = ">=1.0.0b1.dev2026042917,<2"
+mojo-compiler = ">=1.0.0b2.dev2026052706,<2"
 

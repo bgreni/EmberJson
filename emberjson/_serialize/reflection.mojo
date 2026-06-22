@@ -97,8 +97,9 @@ __extension _WriteBufferStack(Serializer):
 
 
 struct PrettySerializer[
-    T: Writer & Defaultable & Movable, indent: String = "    "
-](Defaultable, Serializer):
+    T: Writer & Defaultable & Movable & ImplicitlyDestructible,
+    indent: String = "    ",
+](Defaultable, Serializer, ImplicitlyDestructible):
     var _data: Self.T
     var _skip_indent: Bool
     var _depth: Int

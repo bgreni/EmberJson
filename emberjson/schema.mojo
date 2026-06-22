@@ -215,14 +215,12 @@ Parameters:
 
 
 @always_inline
-def __has_unique_elements[
-    T: _Base & Iterable
-](value: T) -> Bool where conforms_to(
-    T.IteratorType[origin_of(value)], Copyable
-) and conforms_to(T.IteratorType[origin_of(value)].Element, Equatable):
+def __has_unique_elements[T: _Base & Iterable](value: T) -> Bool:
     for i, a in enumerate(value):
         for j, b in enumerate(value):
-            if i != j and a == b:
+            if i != j and trait_downcast[Equatable](a) == trait_downcast[
+                Equatable
+            ](b):
                 return False
     return True
 
@@ -238,7 +236,7 @@ Parameters:
 
 
 @always_inline
-def __is_eq[T: Equatable, //, value: T](a: T) -> Bool:
+def __is_eq[T: Equatable & ImplicitlyDestructible, //, value: T](a: T) -> Bool:
     return a == materialize[value]()
 
 

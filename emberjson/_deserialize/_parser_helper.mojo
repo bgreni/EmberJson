@@ -299,9 +299,13 @@ def copy_to_string[
         if found_escaped:
             return decode_escaped()
         else:
-            return String(StringSlice(ptr=start, length=length))
+            return String(
+                StringSlice(unsafe_from_utf8=Span(ptr=start, length=length))
+            )
     else:
-        return String(StringSlice(ptr=start, length=length))
+        return String(
+            StringSlice(unsafe_from_utf8=Span(ptr=start, length=length))
+        )
 
 
 @always_inline
