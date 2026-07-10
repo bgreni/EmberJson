@@ -6,6 +6,7 @@ from .utils import (
     write_escaped_string,
     ByteView,
     PaddedBuffer,
+    PAD_INPUT_THRESHOLD,
 )
 from std.utils.variant import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
@@ -173,10 +174,15 @@ struct Value(JsonValue, Sized):
         Raises:
             If the bytes represent an invalid JSON document.
         """
-        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops.
-        var buf = PaddedBuffer(parse_bytes)
-        var parser = Parser[options=ParseOptions()._padded()](buf.span())
-        self = parser.parse()
+        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
+        # tiny inputs skip the copy since it would cost more than the parse.
+        if len(parse_bytes) < PAD_INPUT_THRESHOLD:
+            var parser = Parser(parse_bytes)
+            self = parser.parse()
+        else:
+            var buf = PaddedBuffer(parse_bytes)
+            var parser = Parser[options=ParseOptions()._padded()](buf.span())
+            self = parser.parse()
 
     @staticmethod
     def from_json[

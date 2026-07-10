@@ -143,6 +143,15 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
         return self.p.load[width=SIMD8_WIDTH]()
 
 
+comptime PAD_INPUT_THRESHOLD = 128
+"""Input size below which the DOM entry points skip the `PaddedBuffer`
+copy and parse the caller's buffer directly with bounds checks.
+
+For tiny documents (single scalars, small objects) the buffer allocation,
+memcpy and NUL memset cost more than the whole parse; above this size the
+unchecked hot loops win."""
+
+
 struct PaddedBuffer(Movable):
     """Owns a copy of parser input followed by `PAD` NUL bytes.
 

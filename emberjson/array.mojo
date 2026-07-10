@@ -1,7 +1,7 @@
 from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
-from .utils import PaddedBuffer
+from .utils import PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
 from std.python import PythonObject, Python
@@ -73,10 +73,15 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     def __init__(out self: Array, *, parse_string: String) raises:
-        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops.
-        var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-        var p = Parser[options=ParseOptions()._padded()](buf.span())
-        self = p.parse_array()
+        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
+        # tiny inputs skip the copy since it would cost more than the parse.
+        if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
+            var p = Parser(parse_string)
+            self = p.parse_array()
+        else:
+            var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
+            var p = Parser[options=ParseOptions()._padded()](buf.span())
+            self = p.parse_array()
 
     @always_inline
     def __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data] Value:

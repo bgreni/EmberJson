@@ -4,7 +4,7 @@ from std.sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
-from .utils import write_escaped_string, PaddedBuffer
+from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
 from std.python import PythonObject, Python
 from std.os import abort
 from std.memory import UnsafePointer
@@ -234,10 +234,15 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     def __init__(out self, *, parse_string: String) raises:
-        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops.
-        var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-        var p = Parser[options=ParseOptions()._padded()](buf.span())
-        self = p.parse_object()
+        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
+        # tiny inputs skip the copy since it would cost more than the parse.
+        if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
+            var p = Parser(parse_string)
+            self = p.parse_object()
+        else:
+            var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
+            var p = Parser[options=ParseOptions()._padded()](buf.span())
+            self = p.parse_object()
 
     @always_inline
     def _find_entry(self, h: UInt64, key: String) -> Int:
