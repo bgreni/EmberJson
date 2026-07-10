@@ -218,9 +218,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     def parse_array(mut self, out arr: Array) raises:
         self.data += 1
         self.skip_whitespace()
-        arr = Array()
 
-        if unlikely(self.data[] != `]`):
+        if unlikely(self.data[] == `]`):
+            arr = Array()
+        else:
+            # Reserve a few slots up front: most JSON arrays are small, and
+            # growing a List from zero costs several reallocations that each
+            # move the 32-byte Values. Empty arrays stay allocation-free.
+            arr = Array(capacity=4)
             while True:
                 arr.append(self.parse_value())
                 self.skip_whitespace()
@@ -246,11 +251,15 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
 
     def parse_object(mut self, out obj: Object) raises:
-        obj = Object()
         self.data += 1
         self.skip_whitespace()
 
-        if unlikely(self.data[] != `}`):
+        if unlikely(self.data[] == `}`):
+            obj = Object()
+        else:
+            # Reserve a few slots up front (see parse_array); KeyValuePair
+            # entries are ~64 bytes, so realloc-from-zero growth is costly.
+            obj = Object(capacity=4)
             while True:
                 if unlikely(self.data[] != `"`):
                     raise Error("Invalid identifier")
@@ -590,6 +599,13 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var start_digits = p
         var i: UInt64 = 0
 
+        # Ingest digits 8 at a time (SWAR). `i` may wrap for very long
+        # digit runs exactly as the scalar loop below would; correctness is
+        # enforced afterwards via `digit_count` (integer overflow checks and
+        # the >19-significant-digit float slow path).
+        while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
+            p += 8
         while parse_digit(p, i):
             p += 1
 
@@ -608,7 +624,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-            if p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
                 i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
                 p += 8
             while parse_digit(p, i):
@@ -753,6 +769,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var start_digits = p
         var i: UInt64 = 0
 
+        # SWAR digit ingestion; see parse_number for the wrap rationale.
+        while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
+            p += 8
         while parse_digit(p, i):
             p += 1
 
@@ -769,7 +789,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-            if p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
                 i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
                 p += 8
             while parse_digit(p, i):
