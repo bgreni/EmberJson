@@ -85,7 +85,7 @@ def parse[
     # parsing) so the parser's hot loops can skip per-byte bounds checks.
     # Safe because the returned Value owns all of its data.
     var buf = PaddedBuffer(s.as_bytes())
-    var p = Parser[options = options._padded()](buf.span())
+    var p = Parser[options=options._padded()](buf.span())
     j = p.parse()
 
 

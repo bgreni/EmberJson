@@ -236,7 +236,7 @@ struct Object(JsonValue, Sized):
     def __init__(out self, *, parse_string: String) raises:
         # See `emberjson.parse`: pad-and-copy enables unchecked hot loops.
         var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-        var p = Parser[options = ParseOptions()._padded()](buf.span())
+        var p = Parser[options=ParseOptions()._padded()](buf.span())
         self = p.parse_object()
 
     @always_inline

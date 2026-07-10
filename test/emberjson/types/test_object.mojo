@@ -276,9 +276,7 @@ def test_index_duplicate_detection_across_threshold() raises:
     with assert_raises(contains="Duplicate key"):
         _ = parse(dup_late)
 
-    var json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](
-        dup_late
-    )
+    var json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](dup_late)
     assert_equal(len(json.object()), 20)
     assert_equal(json.object()["key0"].int(), 99)
     # last-write-wins keeps the first occurrence's position

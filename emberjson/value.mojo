@@ -175,7 +175,7 @@ struct Value(JsonValue, Sized):
         """
         # See `emberjson.parse`: pad-and-copy enables unchecked hot loops.
         var buf = PaddedBuffer(parse_bytes)
-        var parser = Parser[options = ParseOptions()._padded()](buf.span())
+        var parser = Parser[options=ParseOptions()._padded()](buf.span())
         self = parser.parse()
 
     @staticmethod

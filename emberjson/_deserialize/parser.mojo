@@ -400,6 +400,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     def find(mut self, start: CheckedPointer, out s: String) raises:
         var found_escaped = False
+        var first_escape = 0
         while True:
             var block: StringBlock
             comptime if Self.options._assume_padded:
@@ -413,7 +414,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             if block.has_quote_first():
                 self.data += block.quote_index()
                 return copy_to_string[Self.options.ignore_unicode](
-                    start.p, self.data.p, found_escaped
+                    start.p, self.data.p, found_escaped, first_escape
                 )
             elif unlikely(self.data.p >= self.data.end):
                 # We got EOF before finding the end quote, so obviously this
@@ -432,7 +433,11 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 continue
             self.data += block.bs_index()
 
-            # We found a backslash, so we need to unescape
+            # We found a backslash, so we need to unescape. Record where the
+            # first one is so the decoder can bulk-copy the clean prefix
+            # instead of re-scanning it.
+            if not found_escaped:
+                first_escape = ptr_dist(start.p, self.data.p)
             found_escaped = True
             while True:
                 self.data += 1
@@ -656,9 +661,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         # the >19-significant-digit float slow path). In padded mode the
         # remaining-bytes gate is unnecessary: the 8-byte read lands in the
         # NUL padding, which fails the all-digits test.
-        while (
-            padded or p.dist() >= 8
-        ) and unsafe_is_made_of_eight_digits_fast(p.p):
+        while (padded or p.dist() >= 8) and unsafe_is_made_of_eight_digits_fast(
+            p.p
+        ):
             i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
             p += 8
         while parse_digit[padded](p, i):
