@@ -1,7 +1,8 @@
 from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
-from ._deserialize import Parser
+from ._deserialize import Parser, ParseOptions
+from ._serialize import Serializer
 from std.python import PythonObject, Python
 
 

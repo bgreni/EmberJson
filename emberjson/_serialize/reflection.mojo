@@ -2,12 +2,11 @@ from std.reflection import (
     reflect,
 )
 from std.collections import Set
-from std.sys.intrinsics import _type_is_eq
 from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
 from emberjson.teju import write_float
 from emberjson.traits import PrettyPrintable
-from emberjson.utils import write_escaped_string
+from emberjson.utils import write_escaped_string, write_pretty
 
 
 # TODO: When we have parametric traits, we can make this generic over some Writer type
@@ -97,9 +96,9 @@ __extension _WriteBufferStack(Serializer):
 
 
 struct PrettySerializer[
-    T: Writer & Defaultable & Movable & ImplicitlyDestructible,
+    T: Writer & Defaultable & Movable & ImplicitlyDeletable,
     indent: String = "    ",
-](Defaultable, Serializer, ImplicitlyDestructible):
+](Defaultable, ImplicitlyDeletable, Serializer):
     var _data: Self.T
     var _skip_indent: Bool
     var _depth: Int
@@ -258,13 +257,8 @@ __extension String(JsonSerializable):
         return False
 
 
-__extension Int(JsonSerializable):
-    def write_json(self, mut writer: Some[Serializer]):
-        writer.write(self)
-
-    @staticmethod
-    def serialize_as_array() -> Bool:
-        return False
+# `Int` is now an alias for `Scalar[DType.int]`, so it is covered by the
+# `SIMD` extension below rather than a dedicated extension.
 
 
 __extension SIMD(JsonSerializable):
@@ -384,9 +378,7 @@ __extension InlineArray(JsonSerializable):
 
 __extension Dict(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        comptime assert _type_is_eq[
-            Self.K, String
-        ](), "Dict must have string keys"
+        comptime assert Self.K == String, "Dict must have string keys"
         writer.begin_object()
         var i = 0
         for item in self.items():

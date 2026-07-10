@@ -8,8 +8,8 @@ from emberjson import (
     deserialize,
     Value,
 )
-from std.sys.intrinsics import _type_is_eq
 from emberjson._deserialize.reflection import _Base
+from std.builtin.rebind import downcast
 from std.reflection import reflect
 
 ##########################################################
@@ -46,7 +46,7 @@ struct AllOf[T: _Base, *validators: Validator](
     def validate(value: Self.Type) raises:
         comptime for i in range(len(Self.validators)):
             comptime VType = Self.validators[i]
-            comptime assert _type_is_eq[VType.Type, Self.T]()
+            comptime assert VType.Type == Self.T
             VType.validate(rebind[VType.Type](value))
 
     def write_json(self, mut writer: Some[Serializer]):
@@ -139,12 +139,12 @@ Parameters:
 
 @always_inline
 def _sized_len[T: _Base](value: T) -> Int:
-    comptime assert _type_is_eq[T, String]() or conforms_to(T, Sized)
+    comptime assert T == String or conforms_to(T, Sized)
 
-    comptime if _type_is_eq[T, String]():
+    comptime if T == String:
         return rebind[String](value).byte_length()
     else:
-        return trait_downcast[Sized](value).__len__()
+        return rebind[downcast[T, Sized]](value).__len__()
 
 
 @always_inline
@@ -218,8 +218,8 @@ Parameters:
 def __has_unique_elements[T: _Base & Iterable](value: T) -> Bool:
     for i, a in enumerate(value):
         for j, b in enumerate(value):
-            if i != j and trait_downcast[Equatable](a) == trait_downcast[
-                Equatable
+            if i != j and rebind[downcast[type_of(a), Equatable]](a) == rebind[
+                downcast[type_of(b), Equatable]
             ](b):
                 return False
     return True
@@ -236,7 +236,7 @@ Parameters:
 
 
 @always_inline
-def __is_eq[T: Equatable & ImplicitlyDestructible, //, value: T](a: T) -> Bool:
+def __is_eq[T: Equatable & ImplicitlyDeletable, //, value: T](a: T) -> Bool:
     return a == materialize[value]()
 
 
@@ -254,7 +254,7 @@ Parameters:
 
 def __expect_raises[T: _Base, validator: Validator](value: T) -> Bool:
     comptime VType = validator.Type
-    comptime assert _type_is_eq[VType, T]()
+    comptime assert VType == T
     try:
         validator.validate(rebind[VType](value))
         return False
@@ -316,7 +316,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
             var current_match = False
             try:
                 comptime VType = Self.accepted[i]
-                comptime assert _type_is_eq[VType.Type, Self.T]()
+                comptime assert VType.Type == Self.T
                 VType.validate(rebind[VType.Type](value))
                 current_match = True
             except:
@@ -369,7 +369,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
         comptime for i in range(len(Self.accepted)):
             try:
                 comptime VType = Self.accepted[i]
-                comptime assert _type_is_eq[VType.Type, Self.T]()
+                comptime assert VType.Type == Self.T
                 VType.validate(rebind[VType.Type](value))
                 matched = True
                 break
@@ -417,7 +417,7 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
             var matched = False
             try:
                 comptime VType = Self.rejected[i]
-                comptime assert _type_is_eq[VType.Type, Self.T]()
+                comptime assert VType.Type == Self.T
                 VType.validate(rebind[VType.Type](value))
                 matched = True
             except:
@@ -778,11 +778,11 @@ def __field_in_parent[Parent: _Base, F: StringLiteral]() -> Bool:
 
 struct CrossFieldValidator[
     Parent: _Base,
-    F1: StringLiteral where __field_in_parent[Parent, F1](),
-    F2: StringLiteral where __field_in_parent[Parent, F2](),
+    F1: StringLiteral,
+    F2: StringLiteral,
     V: def(
-        reflect[Parent].field_type[F1].T,
-        reflect[Parent].field_type[F2].T,
+        reflect[Parent].field[F1].T,
+        reflect[Parent].field[F2].T,
     ) thin raises,
 ](JsonDeserializable, JsonSerializable, Validator):
     """
@@ -799,6 +799,8 @@ struct CrossFieldValidator[
     comptime Type = Self.Parent
 
     def __init__(out self, var value: Self.Parent) raises:
+        comptime assert __field_in_parent[Self.Parent, Self.F1]()
+        comptime assert __field_in_parent[Self.Parent, Self.F2]()
         self.value = value^
         Self.validate(self.value)
 
@@ -815,8 +817,8 @@ struct CrossFieldValidator[
         comptime f1 = r.field_index[Self.F1]()
         comptime f2 = r.field_index[Self.F2]()
         Self.V(
-            rebind[r.field_type[Self.F1].T](r.field_ref[f1](value)),
-            rebind[r.field_type[Self.F2].T](r.field_ref[f2](value)),
+            rebind[r.field[Self.F1].T](r.field_ref[f1](value)),
+            rebind[r.field[Self.F2].T](r.field_ref[f2](value)),
         )
 
     def write_json(self, mut writer: Some[Serializer]):

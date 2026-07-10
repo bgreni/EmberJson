@@ -12,6 +12,7 @@ from std.collections import InlineArray
 from std.memory import UnsafePointer
 from std.sys.intrinsics import unlikely, likely
 from ._deserialize import Parser, ParseOptions
+from ._serialize import Serializer
 from std.sys.info import bit_width_of
 from .teju import write_float
 from std.os import abort
@@ -72,6 +73,14 @@ struct Value(JsonValue, Sized):
         Int64, UInt64, Float64, String, Bool, Object, Array, Null
     ]
     var _data: Self.Type
+
+    # `Value` is mutually recursive with `Object`/`Array` (which hold
+    # `List[Value]`), so the compiler can no longer prove it is *implicitly*
+    # deletable and refuses to synthesize the destructor/move. An explicit
+    # (empty) `__del__` breaks the cycle: fields are still destroyed
+    # automatically after it runs, and copy/move synthesis is re-enabled.
+    def __del__(deinit self):
+        pass
 
     @always_inline
     def __init__(out self):
@@ -294,7 +303,7 @@ struct Value(JsonValue, Sized):
         abort("Unreachable: __bool__")
 
     @always_inline
-    def isa[T: Movable & Copyable](self) -> Bool:
+    def isa[T: Copyable](self) -> Bool:
         constrain_json_type[T]()
         return self._data.isa[T]()
 
@@ -331,7 +340,7 @@ struct Value(JsonValue, Sized):
         return self.isa[Null]()
 
     @always_inline
-    def get[T: Movable & Copyable](ref self) -> ref[self._data] T:
+    def get[T: Copyable](ref self) -> ref[self._data] T:
         constrain_json_type[T]()
         return self._data.unsafe_get[T]()
 

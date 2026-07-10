@@ -7,7 +7,7 @@ from std.memory import ArcPointer, OwnedPointer
 from .parser import Parser
 from .parser import Parser, ParseOptions
 from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`, `"`
-from std.sys.intrinsics import unlikely, _type_is_eq
+from std.sys.intrinsics import unlikely
 from emberjson.utils import to_string
 from ._parser_helper import NULL, copy_to_string
 from std.hashlib.hasher import Hasher
@@ -17,7 +17,7 @@ from std.sys import bit_width_of
 comptime non_struct_error = "Cannot deserialize non-struct type"
 
 
-comptime _Base = ImplicitlyDestructible & Movable
+comptime _Base = ImplicitlyDeletable & Movable
 
 
 trait Deserializer:
@@ -95,7 +95,7 @@ def __all_dtors_are_trivial[T: AnyType]() -> Bool:
     comptime r = reflect[T]
     comptime for i in range(r.field_count()):
         comptime type = r.field_types()[i]
-        if not downcast[type, ImplicitlyDestructible].__del__is_trivial:
+        if not downcast[type, ImplicitlyDeletable].__del__is_trivial:
             return False
     return True
 
@@ -127,7 +127,9 @@ def _default_deserialize[
     comptime if is_array:
         p.expect(`[`)
         comptime for i in range(field_count):
-            ref field = trait_downcast[_Base](r.field_ref[i](s))
+            ref field = rebind[downcast[field_types[i], _Base]](
+                r.field_ref[i](s)
+            )
             field = _deserialize_impl[type_of(field)](p)
             p.skip_whitespace()
             if i < field_count - 1:
@@ -154,7 +156,9 @@ def _default_deserialize[
                         raise Error("Duplicate key: ", name)
                     seen_i = True
                     matched = True
-                    ref field = trait_downcast[_Base](r.field_ref[i](s))
+                    ref field = rebind[downcast[field_types[i], _Base]](
+                        r.field_ref[i](s)
+                    )
 
                     field = _deserialize_impl[type_of(field)](p)
 
@@ -170,9 +174,9 @@ def _default_deserialize[
                 comptime if __is_optional[field_types[i]]() or __is_default[
                     field_types[i]
                 ]():
-                    ref field = trait_downcast[_Base & Defaultable](
-                        r.field_ref[i](s)
-                    )
+                    ref field = rebind[
+                        downcast[field_types[i], _Base & Defaultable]
+                    ](r.field_ref[i](s))
                     field = type_of(field)()
                 else:
                     comptime name = field_names[i]
@@ -209,16 +213,8 @@ __extension String(JsonDeserializable):
         return False
 
 
-__extension Int(JsonDeserializable):
-    @staticmethod
-    def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = Int(p.expect_int())
-
-    @staticmethod
-    def deserialize_as_array() -> Bool:
-        return False
+# `Int` is now an alias for `Scalar[DType.int]`, so it is covered by the
+# `SIMD` extension below rather than a dedicated extension.
 
 
 __extension Bool(JsonDeserializable):
@@ -358,14 +354,19 @@ __extension List(JsonDeserializable):
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         p.expect(`[`)
-        s = Self()
+
+        # Build into a list whose element type is downcast to `_Base` (which is
+        # `ImplicitlyDeletable`) so the partially-built list can be cleaned up if
+        # a parse call raises, then rebind back to `Self` (same layout).
+        var lst = List[downcast[Self.T, _Base]]()
 
         while p.peek() != `]`:
-            s.append(_deserialize_impl[downcast[Self.T, _Base]](p))
+            lst.append(_deserialize_impl[downcast[Self.T, _Base]](p))
             p.skip_whitespace()
             if p.peek() != `]`:
                 p.expect(`,`)
         p.expect(`]`)
+        s = rebind_var[Self](lst^)
 
     @staticmethod
     def deserialize_as_array() -> Bool:
@@ -378,22 +379,33 @@ __extension Dict(JsonDeserializable):
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         comptime assert (
-            _type_is_eq[Self.K, String]()
-            or reflect[Self.K].base_name() == "LazyString"
+            Self.K == String or reflect[Self.K].base_name() == "LazyString"
         ), "Dict must have string keys"
         p.expect(`{`)
-        s = Self()
+
+        # `Dict.__setitem__` now requires evidence that `K` and `V` are
+        # `ImplicitlyDeletable`, which the generic `Self.K`/`Self.V` don't
+        # carry. Build into a dict whose key/value types are downcast to
+        # supply that evidence, then rebind back to `Self` (same layout).
+        comptime K2 = downcast[
+            Self.K, Copyable & Hashable & Equatable & ImplicitlyDeletable
+        ]
+        comptime V2 = downcast[Self.V, Movable & ImplicitlyDeletable]
+        var d = Dict[K2, V2, Self.H]()
 
         while p.peek() != `}`:
-            var ident = rebind_var[Self.K](
-                _deserialize_impl[downcast[Self.K, _Base & Movable]](p)
+            var ident = rebind_var[K2](
+                _deserialize_impl[downcast[Self.K, _Base]](p)
             )
             p.expect(`:`)
-            s[ident^] = _deserialize_impl[downcast[Self.V, _Base]](p)
+            d[ident^] = rebind_var[V2](
+                _deserialize_impl[downcast[Self.V, _Base]](p)
+            )
             p.skip_whitespace()
             if p.peek() != `}`:
                 p.expect(`,`)
         p.expect(`}`)
+        s = rebind_var[Self](d^)
 
     @staticmethod
     def deserialize_as_array() -> Bool:
@@ -409,7 +421,7 @@ __extension Tuple(JsonDeserializable):
         p.expect(`[`)
 
         comptime for i in range(Self.__len__()):
-            UnsafePointer(to=s[i]).init_pointee_move(
+            UnsafePointer(to=s[i]).unsafe_write(
                 _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
             )
 
@@ -429,10 +441,16 @@ __extension InlineArray(JsonDeserializable):
         origin: ImmutOrigin, options: ParseOptions, //
     ](mut j: Parser[origin, options], out s: Self) raises:
         j.expect(`[`)
-        s = Self(uninitialized=True)
+
+        # Build into an array whose element type is downcast to `_Base` (which
+        # is `ImplicitlyDeletable`) so cleanup is possible if a parse call
+        # raises, then rebind back to `Self` (same layout).
+        var arr = InlineArray[downcast[Self.ElementType, _Base], size](
+            uninitialized=True
+        )
 
         for i in range(size):
-            UnsafePointer(to=s[i]).init_pointee_move(
+            UnsafePointer(to=arr[i]).unsafe_write(
                 _deserialize_impl[downcast[Self.ElementType, _Base]](j)
             )
 
@@ -440,6 +458,7 @@ __extension InlineArray(JsonDeserializable):
                 j.expect(`,`)
 
         j.expect(`]`)
+        s = rebind_var[Self](arr^)
 
     @staticmethod
     def deserialize_as_array() -> Bool:

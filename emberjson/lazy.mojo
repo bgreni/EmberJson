@@ -4,10 +4,10 @@ from ._deserialize.reflection import (
     JsonDeserializable,
     _deserialize_impl,
 )
-from ._deserialize.parser import Parser
+from ._deserialize.parser import Parser, ParseOptions
 from ._serialize import JsonSerializable, serialize, Serializer
+from .value import Value
 from std.hashlib import Hasher
-from std.sys.intrinsics import _type_is_eq
 from std.builtin.rebind import downcast
 
 
@@ -110,7 +110,7 @@ struct Lazy[
         self,
     ) -> StringSlice[Self.origin]:
         # TODO: Use where clause when that actually works
-        comptime assert _type_is_eq[Self.T, String]()
+        comptime assert Self.T == String
         return StringSlice(unsafe_from_utf8=self._data[1:-1])
 
 

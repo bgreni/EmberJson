@@ -13,7 +13,7 @@ from emberjson.json import JSON
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
 from emberjson.array import Array
 from emberjson.object import Object
-from emberjson.value import Value
+from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
 from std.memory import UnsafePointer, memset
 from std.sys.intrinsics import unlikely, likely

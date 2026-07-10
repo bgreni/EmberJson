@@ -161,7 +161,9 @@ def test_l2_lazy_string_not_decoded() raises:
     var raw = lazy.unsafe_as_string_slice()
     # raw contains "hello\nworld" (12 chars — literal backslash-n, not decoded)
     # Correct: should equal "hello" + newline + "world" (11 chars)
-    assert_equal(len(raw), 12)  # documents the undecoded (buggy) length
+    assert_equal(
+        raw.byte_length(), 12
+    )  # documents the undecoded (buggy) length
 
     # Contrast: .get() DOES decode the escape correctly
     var p2 = Parser(s)

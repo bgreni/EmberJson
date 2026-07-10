@@ -3,6 +3,7 @@
 # Licensed under the Apache License, Version 2.0.
 from .tables import MINIVERSE
 from ..utils import lut, select
+from . import Fields
 
 comptime LOG10_POW2_MAX: Int32 = 112815
 comptime LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX

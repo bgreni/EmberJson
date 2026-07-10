@@ -183,6 +183,12 @@ struct DeepNode(Copyable):
         for i in range(len(copy.children)):
             self.children.append(copy.children[i].copy())
 
+    # Recursive type: an explicit (empty) `__del__` is required so the
+    # compiler will synthesize the destructor/move (fields still destroyed
+    # automatically afterward).
+    def __del__(deinit self):
+        pass
+
 
 def test_nested_structs() raises:
     var addr = Address("123 Main St", "Springfield", 62704)

@@ -2,7 +2,8 @@ from .value import Value, Null
 from std.collections import Dict, List
 from std.sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
-from ._deserialize import Parser
+from ._deserialize import Parser, ParseOptions
+from ._serialize import Serializer
 from .utils import write_escaped_string
 from std.python import PythonObject, Python
 from std.os import abort

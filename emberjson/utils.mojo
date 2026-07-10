@@ -8,9 +8,11 @@ from std.memory import Span
 from std.memory import memcmp, UnsafePointer
 from std.format._utils import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
+from .object import Object
+from .array import Array
+from .value import Null
 from std.sys import size_of
 from std.sys.intrinsics import unlikely
-from std.sys.intrinsics import _type_is_eq
 from std.utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
 from std.builtin.globals import global_constant
@@ -113,9 +115,9 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
 
 comptime DefaultPrettyIndent = 4
 
-comptime StackArray[
-    T: Copyable & Movable & ImplicitlyDestructible, size: Int
-] = InlineArray[T, size]
+comptime StackArray[T: Copyable & ImplicitlyDeletable, size: Int] = InlineArray[
+    T, size
+]
 
 
 @always_inline
@@ -174,18 +176,8 @@ def to_string(var i: UInt32) -> String:
     return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
 
 
-def constrain_json_type[T: Movable & Copyable]():
-    comptime valid = _type_is_eq[T, Int64]() or _type_is_eq[
-        T, UInt64
-    ]() or _type_is_eq[T, Float64]() or _type_is_eq[T, String]() or _type_is_eq[
-        T, Bool
-    ]() or _type_is_eq[
-        T, Object
-    ]() or _type_is_eq[
-        T, Array
-    ]() or _type_is_eq[
-        T, Null
-    ]()
+def constrain_json_type[T: Copyable]():
+    comptime valid = T == Int64 or T == UInt64 or T == Float64 or T == String or T == Bool or T == Object or T == Array or T == Null
     comptime assert valid, "Invalid type for JSON"
 
 
