@@ -172,6 +172,25 @@ struct Object(JsonValue, Sized):
                 return
         self._data.append(KeyValuePair(h, key^, item^))
 
+    def _append_for_parse[
+        allow_duplicates: Bool
+    ](mut self, var key: String, var item: Value) raises:
+        """Parser-only insertion: hashes the key and scans `_data` once,
+        combining the duplicate-key check with the insert. In strict mode
+        (`allow_duplicates=False`) a duplicate raises; in lenient mode it
+        collapses with last-write-wins, preserving the first key's position —
+        identical semantics to the previous `__contains__` + `_upsert` pair.
+        """
+        var h = hash(key)
+        for i in range(len(self._data)):
+            if self._data[i].key_hash == h and self._data[i].key == key:
+                comptime if allow_duplicates:
+                    self._data[i].value = item^
+                    return
+                else:
+                    raise Error("Duplicate key: ", key)
+        self._data.append(KeyValuePair(h, key^, item^))
+
     @always_inline
     def __setitem__(mut self, var key: String, var item: Value):
         """Sets a key-value pair.
