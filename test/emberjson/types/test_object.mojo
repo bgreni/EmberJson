@@ -207,8 +207,8 @@ def test_nested_access_generic() raises:
 
 
 def test_index_threshold_crossing() raises:
-    # Grow well past _INDEX_THRESHOLD (12) so the hash index gets built,
-    # then verify insertion order and lookups are unaffected.
+    # Grow well past _INDEX_THRESHOLD (12); verify insertion order and
+    # lookups hold for objects larger than the parse-index threshold.
     var ob = Object()
     for i in range(40):
         ob["key" + String(i)] = i
@@ -227,8 +227,8 @@ def test_index_threshold_crossing() raises:
 
 
 def test_index_upsert_after_threshold() raises:
-    # Overwriting an existing key once the index is active must update in
-    # place: same length, same position, new value.
+    # Overwriting an existing key in a large object must update in place:
+    # same length, same position, new value.
     var ob = Object()
     for i in range(20):
         ob["key" + String(i)] = i
@@ -243,8 +243,8 @@ def test_index_upsert_after_threshold() raises:
 
 
 def test_index_pop() raises:
-    # pop invalidates the index (entry positions shift); lookups must keep
-    # working, and later inserts must rebuild it correctly.
+    # pop from a large object shifts later entries; lookups and subsequent
+    # inserts must stay correct.
     var ob = Object()
     for i in range(20):
         ob["key" + String(i)] = i
@@ -265,9 +265,9 @@ def test_index_pop() raises:
 
 
 def test_index_duplicate_detection_across_threshold() raises:
-    # A duplicate appearing after the index is built (>12 keys in) must
-    # still be rejected in strict mode and collapse last-write-wins in
-    # lenient mode.
+    # A duplicate appearing after the parser's transient index is built
+    # (>12 keys in) must still be rejected in strict mode and collapse
+    # last-write-wins in lenient mode.
     var dup_late = String('{"key0":0')
     for i in range(1, 20):
         dup_late += ',"key' + String(i) + '":' + String(i)

@@ -12,7 +12,7 @@ from std.math import isinf
 from emberjson.json import JSON
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
 from emberjson.array import Array
-from emberjson.object import Object
+from emberjson.object import Object, _ObjectParseIndex
 from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
 from std.memory import UnsafePointer, memset
@@ -260,6 +260,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             # Reserve a few slots up front (see parse_array); KeyValuePair
             # entries are ~64 bytes, so realloc-from-zero growth is costly.
             obj = Object(capacity=4)
+            # Transient hash index over this object's keys; stays empty
+            # (allocation-free) until the object crosses _INDEX_THRESHOLD,
+            # then keeps duplicate detection O(1) instead of O(n) per key.
+            var index = _ObjectParseIndex()
             while True:
                 if unlikely(self.data[] != `"`):
                     raise Error("Invalid identifier")
@@ -283,7 +287,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 obj._append_for_parse[
                     StrictOptions.ALLOW_DUPLICATE_KEYS
                     in Self.options.strict_mode
-                ](ident^, v^)
+                ](ident^, v^, index)
 
                 if self.data[] == `}`:
                     comptime if (

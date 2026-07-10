@@ -1,5 +1,6 @@
 from emberjson.value import Value, Null
 from emberjson import Object, Array, write_pretty
+from std.sys import size_of
 from std.testing import (
     assert_equal,
     assert_true,
@@ -304,6 +305,17 @@ def test_booling() raises:
     var falsies = Array("", 0, 0.0, False, Null(), None)
     for f in falsies:
         assert_false(f)
+
+
+def test_value_size() raises:
+    # Value is a Variant sized by its largest member (String/Object/Array,
+    # each 3 words) plus a discriminant. Every array slot and object entry
+    # holds a Value inline, so growing any member type taxes every parsed
+    # document. If this fails, a field was added to one of the member types
+    # — reconsider (see _ObjectParseIndex for the pattern to use instead).
+    assert_equal(size_of[Value](), 32)
+    assert_equal(size_of[Object](), 24)
+    assert_equal(size_of[Array](), 24)
 
 
 def main() raises:
