@@ -357,11 +357,33 @@ def unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
 
 
 @always_inline
-def parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
-    if p.dist() <= 0:
-        return False
-    dig = isdigit(p[])
-    i = select(dig, i * 10 + (p[] - `0`).cast[i.dtype](), i)
+def parse_digit[
+    assume_padded: Bool = False
+](out dig: Bool, p: CheckedPointer, mut i: Scalar):
+    comptime if not assume_padded:
+        if p.dist() <= 0:
+            return False
+    # In padded mode the EOF check is skipped: reads at/past end return the
+    # NUL padding, which is not a digit, so the loop terminates the same way.
+    dig = isdigit(p.unsafe_get())
+    i = select(dig, i * 10 + (p.unsafe_get() - `0`).cast[i.dtype](), i)
+
+
+@always_inline
+def at_or_nul[
+    assume_padded: Bool = False
+](p: CheckedPointer) -> Byte:
+    """The byte at `p`, or NUL when at/past end-of-input.
+
+    In padded mode this is a bare read (the padding provides the NULs);
+    otherwise an explicit bounds check substitutes the NUL. Callers compare
+    the result against token characters, so EOF falls into the same "not
+    the byte I wanted" branch either way.
+    """
+    comptime if assume_padded:
+        return p.unsafe_get()
+    else:
+        return 0 if p.dist() <= 0 else p.unsafe_get()
 
 
 @always_inline

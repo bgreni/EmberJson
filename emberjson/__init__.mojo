@@ -2,7 +2,7 @@ from .value import Value, Null
 from .json import JSON
 from .array import Array
 from .object import Object
-from .utils import write, write_pretty
+from .utils import write, write_pretty, PaddedBuffer
 from ._deserialize import (
     Parser,
     ParseOptions,
@@ -81,7 +81,11 @@ def parse[
     Raises:
         If an invalid JSON string is provided.
     """
-    var p = Parser[options=options](s)
+    # Copy the input into a NUL-padded buffer (one memcpy, cheap relative to
+    # parsing) so the parser's hot loops can skip per-byte bounds checks.
+    # Safe because the returned Value owns all of its data.
+    var buf = PaddedBuffer(s.as_bytes())
+    var p = Parser[options = options._padded()](buf.span())
     j = p.parse()
 
 

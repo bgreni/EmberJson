@@ -1,6 +1,7 @@
 from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
+from .utils import PaddedBuffer
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
 from std.python import PythonObject, Python
@@ -72,7 +73,9 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     def __init__(out self: Array, *, parse_string: String) raises:
-        var p = Parser(parse_string)
+        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops.
+        var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
+        var p = Parser[options = ParseOptions()._padded()](buf.span())
         self = p.parse_array()
 
     @always_inline
