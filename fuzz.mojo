@@ -4,6 +4,7 @@ from std.utils.numerics import isinf
 from std.time import monotonic
 from std.testing import assert_equal
 from std.testing.prop.strategy import Strategy, Rng
+from std.testing.prop.strategy.string_strategy import _StringStrategy
 from std.testing.prop import PropTest, PropTestConfig
 from std.benchmark import keep
 from std.time import perf_counter_ns
@@ -52,8 +53,13 @@ struct JsonStringStrategy(Movable, Strategy):
             raise Error("Invalid choice")
 
     def gen_string(self, mut rng: Rng) raises -> String:
-        # TODO: Fix string strategy
-        var strat = String.strategy(unicode=False, only_printable=True)
+        # The stdlib string strategy. The pinned nightly ships the strategy
+        # struct but not yet the `String.strategy(...)` extension sugar;
+        # switch to `String.strategy(unicode=False, only_printable=True)`
+        # once the toolchain resolves it.
+        var strat = _StringStrategy(
+            min_len=0, max_len=20, unicode=False, only_printable=True
+        )
         return strat.value(rng)
 
     def gen_array(self, mut rng: Rng, depth: Int) raises -> Array:
