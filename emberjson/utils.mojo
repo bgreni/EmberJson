@@ -5,7 +5,7 @@ from std.utils import Variant
 from std.utils.numerics import FPUtils
 from std.math import log10, log2
 from std.memory import Span
-from std.memory import memcmp, UnsafePointer
+from std.memory import memcmp, memcpy, memset, UnsafePointer
 from std.format._utils import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from .object import Object
@@ -100,6 +100,26 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
         return self.p[i]
 
     @always_inline("nodebug")
+    def unsafe_get(self) -> Byte:
+        """Reads the current byte without a bounds check.
+
+        Safety:
+            Only valid when the underlying buffer is known to extend past
+            `end` (see `PaddedBuffer`), so reads at or beyond `end` land in
+            NUL padding instead of unmapped memory.
+        """
+        return self.p[]
+
+    @always_inline("nodebug")
+    def unsafe_get(self, i: Int) -> Byte:
+        """Reads the byte at offset `i` without a bounds check.
+
+        Safety:
+            See `unsafe_get()`.
+        """
+        return self.p[i]
+
+    @always_inline("nodebug")
     def dist(self) -> Int:
         return Int(self.end) - Int(self.p)
 
@@ -111,6 +131,56 @@ struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
                 v[i] = self.p[i]
             return v
         return self.p.load[width=SIMD8_WIDTH]()
+
+    @always_inline("nodebug")
+    def unsafe_load_chunk(self) -> SIMD8xT:
+        """Loads a full SIMD chunk without the partial-tail fallback.
+
+        Safety:
+            Only valid when the underlying buffer extends at least
+            `SIMD8_WIDTH` bytes past `end` (see `PaddedBuffer`).
+        """
+        return self.p.load[width=SIMD8_WIDTH]()
+
+
+comptime PAD_INPUT_THRESHOLD = 128
+"""Input size below which the DOM entry points skip the `PaddedBuffer`
+copy and parse the caller's buffer directly with bounds checks.
+
+For tiny documents (single scalars, small objects) the buffer allocation,
+memcpy and NUL memset cost more than the whole parse; above this size the
+unchecked hot loops win."""
+
+
+struct PaddedBuffer(Movable):
+    """Owns a copy of parser input followed by `PAD` NUL bytes.
+
+    The padding lets the parser's SIMD/SWAR hot loops read past the logical
+    end of input without bounds checks: NUL is not a digit, not whitespace,
+    not a structural character, and is an unescaped control character inside
+    strings, so every scan loop terminates within the pad with the same
+    error it would have raised at a checked end-of-input. The layout
+    (round up to 64 bytes + 128-byte pad) also satisfies a future stage-1
+    structural indexer reading whole 64-byte chunks.
+    """
+
+    comptime PAD = 128
+
+    var _data: List[Byte]
+    var _len: Int
+
+    def __init__(out self, s: ByteView):
+        var n = len(s)
+        var total = (n + 63) // 64 * 64 + Self.PAD
+        self._data = List[Byte](unsafe_uninit_length=total)
+        memcpy(dest=self._data.unsafe_ptr(), src=s.unsafe_ptr(), count=n)
+        memset(self._data.unsafe_ptr() + n, 0, total - n)
+        self._len = n
+
+    @always_inline
+    def span(ref self) -> ByteView[origin_of(self._data)]:
+        """The logical input: `len` bytes, with readable NUL padding after."""
+        return Span(ptr=self._data.unsafe_ptr(), length=self._len)
 
 
 comptime DefaultPrettyIndent = 4

@@ -171,5 +171,44 @@ def test_l2_lazy_string_not_decoded() raises:
     assert_equal(lazy2.get(), "hello\nworld")
 
 
+# ===========================================================================
+# Padded-buffer boundary behaviour: inputs truncated mid-token at (or near)
+# 64-byte buffer boundaries must terminate in the NUL padding with a clean
+# error, never an out-of-bounds read (run under -D ASSERT=all).
+# ===========================================================================
+
+
+def test_truncation_at_chunk_boundaries() raises:
+    # Leading whitespace positions the token's end exactly at the given
+    # total length; trailing whitespace is legal so leading is what matters.
+    def padded_to(total: Int, tail: String) -> String:
+        return String(" ") * (total - tail.byte_length()) + tail
+
+    for total in [63, 64, 65, 128]:
+        # Number truncated mid-float: "1." with no fraction digits.
+        with assert_raises():
+            _ = parse(padded_to(total, "1."))
+        # Unterminated string.
+        with assert_raises():
+            _ = parse(padded_to(total, '"abc'))
+        # String ending in a bare backslash.
+        with assert_raises():
+            _ = parse(padded_to(total, '"a\\'))
+        # Truncated exponent.
+        with assert_raises():
+            _ = parse(padded_to(total, "1e"))
+        # Truncated atoms and containers.
+        with assert_raises():
+            _ = parse(padded_to(total, "tru"))
+        with assert_raises():
+            _ = parse(padded_to(total, "[1,2"))
+        with assert_raises():
+            _ = parse(padded_to(total, '{"k":'))
+        # Valid values ending exactly on the boundary must still parse.
+        assert_equal(parse(padded_to(total, "1234")).int(), 1234)
+        assert_equal(parse(padded_to(total, '"ok"')).string(), "ok")
+        assert_equal(len(parse(padded_to(total, "[1,2]")).array()), 2)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

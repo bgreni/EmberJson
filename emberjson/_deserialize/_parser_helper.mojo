@@ -230,9 +230,40 @@ def handle_unicode_codepoint(
 
 
 @always_inline
+def _next_backslash[
+    o1: ImmutOrigin, o2: ImmutOrigin, //
+](var p: BytePtr[o1], end: BytePtr[o2]) -> BytePtr[o1]:
+    """Returns a pointer to the next backslash in [p, end), or `end`.
+
+    Reads SIMD chunks only while they fit inside the range, so it is safe
+    for unpadded buffers.
+    """
+    while ptr_dist(p, end) >= SIMD8_WIDTH:
+        var bs = pack_into_integer(p.load[width=SIMD8_WIDTH]().eq(`\\`))
+        if bs != 0:
+            return p + Int(count_trailing_zeros(bs))
+        p += SIMD8_WIDTH
+    while p < end and p[] != `\\`:
+        p += 1
+    return p
+
+
+@always_inline
 def copy_to_string[
     ignore_unicode: Bool = False
-](start: BytePtr, end: BytePtr, found_escaped: Bool = True) raises -> String:
+](
+    start: BytePtr,
+    end: BytePtr,
+    found_escaped: Bool = True,
+    first_escape: Int = 0,
+) raises -> String:
+    """Materializes the string bytes in [start, end) into a `String`.
+
+    `first_escape` is the offset of the first backslash when the caller
+    already located it (see `Parser.find`); the escaped-decode path then
+    bulk-copies that clean prefix instead of re-scanning it byte by byte.
+    Zero (the default) preserves the scan-from-start behaviour.
+    """
     var length = ptr_dist(start, end)
 
     @parameter
@@ -240,13 +271,16 @@ def copy_to_string[
         # This will usually slightly overallocate if the string contains
         # escaped unicode
         var dest = List[UInt8](capacity=length)
-        var p = start
+        var p = start + first_escape
+
+        if first_escape > 0:
+            dest.resize(first_escape, 0)
+            memcpy(dest=dest.unsafe_ptr(), src=start, count=first_escape)
 
         while p < end:
             # Fast scan for next backslash
             var chunk_start = p
-            while p < end and p[] != `\\`:
-                p += 1
+            p = _next_backslash(p, end)
 
             # Bulk copy non-escaped chunk
             if p > chunk_start:
@@ -357,11 +391,31 @@ def unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
 
 
 @always_inline
-def parse_digit(out dig: Bool, p: CheckedPointer, mut i: Scalar) raises:
-    if p.dist() <= 0:
-        return False
-    dig = isdigit(p[])
-    i = select(dig, i * 10 + (p[] - `0`).cast[i.dtype](), i)
+def parse_digit[
+    assume_padded: Bool = False
+](out dig: Bool, p: CheckedPointer, mut i: Scalar):
+    comptime if not assume_padded:
+        if p.dist() <= 0:
+            return False
+    # In padded mode the EOF check is skipped: reads at/past end return the
+    # NUL padding, which is not a digit, so the loop terminates the same way.
+    dig = isdigit(p.unsafe_get())
+    i = select(dig, i * 10 + (p.unsafe_get() - `0`).cast[i.dtype](), i)
+
+
+@always_inline
+def at_or_nul[assume_padded: Bool = False](p: CheckedPointer) -> Byte:
+    """The byte at `p`, or NUL when at/past end-of-input.
+
+    In padded mode this is a bare read (the padding provides the NULs);
+    otherwise an explicit bounds check substitutes the NUL. Callers compare
+    the result against token characters, so EOF falls into the same "not
+    the byte I wanted" branch either way.
+    """
+    comptime if assume_padded:
+        return p.unsafe_get()
+    else:
+        return 0 if p.dist() <= 0 else p.unsafe_get()
 
 
 @always_inline

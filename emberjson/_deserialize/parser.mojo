@@ -12,7 +12,7 @@ from std.math import isinf
 from emberjson.json import JSON
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
 from emberjson.array import Array
-from emberjson.object import Object
+from emberjson.object import Object, _ObjectParseIndex
 from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
 from std.memory import UnsafePointer, memset
@@ -29,6 +29,7 @@ from ._parser_helper import (
     smallest_power,
     to_double,
     parse_digit,
+    at_or_nul,
     ptr_dist,
     significant_digits,
     unsafe_is_made_of_eight_digits_fast,
@@ -119,6 +120,11 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
 
     var ignore_unicode: Bool
     var strict_mode: StrictOptions
+    # Internal: the input is backed by a `PaddedBuffer`, so hot loops may
+    # read past end-of-input into NUL padding without bounds checks. Only
+    # the public entry points that copy into a PaddedBuffer set this; user
+    # code should never construct options with it enabled.
+    var _assume_padded: Bool
 
     def __init__(
         out self,
@@ -128,6 +134,12 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
     ):
         self.ignore_unicode = ignore_unicode
         self.strict_mode = strict_mode
+        self._assume_padded = False
+
+    def _padded(self) -> Self:
+        var res = self
+        res._assume_padded = True
+        return res
 
 
 comptime IntegerParseResult[origin: ImmutOrigin, acc_type: DType] = Tuple[
@@ -190,11 +202,19 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def load_chunk(self) -> SIMD8xT:
-        return self.data.load_chunk()
+        comptime if Self.options._assume_padded:
+            return self.data.unsafe_load_chunk()
+        else:
+            return self.data.load_chunk()
 
     @always_inline
     def can_load_chunk(self) -> Bool:
-        return self.bytes_remaining() >= SIMD8_WIDTH
+        comptime if Self.options._assume_padded:
+            # PaddedBuffer.PAD >= SIMD8_WIDTH: a full chunk is always
+            # readable while any input remains.
+            return self.has_more()
+        else:
+            return self.bytes_remaining() >= SIMD8_WIDTH
 
     @always_inline
     def pos(self) -> Int:
@@ -203,6 +223,18 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     @always_inline
     def peek(self) raises -> Byte:
         return self.data[]
+
+    @always_inline
+    def cur(self) raises -> Byte:
+        """The byte at the current position. In padded mode reads at or past
+        end-of-input return the NUL padding (which no token accepts, so every
+        caller falls into its existing error/terminate branch); otherwise a
+        bounds-checked read that raises on EOF.
+        """
+        comptime if Self.options._assume_padded:
+            return self.data.unsafe_get()
+        else:
+            return self.data[]
 
     def parse(mut self, out json: Value) raises:
         self.skip_whitespace()
@@ -218,18 +250,23 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
     def parse_array(mut self, out arr: Array) raises:
         self.data += 1
         self.skip_whitespace()
-        arr = Array()
 
-        if unlikely(self.data[] != `]`):
+        if unlikely(self.cur() == `]`):
+            arr = Array()
+        else:
+            # Reserve a few slots up front: most JSON arrays are small, and
+            # growing a List from zero costs several reallocations that each
+            # move the 32-byte Values. Empty arrays stay allocation-free.
+            arr = Array(capacity=4)
             while True:
                 arr.append(self.parse_value())
                 self.skip_whitespace()
                 var has_comma = False
-                if self.data[] == `,`:
+                if self.cur() == `,`:
                     self.data += 1
                     has_comma = True
                     self.skip_whitespace()
-                if self.data[] == `]`:
+                if self.cur() == `]`:
                     comptime if (
                         StrictOptions.ALLOW_TRAILING_COMMA
                         not in Self.options.strict_mode
@@ -246,41 +283,45 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
 
     def parse_object(mut self, out obj: Object) raises:
-        obj = Object()
         self.data += 1
         self.skip_whitespace()
 
-        if unlikely(self.data[] != `}`):
+        if unlikely(self.cur() == `}`):
+            obj = Object()
+        else:
+            # Reserve a few slots up front (see parse_array); KeyValuePair
+            # entries are ~64 bytes, so realloc-from-zero growth is costly.
+            obj = Object(capacity=4)
+            # Transient hash index over this object's keys; stays empty
+            # (allocation-free) until the object crosses _INDEX_THRESHOLD,
+            # then keeps duplicate detection O(1) instead of O(n) per key.
+            var index = _ObjectParseIndex()
             while True:
-                if unlikely(self.data[] != `"`):
+                if unlikely(self.cur() != `"`):
                     raise Error("Invalid identifier")
                 var ident = self.read_string()
                 self.skip_whitespace()
-                if unlikely(self.data[] != `:`):
+                if unlikely(self.cur() != `:`):
                     raise Error("Invalid identifier : ", self.remaining())
                 self.data += 1
                 var v = self.parse_value()
                 self.skip_whitespace()
                 var has_comma = False
-                if self.data[] == `,`:
+                if self.cur() == `,`:
                     self.data += 1
                     self.skip_whitespace()
                     has_comma = True
 
                 # Strict mode rejects duplicate keys outright. In lenient mode
-                # (`ALLOW_DUPLICATE_KEYS`), `_upsert` collapses duplicates with
+                # (`ALLOW_DUPLICATE_KEYS`), duplicates collapse with
                 # last-write-wins semantics — matching how dict literals and
                 # `__setitem__` behave, and what RFC 8259 recommends.
-                comptime if (
-                    not StrictOptions.ALLOW_DUPLICATE_KEYS
+                obj._append_for_parse[
+                    StrictOptions.ALLOW_DUPLICATE_KEYS
                     in Self.options.strict_mode
-                ):
-                    if ident in obj:
-                        raise Error("Duplicate key: ", ident)
+                ](ident^, v^, index)
 
-                obj._upsert(ident^, v^)
-
-                if self.data[] == `}`:
+                if self.cur() == `}`:
                     comptime if (
                         not StrictOptions.ALLOW_TRAILING_COMMA
                         in Self.options.strict_mode
@@ -326,7 +367,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     def parse_value(mut self, out v: Value) raises:
         self.skip_whitespace()
-        var b = self.data[]
+        var b = self.cur()
         # Handle string
         if b == `"`:
             v = self.read_string()
@@ -359,12 +400,21 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     def find(mut self, start: CheckedPointer, out s: String) raises:
         var found_escaped = False
+        var first_escape = 0
         while True:
-            var block = StringBlock.find(self.data)
+            var block: StringBlock
+            comptime if Self.options._assume_padded:
+                # Unconditional full-chunk load; an overread lands in NUL
+                # padding, which registers as an unescaped control character
+                # and is caught by the EOF check below before it can be
+                # reported as such.
+                block = StringBlock.find(self.data.p)
+            else:
+                block = StringBlock.find(self.data)
             if block.has_quote_first():
                 self.data += block.quote_index()
                 return copy_to_string[Self.options.ignore_unicode](
-                    start.p, self.data.p, found_escaped
+                    start.p, self.data.p, found_escaped, first_escape
                 )
             elif unlikely(self.data.p >= self.data.end):
                 # We got EOF before finding the end quote, so obviously this
@@ -383,22 +433,26 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 continue
             self.data += block.bs_index()
 
-            # We found a backslash, so we need to unescape
+            # We found a backslash, so we need to unescape. Record where the
+            # first one is so the decoder can bulk-copy the clean prefix
+            # instead of re-scanning it.
+            if not found_escaped:
+                first_escape = ptr_dist(start.p, self.data.p)
             found_escaped = True
             while True:
                 self.data += 1
-                if self.data[] == `u`:
+                if self.cur() == `u`:
                     self.data += 1
                     break
                 else:
-                    if unlikely(self.data[] not in acceptable_escapes):
+                    if unlikely(self.cur() not in acceptable_escapes):
                         raise Error(
                             "Invalid escape sequence: ",
                             to_string(self.data[-1]),
-                            to_string(self.data[]),
+                            to_string(self.cur()),
                         )
                 self.data += 1
-                if self.data[] != `\\`:
+                if self.cur() != `\\`:
                     break
 
     def read_serial(mut self, start: CheckedPointer, out s: String) raises:
@@ -443,8 +497,13 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def skip_whitespace(mut self) raises:
-        if not self.has_more() or not is_space(self.data[]):
-            return
+        comptime if Self.options._assume_padded:
+            # NUL padding is not whitespace, so the EOF check is free.
+            if not is_space(self.cur()):
+                return
+        else:
+            if not self.has_more() or not is_space(self.data[]):
+                return
         self.data += 1
 
         # compile time interpreter is incompatible with the SIMD accelerated
@@ -585,63 +644,79 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def parse_number(mut self, out v: Value) raises:
-        if self.data[] == `+`:
+        comptime padded = Self.options._assume_padded
+
+        if self.cur() == `+`:
             raise Error('Expected digit of "-", found "+"')
 
-        var neg = self.data[] == `-`
+        var neg = self.cur() == `-`
         var p = self.data + Int(neg)
 
         var start_digits = p
         var i: UInt64 = 0
 
-        while parse_digit(p, i):
+        # Ingest digits 8 at a time (SWAR). `i` may wrap for very long
+        # digit runs exactly as the scalar loop below would; correctness is
+        # enforced afterwards via `digit_count` (integer overflow checks and
+        # the >19-significant-digit float slow path). In padded mode the
+        # remaining-bytes gate is unnecessary: the 8-byte read lands in the
+        # NUL padding, which fails the all-digits test.
+        while (padded or p.dist() >= 8) and unsafe_is_made_of_eight_digits_fast(
+            p.p
+        ):
+            i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
+            p += 8
+        while parse_digit[padded](p, i):
             p += 1
 
         var digit_count = ptr_dist(start_digits.p, p.p)
 
         if unlikely(
-            digit_count == 0 or (start_digits[] == `0` and digit_count > 1)
+            digit_count == 0
+            or (at_or_nul[padded](start_digits) == `0` and digit_count > 1)
         ):
             raise Error("Invalid number")
 
         var exponent: Int64 = 0
         var is_float = False
 
-        if p.dist() > 0 and p[] == `.`:
+        if at_or_nul[padded](p) == `.`:
             is_float = True
             p += 1
 
             var first_after_period = p
-            if p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            while (
+                padded or p.dist() >= 8
+            ) and unsafe_is_made_of_eight_digits_fast(p.p):
                 i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
                 p += 8
-            while parse_digit(p, i):
+            while parse_digit[padded](p, i):
                 p += 1
             exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
                 raise Error("Invalid number")
             digit_count = ptr_dist(start_digits.p, p.p)
 
-        if p.dist() > 0 and is_exp_char(p[]):
+        if is_exp_char(at_or_nul[padded](p)):
             is_float = True
             p += 1
 
-            var neg_exp = p[] == `-`
-            p += Int(neg_exp or p[] == `+`)
+            var neg_exp = at_or_nul[padded](p) == `-`
+            p += Int(neg_exp or at_or_nul[padded](p) == `+`)
 
-            if unlikely(is_exp_char(p[])):
+            if unlikely(is_exp_char(at_or_nul[padded](p))):
                 raise Error("Invalid float: Double sign for exponent")
 
             var start_exp = p
             var exp_number: Int64 = 0
-            while parse_digit(p, exp_number):
+            while parse_digit[padded](p, exp_number):
                 p += 1
 
             if unlikely(p == start_exp):
                 raise Error("Invalid number")
 
             if unlikely(p > start_exp + 18):
-                while start_exp.dist() > 0 and start_exp[] == `0`:
+                while at_or_nul[padded](start_exp) == `0`:
                     start_exp += 1
                 if p > start_exp + 18:
                     exp_number = 999999999999999999
@@ -663,7 +738,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     raise Error("integer overflow")
                 self.data = p
                 return Int64(~i + 1)
-            elif unlikely(self.data[0] != `1` or i <= SIGNED_OVERFLOW):
+            elif unlikely(self.cur() != `1` or i <= SIGNED_OVERFLOW):
                 raise Error("integer overflow")
 
         self.data = p
@@ -673,12 +748,12 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     def expect(mut self, expected: Byte) raises:
         self.skip_whitespace()
-        if unlikely(self.data[] != expected):
+        if unlikely(self.cur() != expected):
             raise Error(
                 "Invalid JSON, Expected: ",
                 to_string(expected),
                 ", Received: ",
-                to_string(self.data[]),
+                to_string(self.cur()),
             )
         self.data += 1
         self.skip_whitespace()
@@ -757,6 +832,10 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         var start_digits = p
         var i: UInt64 = 0
 
+        # SWAR digit ingestion; see parse_number for the wrap rationale.
+        while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
+            p += 8
         while parse_digit(p, i):
             p += 1
 
@@ -773,7 +852,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-            if p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+            while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
                 i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
                 p += 8
             while parse_digit(p, i):

@@ -1,7 +1,7 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
-from emberjson import parse, JSON
+from emberjson import parse, JSON, ParseOptions, StrictOptions
 from std.testing import (
     assert_true,
     assert_equal,
@@ -204,6 +204,87 @@ def test_nested_access_generic() raises:
     var nested: Value = {"key": [True, None, {"inner2": False}]}
 
     assert_equal(nested["key"][2]["inner2"].bool(), False)
+
+
+def test_index_threshold_crossing() raises:
+    # Grow well past _INDEX_THRESHOLD (12); verify insertion order and
+    # lookups hold for objects larger than the parse-index threshold.
+    var ob = Object()
+    for i in range(40):
+        ob["key" + String(i)] = i
+
+    assert_equal(len(ob), 40)
+    var i = 0
+    for key in ob.keys():
+        assert_equal(key, "key" + String(i))
+        i += 1
+    for j in range(40):
+        assert_equal(ob["key" + String(j)].int(), Int64(j))
+    assert_true("key39" in ob)
+    assert_true("missing" not in ob)
+    with assert_raises():
+        _ = ob["missing"].copy()
+
+
+def test_index_upsert_after_threshold() raises:
+    # Overwriting an existing key in a large object must update in place:
+    # same length, same position, new value.
+    var ob = Object()
+    for i in range(20):
+        ob["key" + String(i)] = i
+    ob["key3"] = "replaced"
+
+    assert_equal(len(ob), 20)
+    assert_equal(ob["key3"].string(), "replaced")
+    var keys = List[String]()
+    for key in ob.keys():
+        keys.append(key)
+    assert_equal(keys[3], "key3")
+
+
+def test_index_pop() raises:
+    # pop from a large object shifts later entries; lookups and subsequent
+    # inserts must stay correct.
+    var ob = Object()
+    for i in range(20):
+        ob["key" + String(i)] = i
+
+    ob.pop("key5")
+    assert_equal(len(ob), 19)
+    assert_true("key5" not in ob)
+    assert_equal(ob["key19"].int(), 19)
+    with assert_raises():
+        ob.pop("key5")
+
+    for i in range(20, 40):
+        ob["key" + String(i)] = i
+    assert_equal(len(ob), 39)
+    assert_equal(ob["key0"].int(), 0)
+    assert_equal(ob["key39"].int(), 39)
+    assert_true("key5" not in ob)
+
+
+def test_index_duplicate_detection_across_threshold() raises:
+    # A duplicate appearing after the parser's transient index is built
+    # (>12 keys in) must still be rejected in strict mode and collapse
+    # last-write-wins in lenient mode.
+    var dup_late = String('{"key0":0')
+    for i in range(1, 20):
+        dup_late += ',"key' + String(i) + '":' + String(i)
+    dup_late += ',"key0":99}'
+
+    with assert_raises(contains="Duplicate key"):
+        _ = parse(dup_late)
+
+    var json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](dup_late)
+    assert_equal(len(json.object()), 20)
+    assert_equal(json.object()["key0"].int(), 99)
+    # last-write-wins keeps the first occurrence's position
+    var first_key = String("")
+    for key in json.object().keys():
+        first_key = key
+        break
+    assert_equal(first_key, "key0")
 
 
 def main() raises:

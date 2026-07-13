@@ -4,7 +4,7 @@ from std.sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
-from .utils import write_escaped_string
+from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
 from std.python import PythonObject, Python
 from std.os import abort
 from std.memory import UnsafePointer
@@ -110,6 +110,84 @@ struct _ObjectValueIter[origin: Origin](Sized, TrivialRegisterPassable):
         return len(self.src[]) - self.idx
 
 
+comptime _INDEX_THRESHOLD = 12
+"""Entry count above which the parser builds a transient hash index over an
+object's keys.
+
+Kept high enough that the many small objects typical of JSON documents
+(2-4 keys) never pay the index allocation, while large objects get O(1)
+duplicate detection/insert instead of a linear scan (O(n^2) object
+construction)."""
+
+
+struct _ObjectParseIndex(Movable):
+    """Transient open-addressing hash index over an `Object`'s `_data`, used
+    only while the parser builds an object. Slots hold entry index + 1
+    (0 = empty slot), probed linearly on the cached `key_hash`.
+
+    This deliberately lives outside `Object`: an index field on `Object`
+    itself would grow the `Value` variant (sized by its largest member) and
+    tax every parsed value. Empty `slots` means "no index" — small objects
+    never allocate one.
+    """
+
+    var slots: List[UInt32]
+
+    @always_inline
+    def __init__(out self):
+        self.slots = List[UInt32]()
+
+    def find(self, data: List[KeyValuePair], h: UInt64, key: String) -> Int:
+        """Probes for `key`. Returns the entry's position in `data`, or -1
+        if absent. Requires non-empty `slots`.
+        """
+        var mask = UInt64(len(self.slots) - 1)
+        var slot = Int(h & mask)
+        while True:
+            var stored = self.slots[slot]
+            if stored == 0:
+                return -1
+            var entry = Int(stored - 1)
+            if data[entry].key_hash == h and data[entry].key == key:
+                return entry
+            slot = Int((UInt64(slot) + 1) & mask)
+
+    def insert_slot(mut self, h: UInt64, entry: UInt32):
+        """Records `entry` (a position in the object's `_data`). The entry's
+        key must not already be present in the index.
+        """
+        var mask = UInt64(len(self.slots) - 1)
+        var slot = Int(h & mask)
+        while self.slots[slot] != 0:
+            slot = Int((UInt64(slot) + 1) & mask)
+        self.slots[slot] = entry + 1
+
+    def rebuild(mut self, data: List[KeyValuePair]):
+        """(Re)builds the index sized for the current entry count, using the
+        cached key hashes (no re-hashing of key strings).
+        """
+        var cap = 32
+        while cap < 2 * (len(data) + 1):
+            cap *= 2
+        self.slots = List[UInt32](length=cap, fill=0)
+        for i in range(len(data)):
+            self.insert_slot(data[i].key_hash, UInt32(i))
+
+    @always_inline
+    def note_append(mut self, data: List[KeyValuePair], h: UInt64):
+        """Maintains the index after an append at `len(data) - 1`: builds it
+        once the threshold is crossed, grows it past 50% load, otherwise
+        records the new entry.
+        """
+        if len(self.slots) == 0:
+            if len(data) >= _INDEX_THRESHOLD:
+                self.rebuild(data)
+        elif unlikely(2 * len(data) >= len(self.slots)):
+            self.rebuild(data)
+        else:
+            self.insert_slot(h, UInt32(len(data) - 1))
+
+
 struct Object(JsonValue, Sized):
     """Represents a key-value pair object.
     All keys are String and all values are of type `Value` which is
@@ -156,8 +234,25 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     def __init__(out self, *, parse_string: String) raises:
-        var p = Parser(parse_string)
-        self = p.parse_object()
+        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
+        # tiny inputs skip the copy since it would cost more than the parse.
+        if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
+            var p = Parser(parse_string)
+            self = p.parse_object()
+        else:
+            var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
+            var p = Parser[options=ParseOptions()._padded()](buf.span())
+            self = p.parse_object()
+
+    @always_inline
+    def _find_entry(self, h: UInt64, key: String) -> Int:
+        """Returns the position of `key` in `_data` (or -1) via a linear scan
+        that short-circuits on the cached hashes.
+        """
+        for i in range(len(self._data)):
+            if self._data[i].key_hash == h and self._data[i].key == key:
+                return i
+        return -1
 
     def _upsert(mut self, var key: String, var item: Value):
         """Single insertion path: replace the value if `key` already exists,
@@ -166,11 +261,44 @@ struct Object(JsonValue, Sized):
         path that goes through public methods or the parser.
         """
         var h = hash(key)
-        for i in range(len(self._data)):
-            if self._data[i].key_hash == h and self._data[i].key == key:
-                self._data[i].value = item^
-                return
+        var entry = self._find_entry(h, key)
+        if entry >= 0:
+            self._data[entry].value = item^
+            return
         self._data.append(KeyValuePair(h, key^, item^))
+
+    def _append_for_parse[
+        allow_duplicates: Bool
+    ](
+        mut self,
+        var key: String,
+        var item: Value,
+        mut index: _ObjectParseIndex,
+    ) raises:
+        """Parser-only insertion: hashes the key and searches once, combining
+        the duplicate-key check with the insert. In strict mode
+        (`allow_duplicates=False`) a duplicate raises; in lenient mode it
+        collapses with last-write-wins, preserving the first key's position —
+        identical semantics to the previous `__contains__` + `_upsert` pair.
+
+        `index` is the transient per-object hash index maintained by
+        `parse_object`; it keeps duplicate detection O(1) for large objects
+        without growing `Object` itself.
+        """
+        var h = hash(key)
+        var entry: Int
+        if len(index.slots) != 0:
+            entry = index.find(self._data, h, key)
+        else:
+            entry = self._find_entry(h, key)
+        if entry >= 0:
+            comptime if allow_duplicates:
+                self._data[entry].value = item^
+                return
+            else:
+                raise Error("Duplicate key: ", key)
+        self._data.append(KeyValuePair(h, key^, item^))
+        index.note_append(self._data, h)
 
     @always_inline
     def __setitem__(mut self, var key: String, var item: Value):
@@ -180,29 +308,22 @@ struct Object(JsonValue, Sized):
         self._upsert(key^, item^)
 
     def pop(mut self, key: String) raises:
-        var h = hash(key)
-        for i in range(len(self._data)):
-            if self._data[i].key_hash == h and self._data[i].key == key:
-                _ = self._data.pop(i)
-                return
-        raise Error("KeyError: " + key)
+        var entry = self._find_entry(hash(key), key)
+        if entry < 0:
+            raise Error("KeyError: " + key)
+        _ = self._data.pop(entry)
 
     def __getitem__(
         ref self, key: String
     ) raises -> ref[self._data[0].value] Value:
-        var h = hash(key)
-        for i in range(len(self._data)):
-            if self._data[i].key_hash == h and self._data[i].key == key:
-                return self._data[i].value
-        raise Error("KeyError: " + key)
+        var entry = self._find_entry(hash(key), key)
+        if entry < 0:
+            raise Error("KeyError: " + key)
+        return self._data[entry].value
 
     @always_inline
     def __contains__(self, key: String) -> Bool:
-        var h = hash(key)
-        for i in range(len(self._data)):
-            if self._data[i].key_hash == h and self._data[i].key == key:
-                return True
-        return False
+        return self._find_entry(hash(key), key) >= 0
 
     @always_inline
     def __len__(self) -> Int:

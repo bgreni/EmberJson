@@ -2,7 +2,7 @@ from .value import Value, Null
 from .json import JSON
 from .array import Array
 from .object import Object
-from .utils import write, write_pretty
+from .utils import write, write_pretty, PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._deserialize import (
     Parser,
     ParseOptions,
@@ -81,8 +81,17 @@ def parse[
     Raises:
         If an invalid JSON string is provided.
     """
-    var p = Parser[options=options](s)
-    j = p.parse()
+    # Copy the input into a NUL-padded buffer (one memcpy, cheap relative to
+    # parsing) so the parser's hot loops can skip per-byte bounds checks.
+    # Safe because the returned Value owns all of its data. Tiny inputs skip
+    # the copy: the allocation would cost more than the parse.
+    if s.byte_length() < PAD_INPUT_THRESHOLD:
+        var p = Parser[options=options](s)
+        j = p.parse()
+    else:
+        var buf = PaddedBuffer(s.as_bytes())
+        var p = Parser[options=options._padded()](buf.span())
+        j = p.parse()
 
 
 @always_inline
