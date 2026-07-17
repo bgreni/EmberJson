@@ -86,6 +86,22 @@ from std.utils.numerics import FPUtils
 #######################################################
 
 
+comptime _DIGIT_PEEL = 16
+"""Scalar digits peeled before `_skip_digits` falls back to its SIMD scan.
+
+Same fixed-cost-vs-short-run story as `_WS_PEEL`: citm's numbers are 5-13
+bytes, always inside one 16-byte chunk, so the SIMD scan's flat ~6.6ns/call
+never amortised. Tuned on citm: 0 -> 0.668ms, 16 -> 0.623ms, pure scalar ->
+0.638ms (the SIMD fallback still earns its keep on long digit runs)."""
+
+comptime _WS_PEEL = 1
+"""Scalar whitespace bytes peeled before falling back to the SIMD scan.
+
+Tuned on citm (M3): 0 -> 0.859ms, 1 -> 0.684ms, 2 -> 0.690ms, 4 -> 0.699ms,
+8 -> 0.713ms. One byte catches the single space after ":" (34% of citm's
+whitespace runs) while costing longer indent runs almost nothing."""
+
+
 struct StrictOptions(Defaultable, Equatable, TrivialRegisterPassable):
     var _flags: Int
 
@@ -928,29 +944,233 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.data += 4
 
     def expect_value_bytes(mut self) raises -> Span[Byte, Self.origin]:
-        self.skip_whitespace()
-        var b = self.data[]
-        if b == `"`:
-            return self.expect_string_bytes()
-        elif b == `{`:
-            return self.expect_object_bytes()
-        elif b == `[`:
-            return self.expect_array_bytes()
-        elif b == `t` or b == `n`:
-            var s = Span(ptr=self.data.p, length=4)
-            self.data += 4
-            return s
-        elif b == `f`:
-            var s = Span(ptr=self.data.p, length=5)
-            self.data += 5
-            return s
-        elif is_numerical_component(b):
-            return self.expect_float_bytes()
-        else:
-            raise Error("Invalid json value to skip")
+        return self._expect_validated_bytes()
 
     def skip_value(mut self) raises:
         _ = self.expect_value_bytes()
+
+    @always_inline
+    def _skip_ws(mut self) raises:
+        """Whitespace skip tuned for the token-dense validating walk.
+
+        Three measured facts drive the shape of this (M3, citm):
+
+        1. Every byte that can legally start a JSON token is > 0x20, so a
+           single compare rejects whitespace. `is_space`'s four-way
+           short-circuit chain is paid on every call, and most calls (~3 of the
+           4 per token) sit on a non-space byte. Bytes <= 0x20 that are not
+           whitespace are control characters, which are illegal here anyway --
+           we return and let the dispatcher raise.
+        2. The SIMD scan costs a flat ~6.6ns per *call* regardless of run
+           length -- it is a serial load -> compare -> pack_bits -> ctz ->
+           dependent-load chain with nothing to overlap it. Scalar runs
+           ~0.33ns/byte. So scalar wins outright below ~16 bytes, and 34% of
+           citm's whitespace runs are the single space after ':'.
+        3. Long runs (pretty-printed indentation) still favour SIMD, so peel
+           scalar first and fall through only when the run keeps going.
+        """
+        if not self.has_more() or self.data[] > ` `:
+            return
+        if not is_space(self.data[]):
+            return
+        self.data += 1
+
+        comptime for _ in range(_WS_PEEL):
+            if not self.has_more() or not is_space(self.data[]):
+                return
+            self.data += 1
+
+        while self.can_load_chunk():
+            var nonspace = get_non_space_bits(self.data.unsafe_load_chunk())
+            if nonspace != 0:
+                self.data += count_trailing_zeros(nonspace)
+                return
+            self.data += SIMD8_WIDTH
+
+        while self.has_more() and is_space(self.data[]):
+            self.data += 1
+
+    @always_inline
+    def _expect_literal(mut self) raises:
+        """Bounds-checked `true`/`false`/`null`. Unlike a fixed 4/5 byte bump
+        this can neither over-read the input nor accept a misspelling.
+        """
+        var b = self.data[]
+        if b == `t`:
+            _ = self.parse_true()
+        elif b == `f`:
+            _ = self.parse_false()
+        else:
+            self.expect_null()
+
+    @always_inline
+    def _skip_digits(mut self) raises:
+        comptime for _ in range(_DIGIT_PEEL):
+            if not self.has_more() or not isdigit(self.data[]):
+                return
+            self.data += 1
+
+        while self.can_load_chunk():
+            var chunk = self.load_chunk()
+            var is_digit = chunk.ge(`0`) & chunk.le(`9`)
+            var mask = pack_into_integer(~is_digit)
+            if mask == 0:
+                self.data += SIMD8_WIDTH
+            else:
+                self.data += count_trailing_zeros(mask)
+                return
+
+        while self.has_more() and isdigit(self.data[]):
+            self.data += 1
+
+    def _validate_number[integer_only: Bool = False](mut self) raises:
+        """Consume one number, enforcing the JSON grammar:
+        `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`.
+        """
+        if self.data[] == `-`:
+            self.data += 1
+            if unlikely(not self.has_more()):
+                raise Error("Unexpected EOF in number")
+
+        var c = self.data[]
+        if c == `0`:
+            self.data += 1
+            if unlikely(self.has_more() and isdigit(self.data[])):
+                raise Error("Number may not have a leading zero")
+        elif likely(isdigit(c)):
+            self._skip_digits()
+        else:
+            raise Error("Invalid number, expected a digit")
+
+        comptime if integer_only:
+            if unlikely(
+                self.has_more()
+                and (self.data[] == `.` or is_exp_char(self.data[]))
+            ):
+                raise Error("Expected an integer, received a float")
+            return
+
+        if self.has_more() and self.data[] == `.`:
+            self.data += 1
+            if unlikely(not self.has_more() or not isdigit(self.data[])):
+                raise Error("Expected a digit after the decimal point")
+            self._skip_digits()
+
+        if self.has_more() and is_exp_char(self.data[]):
+            self.data += 1
+            if self.has_more() and (self.data[] == `+` or self.data[] == `-`):
+                self.data += 1
+            if unlikely(not self.has_more() or not isdigit(self.data[])):
+                raise Error("Expected a digit in the exponent")
+            self._skip_digits()
+
+    @always_inline
+    def _expect_key_and_colon(mut self) raises:
+        """Consume `"key" :` at the head of an object member."""
+        self._skip_ws()
+        if unlikely(not self.has_more() or self.data[] != `"`):
+            raise Error("Expected an object key string")
+        _ = self.expect_string_bytes()
+        self._skip_ws()
+        if unlikely(not self.has_more() or self.data[] != `:`):
+            raise Error("Expected ':' after an object key")
+        self.data += 1
+
+    def _expect_validated_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        """Consume exactly one JSON value and return the bytes spanning it.
+
+        This is a full grammar check that stops short of materializing
+        anything: no allocation, no unescaping, no float conversion. It is the
+        `serde_json` `ignore_value` contract, and it is what makes `Lazy` safe
+        to re-emit verbatim in `write_json`. A cheaper bracket-counting skip
+        would accept mismatched brackets, missing commas, bare `nope` and
+        `1.2.3`, and hand those straight back out.
+
+        Iterative rather than recursive so that nesting depth costs heap, not
+        stack. `_closers` holds the closing byte expected at each open level,
+        which is what makes `{"a": [1,2}` an error rather than a shrug.
+        """
+        self._skip_ws()
+        var start = self.data
+        var closers = List[Byte](capacity=16)
+
+        while True:
+            self._skip_ws()
+            if unlikely(not self.has_more()):
+                raise Error("Unexpected EOF while parsing a value")
+
+            # --- consume one value ------------------------------------------
+            var b = self.data[]
+            if b == `"`:
+                _ = self.expect_string_bytes()
+            elif b == `-` or isdigit(b):
+                self._validate_number()
+            elif b == `t` or b == `f` or b == `n`:
+                self._expect_literal()
+            elif b == `{`:
+                self.data += 1
+                self._skip_ws()
+                if unlikely(not self.has_more()):
+                    raise Error("Unexpected EOF while parsing an object")
+                if self.data[] == `}`:
+                    self.data += 1
+                else:
+                    closers.append(`}`)
+                    self._expect_key_and_colon()
+                    continue
+            elif b == `[`:
+                self.data += 1
+                self._skip_ws()
+                if unlikely(not self.has_more()):
+                    raise Error("Unexpected EOF while parsing an array")
+                if self.data[] == `]`:
+                    self.data += 1
+                else:
+                    closers.append(`]`)
+                    continue
+            else:
+                raise Error("Invalid JSON value: ", to_string(b))
+
+            # --- a value completed: close out every container it finished ----
+            while True:
+                if len(closers) == 0:
+                    return Span(
+                        ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                    )
+
+                self._skip_ws()
+                if unlikely(not self.has_more()):
+                    raise Error("Unexpected EOF while parsing a structure")
+
+                var closer = closers[len(closers) - 1]
+                var c = self.data[]
+                if c == closer:
+                    self.data += 1
+                    _ = closers.pop()
+                    continue
+
+                if unlikely(c != `,`):
+                    raise Error(
+                        "Invalid JSON, Expected: ",
+                        to_string(closer),
+                        " or ',', Received: ",
+                        to_string(c),
+                    )
+
+                self.data += 1
+                comptime if (
+                    StrictOptions.ALLOW_TRAILING_COMMA
+                    in Self.options.strict_mode
+                ):
+                    self._skip_ws()
+                    if self.has_more() and self.data[] == closer:
+                        self.data += 1
+                        _ = closers.pop()
+                        continue
+
+                if closer == `}`:
+                    self._expect_key_and_colon()
+                break
 
     def expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
@@ -1006,143 +1226,29 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
         raise Error("Unexpected EOF")
 
-    def _expect_structural_bytes[
-        open: Byte, close: Byte
-    ](mut self) raises -> Span[Byte, Self.origin]:
-        var start = self.data
-        if unlikely(self.data[] != open):
-            raise Error(
-                "Invalid JSON, Expected: ",
-                to_string(open),
-                ", Received: ",
-                to_string(self.data[]),
-            )
-        self.data += 1
-        var depth = 1
-
-        while self.has_more():
-            while self.can_load_chunk():
-                var chunk = self.load_chunk()
-                var relevant = chunk.eq(`"`) | chunk.eq(open) | chunk.eq(close)
-                var mask = pack_into_integer(relevant)
-
-                if mask == 0:
-                    self.data += SIMD8_WIDTH
-                else:
-                    var broke = False
-                    while mask != 0:
-                        var offset = count_trailing_zeros(mask)
-                        var c = self.data[Int(offset)]
-                        if c == `"`:
-                            self.data += Int(offset)
-                            _ = self.expect_string_bytes()
-                            broke = True
-                            break
-                        elif c == open:
-                            depth += 1
-                        elif c == close:
-                            depth -= 1
-                            if depth == 0:
-                                self.data += Int(offset) + 1
-                                return Span(
-                                    ptr=start.p,
-                                    length=ptr_dist(start.p, self.data.p),
-                                )
-                        mask &= mask - 1
-
-                    if not broke:
-                        self.data += SIMD8_WIDTH
-                    else:
-                        break
-
-            if unlikely(not self.has_more()):
-                break
-
-            var c = self.data[]
-            if c == `"`:
-                _ = self.expect_string_bytes()
-            elif c == open:
-                depth += 1
-                self.data += 1
-            elif c == close:
-                depth -= 1
-                self.data += 1
-                if depth == 0:
-                    return Span(
-                        ptr=start.p, length=ptr_dist(start.p, self.data.p)
-                    )
-            else:
-                self.data += 1
-
-        raise Error("Unexpected EOF while parsing structure")
-
     def expect_int_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        self.skip_whitespace()
         var start = self.data
-        if self.data[] == `-`:  # '-'
-            self.data += 1
-
-        while self.can_load_chunk():
-            var chunk = self.load_chunk()
-            var is_digit = chunk.ge(`0`) & chunk.le(`9`)  # '0' to '9'
-            var invalid = ~is_digit
-            var mask = pack_into_integer(invalid)
-            if mask == 0:
-                self.data += SIMD8_WIDTH
-            else:
-                var offset = count_trailing_zeros(mask)
-                self.data += offset
-                return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
-
-        while self.has_more():
-            var c = self.data[]
-            if not isdigit(c):
-                break
-            self.data += 1
-
+        self._validate_number[integer_only=True]()
         return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
     def expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
+        self.skip_whitespace()
         var start = self.data
-        if self.data[] == `-`:  # '-'
-            self.data += 1
-
-        while self.can_load_chunk():
-            var chunk = self.load_chunk()
-            var is_digit = chunk.ge(`0`) & chunk.le(`9`)
-            var is_dot = chunk.eq(`.`)  # '.'
-            var is_e = chunk.eq(`e`) | chunk.eq(`E`)  # 'e', 'E'
-            var is_sign = chunk.eq(`+`) | chunk.eq(`-`)  # '+', '-'
-            var valid = is_digit | is_dot | is_e | is_sign
-            var invalid = ~valid
-            var mask = pack_into_integer(invalid)
-            if mask == 0:
-                self.data += SIMD8_WIDTH
-            else:
-                var offset = count_trailing_zeros(mask)
-                self.data += offset
-                return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
-
-        while self.has_more():
-            var c = self.data[]
-            var valid_char = (
-                isdigit(c)
-                or c == `.`
-                or c == `e`
-                or c == `E`
-                or c == `+`
-                or c == `-`
-            )
-            if not valid_char:
-                break
-            self.data += 1
-
+        self._validate_number()
         return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
     def expect_object_bytes(mut self) raises -> Span[Byte, Self.origin]:
-        return self._expect_structural_bytes[`{`, `}`]()
+        self.skip_whitespace()
+        if unlikely(not self.has_more() or self.data[] != `{`):
+            raise Error("Invalid JSON, Expected an object")
+        return self._expect_validated_bytes()
 
     def expect_array_bytes(mut self) raises -> Span[Byte, Self.origin]:
-        return self._expect_structural_bytes[`[`, `]`]()
+        self.skip_whitespace()
+        if unlikely(not self.has_more() or self.data[] != `[`):
+            raise Error("Invalid JSON, Expected an array")
+        return self._expect_validated_bytes()
 
 
 def minify(s: String, out out_str: String) raises:
