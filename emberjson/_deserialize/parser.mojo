@@ -2,6 +2,7 @@ from emberjson.utils import (
     CheckedPointer,
     BytePtr,
     ByteView,
+    PaddedBuffer,
     to_string,
     ByteVec,
     is_space,
@@ -38,6 +39,7 @@ from ._parser_helper import (
     is_exp_char,
     pack_into_integer,
     isdigit,
+    is_hex_digits,
 )
 from std.memory.unsafe import bitcast
 from std.bit import count_leading_zeros
@@ -132,10 +134,16 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
     Fields:
         ignore_unicode: Do not decode escaped unicode characters for a slight increase in performance.
         strict_mode: Flags to control strictness of parsing.
+        validate_utf8: Validate that the whole input is well-formed UTF-8
+            (RFC 3629) before parsing, as the JSON spec requires. On by
+            default; the check runs at 20-30 GB/s (with an ASCII fast
+            path) and typically costs 2-4% of a parse. Set False to skip
+            it for trusted input.
     """
 
     var ignore_unicode: Bool
     var strict_mode: StrictOptions
+    var validate_utf8: Bool
     # Internal: the input is backed by a `PaddedBuffer`, so hot loops may
     # read past end-of-input into NUL padding without bounds checks. Only
     # the public entry points that copy into a PaddedBuffer set this; user
@@ -147,12 +155,18 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
         *,
         ignore_unicode: Bool = False,
         strict_mode: StrictOptions = StrictOptions.STRICT,
+        validate_utf8: Bool = True,
     ):
         self.ignore_unicode = ignore_unicode
         self.strict_mode = strict_mode
+        self.validate_utf8 = validate_utf8
         self._assume_padded = False
 
     def _padded(self) -> Self:
+        # A parser carrying these options can only be constructed from a
+        # `PaddedBuffer` (see `Parser.__init__(padded=...)`); every other
+        # constructor rejects `_assume_padded` at compile time, so the
+        # unchecked hot-loop reads are safe by construction.
         var res = self
         res._assume_padded = True
         return res
@@ -161,6 +175,20 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
 comptime IntegerParseResult[origin: ImmutOrigin, acc_type: DType] = Tuple[
     Scalar[acc_type], Bool, CheckedPointer[origin], Int, CheckedPointer[origin]
 ]
+
+
+@fieldwise_init
+struct RawNumber(TrivialRegisterPassable):
+    """A parsed JSON number as kind + raw 64-bit payload, decoupled from
+    `Value` so non-DOM consumers (the tape builder) can share the number
+    grammar without materializing a variant."""
+
+    comptime INT64: Byte = 0
+    comptime UINT64: Byte = 1
+    comptime FLOAT64: Byte = 2
+
+    var kind: Byte
+    var bits: UInt64
 
 
 struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
@@ -193,8 +221,33 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         ptr: UnsafePointer[Byte, origin=Self.origin],
         length: Int,
     ):
+        # `_assume_padded` removes bounds checks from every hot loop, which
+        # is only sound over a `PaddedBuffer`'s NUL tail. Enforce the
+        # pairing at compile time: padded options are unconstructible from
+        # arbitrary memory.
+        comptime assert not Self.options._assume_padded, (
+            "options with `_assume_padded` require a `PaddedBuffer`:"
+            " construct with `Parser(padded=...)`"
+        )
         self.data = CheckedPointer(ptr, ptr, ptr + length)
         self.size = length
+
+    def __init__(
+        out self: Parser[Self.origin, Self.options],
+        *,
+        ref[Self.origin] padded: PaddedBuffer,
+    ):
+        """The only constructor for `_assume_padded` options: the buffer's
+        NUL tail is what makes the unchecked hot-loop reads safe."""
+        comptime assert Self.options._assume_padded, (
+            "`Parser(padded=...)` is reserved for `_padded()` options; use"
+            " the span/string constructors otherwise"
+        )
+        # Safety: the buffer is borrowed for `Self.origin`, so viewing its
+        # heap data through that origin is exactly the borrow contract.
+        var p = padded._data.unsafe_ptr().unsafe_origin_cast[Self.origin]()
+        self.data = CheckedPointer(p, p, p + padded._len)
+        self.size = padded._len
 
     @always_inline
     def bytes_remaining(self) -> Int:
@@ -660,6 +713,16 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
 
     @always_inline
     def parse_number(mut self, out v: Value) raises:
+        var r = self._parse_number_raw()
+        if r.kind == RawNumber.FLOAT64:
+            v = bitcast[DType.float64](r.bits)
+        elif r.kind == RawNumber.UINT64:
+            v = r.bits
+        else:
+            v = bitcast[DType.int64](r.bits)
+
+    @always_inline
+    def _parse_number_raw(mut self, out r: RawNumber) raises:
         comptime padded = Self.options._assume_padded
 
         if self.cur() == `+`:
@@ -740,9 +803,11 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             exponent += select(neg_exp, -exp_number, exp_number)
 
         if is_float:
-            v = self.write_float(neg, i, start_digits, digit_count, exponent)
+            var f = self.write_float(
+                neg, i, start_digits, digit_count, exponent
+            )
             self.data = p
-            return
+            return RawNumber(RawNumber.FLOAT64, bitcast[DType.uint64](f))
 
         var longest_digit_count = select(neg, 19, 20)
         comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
@@ -753,14 +818,14 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 if unlikely(i > SIGNED_OVERFLOW + 1):
                     raise Error("integer overflow")
                 self.data = p
-                return Int64(~i + 1)
+                return RawNumber(RawNumber.INT64, ~i + 1)
             elif unlikely(self.cur() != `1` or i <= SIGNED_OVERFLOW):
                 raise Error("integer overflow")
 
         self.data = p
         if i > SIGNED_OVERFLOW:
-            return i
-        return select(neg, Int64(~i + 1), Int64(i))
+            return RawNumber(RawNumber.UINT64, i)
+        return RawNumber(RawNumber.INT64, select(neg, ~i + 1, i))
 
     def expect(mut self, expected: Byte) raises:
         self.skip_whitespace()
@@ -1172,6 +1237,32 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                     self._expect_key_and_colon()
                 break
 
+    @always_inline
+    def _expect_escape_body(mut self) raises:
+        """Positioned on the byte after a backslash: validate and consume the
+        escape body. Escape-byte legality and the four `\\u` hex digits are
+        checked here so captured spans carry the same guarantee as the eager
+        path's `acceptable_escapes` contract; surrogate pairing stays deferred
+        to materialization.
+        """
+        if unlikely(not self.has_more()):
+            raise Error("Unexpected EOF")
+        var esc = self.data[]
+        if unlikely(esc not in acceptable_escapes):
+            raise Error(
+                "Invalid escape sequence: ",
+                to_string(self.data[-1]),
+                to_string(esc),
+            )
+        self.data += 1
+        if esc == `u`:
+            if unlikely(
+                ptr_dist(self.data.p, self.data.end) < 4
+                or not is_hex_digits(self.data.p.load[width=4]())
+            ):
+                raise Error("Invalid hex digit encountered")
+            self.data += 4
+
     def expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
         var start = self.data
         self.data += 1
@@ -1196,10 +1287,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             self.data += block.bs_index()
             # Found backslash
             self.data += 1
-            if self.data[] == `u`:
-                self.data += 5
-            else:
-                self.data += 1
+            self._expect_escape_body()
 
         while self.has_more():
             var c = self.data[]
@@ -1211,14 +1299,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 return res
             elif c == `\\`:
                 self.data += 1
-                if unlikely(not self.has_more()):
-                    raise Error("Unexpected EOF")
-
-                var esc = self.data[]
-                if esc == `u`:
-                    self.data += 5
-                else:
-                    self.data += 1
+                self._expect_escape_body()
             elif c < 0x20:
                 raise Error("Control characters must be escaped")
             else:

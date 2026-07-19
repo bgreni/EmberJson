@@ -72,6 +72,11 @@ All JSON data is represented as this unified type.
 ```mojo
 parse[options](json_string)          # → Value (raises on error)
 try_parse[options](json_string)      # → Optional[Value]
+parse_document[options](json_string) # → Document (immutable tape, fastest full parse)
+try_parse_document[options](s)       # → Optional[Document]
+parse_pointer[options](s, "/a/b/0")  # → Value (partial access: only the target is parsed/validated)
+try_parse_pointer[options](s, path)  # → Optional[Value]
+is_valid_utf8(bytes_or_slice)        # → Bool (RFC 3629 SIMD validator; ON by default in parsing — ParseOptions(validate_utf8=False) to skip)
 to_string[pretty=False](value)       # → String
 serialize[pretty=False](value)       # → String
 deserialize[T](json_string)          # → T (reflection-based)
@@ -80,6 +85,6 @@ try_deserialize[T](json_string)      # → Optional[T]
 
 ## Mojo Version
 
-Requires `mojo >=0.26.2.0.dev2026020205,<0.27` (MAX nightly channel). Platforms: osx-arm64, linux-aarch64, linux-64.
+Requires `mojo >=1.0.0b3.dev2026071006,<2` (MAX nightly channel). Platforms: osx-arm64, linux-aarch64, linux-64.
 
 A full reference for the Mojo APIs https://docs.modular.com/llms-mojo.txt

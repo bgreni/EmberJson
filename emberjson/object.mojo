@@ -5,6 +5,7 @@ from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
 from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
+from ._utf8 import is_valid_utf8
 from std.python import PythonObject, Python
 from std.os import abort
 from std.memory import UnsafePointer
@@ -234,6 +235,9 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     def __init__(out self, *, parse_string: String) raises:
+        # Default options: UTF-8 validation is on (see ParseOptions).
+        if not is_valid_utf8(StringSlice(parse_string)):
+            raise Error("Invalid UTF-8 in input")
         # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
         # tiny inputs skip the copy since it would cost more than the parse.
         if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
@@ -241,7 +245,7 @@ struct Object(JsonValue, Sized):
             self = p.parse_object()
         else:
             var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-            var p = Parser[options=ParseOptions()._padded()](buf.span())
+            var p = Parser[options=ParseOptions()._padded()](padded=buf)
             self = p.parse_object()
 
     @always_inline
@@ -299,6 +303,18 @@ struct Object(JsonValue, Sized):
                 raise Error("Duplicate key: ", key)
         self._data.append(KeyValuePair(h, key^, item^))
         index.note_append(self._data, h)
+
+    def _append_unchecked(mut self, var key: String, var item: Value):
+        """Appends without the duplicate-key scan.
+
+        Safety:
+            Only valid when the caller guarantees `key` is not already
+            present (e.g. materializing a strict-mode `Document`, whose
+            tape was built with duplicate keys rejected). Violating this
+            breaks the structural "no duplicate keys" invariant.
+        """
+        var h = hash(key)
+        self._data.append(KeyValuePair(h, key^, item^))
 
     @always_inline
     def __setitem__(mut self, var key: String, var item: Value):

@@ -9,8 +9,10 @@ from .parser import Parser, ParseOptions
 from emberjson.constants import `{`, `}`, `:`, `,`, `t`, `f`, `n`, `[`, `]`, `"`
 from std.sys.intrinsics import unlikely
 from emberjson.utils import to_string
-from ._parser_helper import NULL, copy_to_string
+from ._parser_helper import NULL, copy_to_string, _next_backslash
+from emberjson._utf8 import is_valid_utf8
 from std.hashlib.hasher import Hasher
+from std.memory import memcmp
 from std.sys import bit_width_of
 
 
@@ -48,6 +50,10 @@ trait JsonDeserializable(_Base):
 
 @always_inline
 def try_deserialize[T: _Base](s: String) -> Optional[T]:
+    # Default options: UTF-8 validation is on (see ParseOptions). The
+    # Parser-taking overloads skip it for callers managing their own input.
+    if not is_valid_utf8(StringSlice(s)):
+        return None
     var p = Parser(s)
     return try_deserialize[T](p)
 
@@ -63,6 +69,10 @@ def try_deserialize[
 
 @always_inline
 def deserialize[T: _Base](s: String, out res: T) raises:
+    # Default options: UTF-8 validation is on (see ParseOptions). The
+    # Parser-taking overloads skip it for callers managing their own input.
+    if not is_valid_utf8(StringSlice(s)):
+        raise Error("Invalid UTF-8 in input")
     var p = Parser(s)
     res = deserialize[T](p)
 
@@ -98,6 +108,20 @@ def __all_dtors_are_trivial[T: AnyType]() -> Bool:
         if not downcast[type, ImplicitlyDeletable].__del__is_trivial:
             return False
     return True
+
+
+@always_inline
+def _field_key_eq(
+    kb: Span[Byte, _], escaped: Bool, decoded: String, name: StaticString
+) -> Bool:
+    """Matches an object key against a comptime field name. The common
+    case compares the key's raw bytes; keys containing escapes (rare for
+    struct fields) are matched via their decoded form."""
+    if unlikely(escaped):
+        return decoded == name
+    if len(kb) != name.byte_length():
+        return False
+    return memcmp(kb.unsafe_ptr(), name.unsafe_ptr(), len(kb)) == 0
 
 
 @always_inline
@@ -143,14 +167,28 @@ def _default_deserialize[
         var seen = materialize[InlineArray[Bool, field_count](fill=False)]()
 
         while p.peek() != `}`:
-            var ident = p.read_string()
+            if unlikely(p.peek() != `"`):
+                raise Error("Invalid identifier")
+            # Field names are matched against the key's raw span — no
+            # String materialization per key. Escaped keys (rare) are
+            # decoded once and compared in decoded form.
+            var key_span = p.expect_string_bytes()
             p.expect(`:`)
+
+            var kb = Span(
+                ptr=key_span.unsafe_ptr() + 1, length=len(key_span) - 2
+            )
+            var kb_end = kb.unsafe_ptr() + len(kb)
+            var escaped = _next_backslash(kb.unsafe_ptr(), kb_end) < kb_end
+            var decoded = String()
+            if unlikely(escaped):
+                decoded = copy_to_string[False](kb.unsafe_ptr(), kb_end)
 
             var matched = False
             comptime for i in range(field_count):
                 comptime name = field_names[i]
 
-                if ident == name:
+                if _field_key_eq(kb, escaped, decoded, name):
                     ref seen_i = seen.unsafe_get(i)
                     if unlikely(seen_i):
                         raise Error("Duplicate key: ", name)
@@ -163,7 +201,11 @@ def _default_deserialize[
                     field = _deserialize_impl[type_of(field)](p)
 
             if unlikely(not matched):
-                raise Error("Unexpected field: ", ident)
+                if escaped:
+                    raise Error("Unexpected field: ", decoded)
+                raise Error(
+                    "Unexpected field: ", StringSlice(unsafe_from_utf8=kb)
+                )
 
             p.skip_whitespace()
             if p.peek() != `}`:

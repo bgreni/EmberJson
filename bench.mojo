@@ -1,12 +1,14 @@
 from emberjson import (
     parse,
+    parse_document,
+    parse_pointer,
+    is_valid_utf8,
     to_string,
     write_pretty,
     Value,
     Parser,
     minify,
     ParseOptions,
-    Null,
     deserialize,
     serialize,
     read_lines,
@@ -22,6 +24,8 @@ from std.benchmark import (
     BenchConfig,
     keep,
 )
+from emberjson._index import structural_index
+from emberjson.utils import PaddedBuffer
 from std.python import Python, PythonObject
 from std.sys import argv
 from std.pathlib import Path
@@ -369,9 +373,29 @@ def run[
     )
 
 
+def run_batch[
+    func: def(mut Bencher, List[String]) raises capturing, name: String
+](mut m: Bench, docs: List[String]) raises:
+    var total = 0
+    for doc in docs:
+        total += doc.byte_length()
+    m.bench_with_input[List[String], func](
+        BenchId(name), docs, [ThroughputMeasure(BenchMetric.bytes, total)]
+    )
+
+
+def make_corpus(v: Value) raises -> List[String]:
+    # Split a JSON array into one standalone document per element.
+    var docs = List[String]()
+    for item in v.array():
+        docs.append(to_string(item))
+    return docs^
+
+
 def run_benchchecks(mut m: Bench) raises:
     var canada = get_data("canada.json")
     var catalog = get_data("citm_catalog.json")
+    var catalog_minify = get_data("citm_catalog_minify.json")
     var twitter = get_data("twitter.json")
 
     var data: String
@@ -395,40 +419,71 @@ def run_benchchecks(mut m: Bench) raises:
         "ParseCitmCatalogWithReflectionLazy",
     ](m, catalog)
 
+    run[benchmark_json_parse, "ParseCitmCatalogMinify"](m, catalog_minify)
+    run[
+        benchmark_deserialize_with_reflection[
+            LazyCatalogData[origin_of(catalog_minify)]
+        ],
+        "ParseCitmCatalogWithReflectionLazyMinify",
+    ](m, catalog_minify)
+
     run[benchmark_json_parse, "ParseCanada"](m, canada)
     run[
         benchmark_deserialize_with_reflection[Canada],
         "ParseCanadaWithReflection",
     ](m, canada)
 
+    run[benchmark_document_parse, "ParseTwitterDoc"](m, twitter)
+    run[benchmark_document_parse, "ParseCitmCatalogDoc"](m, catalog)
+    run[benchmark_document_parse, "ParseCitmCatalogMinifyDoc"](
+        m, catalog_minify
+    )
+    run[benchmark_document_parse, "ParseCanadaDoc"](m, canada)
+
+    run[benchmark_stage1, "Stage1Twitter"](m, twitter)
+    run[benchmark_stage1, "Stage1CitmCatalog"](m, catalog)
+    run[benchmark_stage1, "Stage1CitmCatalogMinify"](m, catalog_minify)
+    run[benchmark_stage1, "Stage1Canada"](m, canada)
+
+    run[
+        benchmark_parse_pointer["/statuses/99/user/screen_name"],
+        "ParsePointerTwitter",
+    ](m, twitter)
+    run[benchmark_parse_pointer["/venueNames"], "ParsePointerCitmCatalog"](
+        m, catalog
+    )
+    run[benchmark_parse_pointer["/type"], "ParsePointerCanada"](m, canada)
+
+    run[benchmark_utf8_validate, "Utf8ValidateTwitter"](m, twitter)
+    run[benchmark_utf8_validate, "Utf8ValidateCanada"](m, canada)
+
     run[benchmark_jsonl_parse, "ParseLargeJSONL"](
         m, "./bench_data/big_lines_complex.jsonl"
     )
 
-    run[benchmark_json_parse, "ParseSmall"](m, small_data)
-    run[benchmark_json_parse, "ParseMedium"](m, medium_array)
-    run[benchmark_json_parse, "ParseLarge"](m, large_array)
     run[benchmark_json_parse, "ParseExtraLarge"](m, data)
+    run[benchmark_document_parse, "ParseExtraLargeDoc"](m, data)
     run[benchmark_json_parse, "ParseHeavyUnicode"](m, unicode)
     run[benchmark_ignore_unicode, "ParseHeavyIgnoreUnicode"](m, unicode)
 
-    run[benchmark_value_parse, "ParseBool"](m, "false")
-    run[benchmark_value_parse, "ParseNull"](m, "null")
-    run[benchmark_value_parse, "ParseInt"](m, "12345")
-    run[benchmark_value_parse, "ParseFloat"](m, "453.45643")
-    run[benchmark_value_parse, "ParseFloatLongDec"](m, "453.456433232")
-    run[benchmark_value_parse, "ParseFloatExp"](m, "4546.5E23")
-    run[benchmark_value_parse, "ParseSlowFallback"](
-        m, "3.1415926535897932384626433832795028841971693993751"
+    # Web-server-style workloads: many independent small payloads, each
+    # parsed from a fresh buffer. Batching keeps the aggregate measurement
+    # at a stable ms scale while staying in the regime where per-parse
+    # overhead (buffer setup, allocations) dominates.
+    # Statuses: ~100 docs of ~4.7KB (rich API responses).
+    # Users: ~1000 docs of ~310B (tiny microservice responses).
+    var statuses = make_corpus(parse(twitter)["statuses"])
+    var users = make_corpus(parse(data))
+    run_batch[benchmark_batch_parse, "ParseStatusBatch"](m, statuses)
+    run_batch[benchmark_batch_document_parse, "ParseStatusBatchDoc"](
+        m, statuses
     )
-    run[benchmark_json_parse, "ParseFloatCoordinate"](
-        m, "[-57.94027699999998,54.923607000000004]"
-    )
-    run[benchmark_value_parse, "ParseString"](
-        m, '"some example string of short length, not all that long really"'
-    )
+    run_batch[benchmark_batch_parse, "ParseUserBatch"](m, users)
+    run_batch[benchmark_batch_document_parse, "ParseUserBatchDoc"](m, users)
+    run_batch[
+        benchmark_batch_deserialize[User], "ParseUserBatchWithReflection"
+    ](m, users)
 
-    run[benchmark_value_stringify, "StringifyLarge"](m, parse(large_array))
     run[benchmark_value_stringify, "StringifyCanada"](m, parse(canada))
     run[benchmark_reflection_serialize, "StringifyCanadaWithReflection"](
         m, deserialize[Canada](canada)
@@ -439,16 +494,6 @@ def run_benchchecks(mut m: Bench) raises:
         m, deserialize[CatalogData](catalog)
     )
     run[benchmark_value_stringify, "StringifyCitmCatalog"](m, parse(catalog))
-
-    run[benchmark_value_stringify, "StringifyBool"](m, False)
-    run[benchmark_value_stringify, "StringifyNull"](m, Null())
-    # These should be the same so its more of a sanity check here
-    run[benchmark_value_stringify, "StringifyInt"](m, Int64(12345))
-    run[benchmark_value_stringify, "StringifyUInt"](m, UInt64(12345))
-    run[benchmark_value_stringify, "StringifyFloat"](m, Float64(456.345))
-    run[benchmark_value_stringify, "StringifyString"](
-        m, "some example string of short length, not all that long really"
-    )
 
     run[benchmark_minify, "MinifyCitmCatalog"](m, catalog)
     run[benchmark_pretty_print, "WritePrettyCitmCatalog"](m, parse(catalog))
@@ -517,12 +562,90 @@ def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
 
 
 @parameter
-def benchmark_value_parse(mut b: Bencher, s: String) raises:
+def benchmark_utf8_validate(mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
     def do() raises:
-        var a = Value(parse_string=s)
-        keep(a)
+        keep(is_valid_utf8(StringSlice(s)))
+
+    b.iter[do]()
+
+
+@parameter
+def benchmark_parse_pointer[
+    path: StringLiteral
+](mut b: Bencher, s: String) raises:
+    @always_inline
+    @parameter
+    def do() raises:
+        var v = parse_pointer(s, String(path))
+        keep(v)
+
+    b.iter[do]()
+
+
+@parameter
+def benchmark_stage1(mut b: Bencher, s: String) raises:
+    # End-to-end stage-1 structural indexing: pad-copy + index, fresh
+    # buffers per iteration (matching the Parse* rows' methodology).
+    @always_inline
+    @parameter
+    def do() raises:
+        var buf = PaddedBuffer(StringSlice(s).as_bytes())
+        var span = buf.span()
+        var positions = List[UInt32]()
+        structural_index[True](span.unsafe_ptr(), len(span), positions)
+        keep(positions)
+
+    b.iter[do]()
+
+
+@parameter
+def benchmark_document_parse(mut b: Bencher, s: String) raises:
+    @always_inline
+    @parameter
+    def do() raises:
+        var d = parse_document(s)
+        keep(d)
+
+    b.iter[do]()
+
+
+@parameter
+def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
+    @always_inline
+    @parameter
+    def do() raises:
+        for doc in docs:
+            var v = parse(doc)
+            keep(v)
+
+    b.iter[do]()
+
+
+@parameter
+def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
+    @always_inline
+    @parameter
+    def do() raises:
+        for doc in docs:
+            var d = parse_document(doc)
+            keep(d)
+
+    b.iter[do]()
+
+
+@parameter
+def benchmark_batch_deserialize[
+    T: Movable & ImplicitlyDeletable
+](mut b: Bencher, docs: List[String]) raises:
+    @always_inline
+    @parameter
+    def do() raises:
+        for doc in docs:
+            var parser = Parser(doc)
+            var a = deserialize[T](parser^)
+            keep(a)
 
     b.iter[do]()
 
@@ -692,9 +815,33 @@ struct Properties(Copyable, Defaultable):
         self.name = ""
 
 
+struct User(Defaultable, Movable):
+    var id: Int
+    var name: String
+    var city: String
+    var age: Int
+    var friends: List[Friend]
+
+    def __init__(out self):
+        self.id = 0
+        self.name = ""
+        self.city = ""
+        self.age = 0
+        self.friends = List[Friend]()
+
+
+struct Friend(Copyable, Defaultable):
+    var name: String
+    var hobbies: List[String]
+
+    def __init__(out self):
+        self.name = ""
+        self.hobbies = List[String]()
+
+
 @parameter
 def benchmark_deserialize_with_reflection[
-    T: Movable & ImplicitlyDestructible
+    T: Movable & ImplicitlyDeletable
 ](mut b: Bencher, s: String) raises:
     @always_inline
     @parameter
@@ -705,110 +852,6 @@ def benchmark_deserialize_with_reflection[
 
     b.iter[do]()
 
-
-# source https://opensource.adobe.com/Spry/samples/data_region/JSONDataSetSample.html
-comptime small_data = """{
-	"id": "0001",
-	"type": "donut",
-	"name": "Cake",
-	"ppu": 0.55,
-	"batters":
-		{
-			"batter":
-				[
-					{ "id": "1001", "type": "Regular" },
-					{ "id": "1002", "type": "Chocolate" },
-					{ "id": "1003", "type": "Blueberry" },
-					{ "id": "1004", "type": "Devil's Food" }
-				]
-		},
-	"topping":
-		[
-			{ "id": "5001", "type": "None" },
-			{ "id": "5002", "type": "Glazed" },
-			{ "id": "5005", "type": "Sugar" },
-			{ "id": "5007", "type": "Powdered Sugar" },
-			{ "id": "5006", "type": "Chocolate with Sprinkles" },
-			{ "id": "5003", "type": "Chocolate" },
-			{ "id": "5004", "type": "Maple" }
-		]
-}"""
-
-comptime medium_array = """
-[
-	{
-		"id": "0001",
-		"type": "donut",
-		"name": "Cake",
-		"ppu": 0.55,
-		"batters":
-			{
-				"batter":
-					[
-						{ "id": "1001", "type": "Regular" },
-						{ "id": "1002", "type": "Chocolate" },
-						{ "id": "1003", "type": "Blueberry" },
-						{ "id": "1004", "type": "Devil's Food" }
-					]
-			},
-		"topping":
-			[
-				{ "id": "5001", "type": "None" },
-				{ "id": "5002", "type": "Glazed" },
-				{ "id": "5005", "type": "Sugar" },
-				{ "id": "5007", "type": "Powdered Sugar" },
-				{ "id": "5006", "type": "Chocolate with Sprinkles" },
-				{ "id": "5003", "type": "Chocolate" },
-				{ "id": "5004", "type": "Maple" }
-			]
-	},
-	{
-		"id": "0002",
-		"type": "donut",
-		"name": "Raised",
-		"ppu": 0.55,
-		"batters":
-			{
-				"batter":
-					[
-						{ "id": "1001", "type": "Regular" }
-					]
-			},
-		"topping":
-			[
-				{ "id": "5001", "type": "None" },
-				{ "id": "5002", "type": "Glazed" },
-				{ "id": "5005", "type": "Sugar" },
-				{ "id": "5003", "type": "Chocolate" },
-				{ "id": "5004", "type": "Maple" }
-			]
-	},
-	{
-		"id": "0003",
-		"type": "donut",
-		"name": "Old Fashioned",
-		"ppu": 0.55,
-		"batters":
-			{
-				"batter":
-					[
-						{ "id": "1001", "type": "Regular" },
-						{ "id": "1002", "type": "Chocolate" }
-					]
-			},
-		"topping":
-			[
-				{ "id": "5001", "type": "None" },
-				{ "id": "5002", "type": "Glazed" },
-				{ "id": "5003", "type": "Chocolate" },
-				{ "id": "5004", "type": "Maple" }
-			]
-	}
-]
-"""
-
-comptime large_array = """
-[{"id":0,"name":"Elijah","city":"Austin","age":78,"friends":[{"name":"Michelle","hobbies":["Watching Sports","Reading","Skiing & Snowboarding"]},{"name":"Robert","hobbies":["Traveling","Video Games"]}]},{"id":1,"name":"Noah","city":"Boston","age":97,"friends":[{"name":"Oliver","hobbies":["Watching Sports","Skiing & Snowboarding","Collecting"]},{"name":"Olivia","hobbies":["Running","Music","Woodworking"]},{"name":"Robert","hobbies":["Woodworking","Calligraphy","Genealogy"]},{"name":"Ava","hobbies":["Walking","Church Activities"]},{"name":"Michael","hobbies":["Music","Church Activities"]},{"name":"Michael","hobbies":["Martial Arts","Painting","Jewelry Making"]}]},{"id":2,"name":"Evy","city":"San Diego","age":48,"friends":[{"name":"Joe","hobbies":["Reading","Volunteer Work"]},{"name":"Joe","hobbies":["Genealogy","Golf"]},{"name":"Oliver","hobbies":["Collecting","Writing","Bicycling"]},{"name":"Liam","hobbies":["Church Activities","Jewelry Making"]},{"name":"Amelia","hobbies":["Calligraphy","Dancing"]}]},{"id":3,"name":"Oliver","city":"St. Louis","age":39,"friends":[{"name":"Mateo","hobbies":["Watching Sports","Gardening"]},{"name":"Nora","hobbies":["Traveling","Team Sports"]},{"name":"Ava","hobbies":["Church Activities","Running"]},{"name":"Amelia","hobbies":["Gardening","Board Games","Watching Sports"]},{"name":"Leo","hobbies":["Martial Arts","Video Games","Reading"]}]},{"id":4,"name":"Michael","city":"St. Louis","age":95,"friends":[{"name":"Mateo","hobbies":["Movie Watching","Collecting"]},{"name":"Chris","hobbies":["Housework","Bicycling","Collecting"]}]},{"id":5,"name":"Michael","city":"Portland","age":19,"friends":[{"name":"Jack","hobbies":["Painting","Television"]},{"name":"Oliver","hobbies":["Walking","Watching Sports","Movie Watching"]},{"name":"Charlotte","hobbies":["Podcasts","Jewelry Making"]},{"name":"Elijah","hobbies":["Eating Out","Painting"]}]},{"id":6,"name":"Lucas","city":"Austin","age":76,"friends":[{"name":"John","hobbies":["Genealogy","Cooking"]},{"name":"John","hobbies":["Socializing","Yoga"]}]},{"id":7,"name":"Michelle","city":"San Antonio","age":25,"friends":[{"name":"Jack","hobbies":["Music","Golf"]},{"name":"Daniel","hobbies":["Socializing","Housework","Walking"]},{"name":"Robert","hobbies":["Collecting","Walking"]},{"name":"Nora","hobbies":["Painting","Church Activities"]},{"name":"Mia","hobbies":["Running","Painting"]}]},{"id":8,"name":"Emily","city":"Austin","age":61,"friends":[{"name":"Nora","hobbies":["Bicycling","Skiing & Snowboarding","Watching Sports"]},{"name":"Ava","hobbies":["Writing","Reading","Collecting"]},{"name":"Amelia","hobbies":["Eating Out","Watching Sports"]},{"name":"Daniel","hobbies":["Skiing & Snowboarding","Martial Arts","Writing"]},{"name":"Zoey","hobbies":["Board Games","Tennis"]}]},{"id":9,"name":"Liam","city":"New Orleans","age":33,"friends":[{"name":"Chloe","hobbies":["Traveling","Bicycling","Shopping"]},{"name":"Evy","hobbies":["Eating Out","Watching Sports"]},{"name":"Grace","hobbies":["Jewelry Making","Yoga","Podcasts"]}]}]"""
 
 comptime unicode = r"""{
   "user": {

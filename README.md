@@ -40,6 +40,82 @@ if result:
     print(result.value())  # prints {"key":123}
 ```
 
+### Fast immutable documents
+
+`parse_document` parses onto an immutable, self-contained tape `Document`
+(simdjson-style): a SIMD structural index feeds an iterative stage-2
+walker, containers are tape spans, and all strings share one arena — no
+per-node allocation and no byte-at-a-time scanning. That makes it 2-3x
+faster than `parse` across the bench corpus. The trade-off: the result is read-only, and navigation values
+borrow the `Document` (enforced at compile time by the origin system).
+
+```mojo
+from emberjson import parse_document, to_string
+
+def main() raises:
+    var d = parse_document('{"name": "ember", "versions": [1, 2.5]}')
+
+    print(d.root()["name"].string())        # ember
+    print(d.root()["versions"][1].float())  # 2.5
+    print(len(d.root()["versions"]))        # 2
+
+    for entry in d.root().object():         # zero-copy keys and values
+        print(entry.key)
+
+    print(to_string(d))                     # serialize straight off the tape
+
+    # Materialize an owned, mutable Value tree when you need to modify
+    # the data or keep it beyond the Document's lifetime:
+    var v = d.to_value()
+    v["name"] = "modified"
+```
+
+`try_parse_document` is the non-raising variant returning an
+`Optional[Document]`.
+
+### Partial access with JSON Pointer
+
+When you need one value out of a large document, `parse_pointer` navigates
+the raw text to an RFC 6901 target using a SIMD structural index and
+parses only that subtree — sibling values are skipped with bracket hops,
+never visiting their contents. Sparse queries run 3-6x faster than even
+`parse_document` on the bench corpus (5-19x faster than `parse`).
+
+```mojo
+from emberjson import parse_pointer
+
+var name = parse_pointer(big_doc, "/statuses/99/user/screen_name")
+print(name.string())
+```
+
+The trade-off: the target (and everything actually traversed) is fully
+validated, but bytes that are merely skipped over are checked only for
+structural sanity — `parse_pointer('{"bad": nope, "good": 1}', "/good")`
+succeeds. Use `parse` when whole-document validation matters.
+`try_parse_pointer` is the non-raising variant.
+
+### UTF-8 validation
+
+JSON text is required to be UTF-8 (RFC 8259), and every parse entry
+point validates that by default: input containing overlongs, surrogates,
+truncated sequences, or code points above U+10FFFF is rejected before
+parsing. The check is a SIMD validator running at ~20-30 GB/s (with an
+ASCII fast path), so it typically costs 2-4% of a parse. For trusted
+input you can opt out:
+
+```mojo
+from emberjson import parse, is_valid_utf8, ParseOptions
+
+var v = parse(untrusted_bytes)  # raises on invalid UTF-8
+
+comptime trusted = ParseOptions(validate_utf8=False)
+var w = parse[trusted](my_own_bytes)  # skips the check
+
+# Also available standalone:
+if is_valid_utf8(some_bytes):
+    ...
+```
+
 ### Converting to String
 
 Use the `to_string` function to convert a JSON struct to its string representation.
@@ -243,6 +319,29 @@ struct MyInt(JsonSerializable):
 def main():
     print(serialize(Coordinate(1.0, 2.0)))  # prints [1.0,2.0]
     print(serialize(MyInt(1)))              # prints 1
+```
+
+### Mixing eager and lazy fields
+
+Any deserialized struct can defer expensive subtrees by declaring fields
+as `Lazy` wrappers (`LazyValue`, `LazyString`, `LazyInt`, `LazyFloat`,
+or `Lazy[YourType, origin]`): during `deserialize` those fields only
+record their byte span (grammar-validated, so re-serialization is safe),
+and materialize when you call `.get()`. The struct is parameterized on
+the input's origin, which lets the compiler guarantee the spans cannot
+outlive the source string.
+
+```mojo
+from emberjson import deserialize, LazyValue, LazyString
+
+struct Event[origin: ImmutOrigin](Movable):
+    var id: Int64                      # parsed eagerly
+    var payload: LazyValue[Self.origin]  # span captured, parsed on demand
+    var note: LazyString[Self.origin]
+
+var e = deserialize[Event[origin_of(data)]](data)
+print(e.id)                  # already materialized
+print(e.payload.get())       # parses just this subtree, now
 ```
 
 ### Schema Validation
