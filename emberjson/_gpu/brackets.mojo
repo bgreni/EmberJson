@@ -28,14 +28,15 @@ global error flag. This is exactly the data the tape's container words
 need (close index / open index), computed with zero serial work.
 """
 
+from layout import row_major, stack_allocation
 from std.math import ceildiv
-from std.memory import UnsafePointer, stack_allocation
 from std.sys import has_accelerator
 from std.atomic import Atomic
 from std.gpu import barrier, global_idx, thread_idx
 from std.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from std.gpu.memory import AddressSpace
 
+from ._tensor import Vec, vec
 from .stage1 import BLOCK
 from .stage2 import (
     TOK_CLOSE_ARR,
@@ -64,11 +65,11 @@ def _is_open(kind: UInt8) -> Bool:
 
 
 def oc_count_kernel(
-    types: UnsafePointer[UInt8, MutAnyOrigin],
-    counts: UnsafePointer[UInt32, MutAnyOrigin],
-    num_tokens: Int,
+    types: Vec[DType.uint8],
+    counts: Vec[DType.uint32],
 ):
     """Per-block count of container tokens (feeds the compaction scan)."""
+    var num_tokens = types.layout.size()
     var tid = thread_idx.x
     var t = global_idx.x
     var c: UInt32 = 0
@@ -76,8 +77,8 @@ def oc_count_kernel(
         if _is_container(types[t] & TOK_KIND_MASK):
             c = 1
     var shared = stack_allocation[
-        BLOCK, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = c
     barrier()
     var offset = 1
@@ -94,14 +95,14 @@ def oc_count_kernel(
 
 
 def oc_compact_kernel(
-    types: UnsafePointer[UInt8, MutAnyOrigin],
-    block_bases: UnsafePointer[UInt32, MutAnyOrigin],
-    oc_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    oc_delta: UnsafePointer[Int32, MutAnyOrigin],
-    num_tokens: Int,
+    types: Vec[DType.uint8],
+    block_bases: Vec[DType.uint32],
+    oc_tok: Vec[DType.uint32],
+    oc_delta: Vec[DType.int32],
 ):
     """Scatter container tokens (their token index + depth delta) in
     document order, using the block-scanned bases."""
+    var num_tokens = types.layout.size()
     var tid = thread_idx.x
     var t = global_idx.x
     var is_c = False
@@ -111,8 +112,8 @@ def oc_compact_kernel(
         is_c = _is_container(kind)
     var c: UInt32 = UInt32(1) if is_c else UInt32(0)
     var shared = stack_allocation[
-        BLOCK, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = c
     barrier()
     var offset = 1
@@ -131,20 +132,20 @@ def oc_compact_kernel(
 
 
 def depth_block_kernel(
-    oc_delta: UnsafePointer[Int32, MutAnyOrigin],
-    depth_excl: UnsafePointer[Int32, MutAnyOrigin],
-    block_aggs: UnsafePointer[Int32, MutAnyOrigin],
-    oc_cnt: Int,
+    oc_delta: Vec[DType.int32],
+    depth_excl: Vec[DType.int32],
+    block_aggs: Vec[DType.int32],
 ):
     """Per-block inclusive +1/-1 scan (block phase of the depth scan)."""
+    var oc_cnt = oc_delta.layout.size()
     var tid = thread_idx.x
     var g = global_idx.x
     var v: Int32 = 0
     if g < oc_cnt:
         v = oc_delta[g]
     var shared = stack_allocation[
-        BLOCK, Int32, address_space=AddressSpace.SHARED
-    ]()
+        DType.int32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = v
     barrier()
     var offset = 1
@@ -163,15 +164,15 @@ def depth_block_kernel(
 
 
 def depth_aggs_kernel(
-    block_aggs: UnsafePointer[Int32, MutAnyOrigin],
-    block_bases: UnsafePointer[Int32, MutAnyOrigin],
-    num_blocks: Int,
+    block_aggs: Vec[DType.int32],
+    block_bases: Vec[DType.int32],
 ):
     """Single-threadgroup exclusive scan of block depth sums."""
+    var num_blocks = block_aggs.layout.size()
     var tid = thread_idx.x
     var shared = stack_allocation[
-        BLOCK, Int32, address_space=AddressSpace.SHARED
-    ]()
+        DType.int32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     var carried: Int32 = 0
     var tile = 0
     while tile < num_blocks:
@@ -201,17 +202,17 @@ def depth_aggs_kernel(
 
 
 def depth_finalize_kernel(
-    oc_delta: UnsafePointer[Int32, MutAnyOrigin],
-    depth_incl: UnsafePointer[Int32, MutAnyOrigin],
-    block_bases: UnsafePointer[Int32, MutAnyOrigin],
-    depth_key: UnsafePointer[UInt32, MutAnyOrigin],
-    err_flag: UnsafePointer[Int32, MutAnyOrigin],
-    oc_cnt: Int,
+    oc_delta: Vec[DType.int32],
+    depth_incl: Vec[DType.int32],
+    block_bases: Vec[DType.int32],
+    depth_key: Vec[DType.uint32],
+    err_flag: Vec[DType.int32],
 ):
     """Adds block bases, applies cuJSON's open-adjustment (open's key =
     its inclusive depth - 1 = the matching close's key), and validates
     the depth domain (negative depth = close-before-open; >= 1024 =
     walker's max-depth verdict)."""
+    var oc_cnt = oc_delta.layout.size()
     var g = global_idx.x
     if g >= oc_cnt:
         return
@@ -220,24 +221,24 @@ def depth_finalize_kernel(
     if oc_delta[g] > 0:
         key = d - 1
     if key < 0 or key >= MAX_BRACKET_DEPTH:
-        _ = Atomic.fetch_add(err_flag, 1)
+        _ = Atomic.fetch_add(err_flag.ptr, 1)
         key = 0
     depth_key[g] = UInt32(key)
 
 
 def hist_kernel(
-    depth_key: UnsafePointer[UInt32, MutAnyOrigin],
-    block_hists: UnsafePointer[UInt32, MutAnyOrigin],
-    oc_cnt: Int,
+    depth_key: Vec[DType.uint32],
+    block_hists: Vec[DType.uint32],
     num_blocks: Int,
 ):
     """Per-block depth histograms, written bucket-major:
     block_hists[d * num_blocks + b]."""
+    var oc_cnt = depth_key.layout.size()
     var tid = thread_idx.x
     var b = Int(global_idx.x) // BLOCK
     var shared = stack_allocation[
-        MAX_BRACKET_DEPTH, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[MAX_BRACKET_DEPTH]())
     var i = tid
     while i < MAX_BRACKET_DEPTH:
         shared[i] = 0
@@ -246,8 +247,7 @@ def hist_kernel(
     var g = b * BLOCK + tid
     if g < oc_cnt:
         _ = Atomic.fetch_add(
-            shared.address_space_cast[AddressSpace.SHARED]()
-            + Int(depth_key[g]),
+            shared.ptr + Int(depth_key[g]),
             UInt32(1),
         )
     barrier()
@@ -258,23 +258,23 @@ def hist_kernel(
 
 
 def sort_scatter_kernel(
-    depth_key: UnsafePointer[UInt32, MutAnyOrigin],
-    oc_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    hist_bases: UnsafePointer[UInt32, MutAnyOrigin],
-    sorted_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    sorted_key: UnsafePointer[UInt32, MutAnyOrigin],
-    oc_cnt: Int,
+    depth_key: Vec[DType.uint32],
+    oc_tok: Vec[DType.uint32],
+    hist_bases: Vec[DType.uint32],
+    sorted_tok: Vec[DType.uint32],
+    sorted_key: Vec[DType.uint32],
     num_blocks: Int,
 ):
     """Stable scatter: position = scanned bucket-major histogram base +
     in-block rank among same-key elements (replayed from shared keys —
     O(BLOCK) per thread, bounded and Metal-safe)."""
+    var oc_cnt = depth_key.layout.size()
     var tid = thread_idx.x
     var b = Int(global_idx.x) // BLOCK
     var g = b * BLOCK + tid
     var shared_keys = stack_allocation[
-        BLOCK, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     var key: UInt32 = 0xFFFFFFFF
     if g < oc_cnt:
         key = depth_key[g]
@@ -293,12 +293,11 @@ def sort_scatter_kernel(
 
 
 def pair_validate_kernel(
-    sorted_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    sorted_key: UnsafePointer[UInt32, MutAnyOrigin],
-    types: UnsafePointer[UInt8, MutAnyOrigin],
-    pair_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    err_flag: UnsafePointer[Int32, MutAnyOrigin],
-    oc_cnt: Int,
+    sorted_tok: Vec[DType.uint32],
+    sorted_key: Vec[DType.uint32],
+    types: Vec[DType.uint8],
+    pair_tok: Vec[DType.uint32],
+    err_flag: Vec[DType.int32],
 ):
     """Neighbor pairing + validation over the depth-sorted stream.
 
@@ -309,6 +308,7 @@ def pair_validate_kernel(
     open strictly first in document order (guaranteed by stable sort +
     checking open/close roles explicitly). Writes both directions of
     the match, as CONTAINER-token indexes into the token stream."""
+    var oc_cnt = sorted_tok.layout.size()
     var k = global_idx.x
     var i = Int(k) * 2
     if i >= oc_cnt:
@@ -331,7 +331,7 @@ def pair_validate_kernel(
             pair_tok[t_open] = UInt32(t_close)
             pair_tok[t_close] = UInt32(t_open)
     if bad:
-        _ = Atomic.fetch_add(err_flag, 1)
+        _ = Atomic.fetch_add(err_flag.ptr, 1)
 
 
 struct BracketBuffers(Movable):
@@ -435,21 +435,21 @@ struct BracketBuffers(Movable):
 
 
 def u32_scan_block_kernel(
-    elems: UnsafePointer[UInt32, MutAnyOrigin],
-    excl: UnsafePointer[UInt32, MutAnyOrigin],
-    block_aggs: UnsafePointer[UInt32, MutAnyOrigin],
-    n: Int,
+    elems: Vec[DType.uint32],
+    excl: Vec[DType.uint32],
+    block_aggs: Vec[DType.uint32],
 ):
     """Block phase of a u32 exclusive scan (aggregates feed
     `scan.scan_counts_kernel`; `u32_scan_apply_kernel` finishes)."""
+    var n = elems.layout.size()
     var tid = thread_idx.x
     var g = global_idx.x
     var v: UInt32 = 0
     if g < n:
         v = elems[g]
     var shared = stack_allocation[
-        BLOCK, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = v
     barrier()
     var offset = 1
@@ -468,23 +468,23 @@ def u32_scan_block_kernel(
 
 
 def u32_scan_apply_kernel(
-    excl: UnsafePointer[UInt32, MutAnyOrigin],
-    block_bases: UnsafePointer[UInt32, MutAnyOrigin],
-    n: Int,
+    excl: Vec[DType.uint32],
+    block_bases: Vec[DType.uint32],
 ):
+    var n = excl.layout.size()
     var g = global_idx.x
     if g < n:
         excl[g] += block_bases[g // BLOCK]
 
 
 def gather_pairs_kernel(
-    oc_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    pair_tok: UnsafePointer[UInt32, MutAnyOrigin],
-    pair_compact: UnsafePointer[UInt32, MutAnyOrigin],
-    oc_cnt: Int,
+    oc_tok: Vec[DType.uint32],
+    pair_tok: Vec[DType.uint32],
+    pair_compact: Vec[DType.uint32],
 ):
     """pair_compact[i] = partner token of the i-th container (document
     order) — the compact readback for testing and host consumers."""
+    var oc_cnt = oc_tok.layout.size()
     var g = global_idx.x
     if g < oc_cnt:
         pair_compact[g] = pair_tok[Int(oc_tok[g])]

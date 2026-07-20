@@ -37,11 +37,10 @@ def check_positions_str(mut s: GpuSession, data: String) raises:
     check_positions(s, data.as_bytes())
 
 
-def test_stage1_corpora() raises:
+def _stage1_corpora(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         comptime files = [
             "bench_data/data/twitter.json",
             "bench_data/data/citm_catalog.json",
@@ -56,11 +55,10 @@ def test_stage1_corpora() raises:
             check_positions_str(s, data)
 
 
-def test_stage1_boundaries() raises:
+def _stage1_boundaries(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         # Sizes around chunk and block edges.
         check_positions_str(s, "")
         check_positions_str(s, "1")
@@ -117,12 +115,11 @@ def test_stage1_boundaries() raises:
             check_positions_str(s, doc)
 
 
-def test_stage1_random_bytes() raises:
+def _stage1_random_bytes(mut s: GpuSession) raises:
     """Stage 1 must agree on ARBITRARY bytes, not just valid JSON."""
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         var rng = Rng(seed=0x57A6E1)
         # Structural-ish alphabet to hit interesting densities, plus raw
         # byte soup.
@@ -140,6 +137,19 @@ def test_stage1_random_bytes() raises:
             for _ in range(n):
                 buf.append(Byte(rng.rand_int(min=0, max=255)))
             check_positions(s, Span(buf))
+
+
+def test_gpu_stage1_suite() raises:
+    """All stage-1 differentials on ONE shared session (a second
+    in-process GpuSession construction deadlocks on the current CUDA
+    toolchain; see test_gpu_utf8_suite)."""
+    comptime if not has_accelerator():
+        return
+    else:
+        var s = GpuSession()
+        _stage1_corpora(s)
+        _stage1_boundaries(s)
+        _stage1_random_bytes(s)
 
 
 def main() raises:

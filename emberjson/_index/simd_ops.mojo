@@ -13,6 +13,12 @@ Lemire, arXiv:1902.08318). Two layers:
     parsing coexist. PMULL replaces the six-step shift-XOR scan and an
     ADDP reduction tree replaces `pack_bits` for movemasks (simdjson's
     aarch64 kernel formulations).
+  * An x86 fast layer (`has_avx2()` targets, which implies SSSE3 and
+    PCLMULQDQ) with the same guard: PCLMULQDQ replaces the shift-XOR
+    scan (simdjson's westmere/haswell formulation) and the 64-byte
+    chunk ops recombine the four 16-byte registers into two 32-byte
+    vectors so compares and movemasks run at AVX2 width (VPCMPEQB +
+    VPMOVMSKB, simdjson's haswell kernel shape).
 
   * `SimdInput` wraps the 64-byte logical chunk, abstracting the hardware
     SIMD width, and exposes `load`, `eq`, and `lteq` that produce 64-bit
@@ -28,9 +34,34 @@ from std.sys.intrinsics import llvm_intrinsic
 from .portable import prefix_xor_portable
 
 comptime _NEON = CompilationTarget.has_neon()
+# Every AVX2 CPU (Haswell+/Zen+) also has SSSE3 PSHUFB and PCLMULQDQ, so
+# one flag gates all three x86 fast paths.
+comptime _AVX2 = CompilationTarget.has_avx2()
 
 comptime _Chunk16 = SIMD[DType.uint8, 16]
 comptime _Bool16 = SIMD[DType.bool, 16]
+comptime _Chunk32 = SIMD[DType.uint8, 32]
+
+
+@always_inline("nodebug")
+def lookup16(table: _Chunk16, idx: _Chunk16) -> _Chunk16:
+    """16-entry byte shuffle-table lookup; every idx lane must be < 16.
+
+    `_dynamic_shuffle` lowers to one TBL1 on NEON and one PSHUFB on x86
+    (verified against the raw intrinsics), and carries its own fallback
+    on targets with neither, so this is safe to call at runtime on any
+    target. Not comptime-interpretable — callers keep their
+    `__is_run_in_comptime_interpreter` guards.
+    """
+    return table._dynamic_shuffle(idx)
+
+
+@always_inline("nodebug")
+def lookup16_x2(table: _Chunk16, idx: _Chunk32) -> _Chunk32:
+    """`lookup16` at 32-byte width. Duplicating the 16-entry table into
+    both halves makes the full 32-entry lookup per-128-bit-lane safe, so
+    on AVX2 this compiles to a single VPSHUFB YMM (verified)."""
+    return table.join(table)._dynamic_shuffle(idx)
 
 
 @always_inline("nodebug")
@@ -42,6 +73,13 @@ def prefix_xor(bitmask: UInt64) -> UInt64:
     64-bit quote mask. NEON: one PMULL against all-ones (carryless
     multiply spreads the XOR prefix — simdjson's PCLMULQDQ trick).
     Portable/comptime: six shift-XOR steps (Hillis-Steele); bit-identical.
+
+    Verified from --emit=asm that both intrinsics earn their keep: the
+    shift-XOR chain is 17 dependent insns on x86 (no shifted-operand ALU)
+    vs 5 for PCLMULQDQ, and 7 vs 5 on aarch64. Note PMULL64 is part of
+    the aarch64 crypto extension (+aes), not baseline NEON — there is no
+    `has_aes()` query, but every supported aarch64 target (Apple
+    Silicon, Graviton, Ampere) ships it.
     """
     comptime if _NEON:
         if not __is_run_in_comptime_interpreter:
@@ -49,6 +87,18 @@ def prefix_xor(bitmask: UInt64) -> UInt64:
                 bitmask, UInt64.MAX
             )
             return bitcast[DType.uint64, 2](prod)[0]
+    comptime if _AVX2:
+        if not __is_run_in_comptime_interpreter:
+            # PCLMULQDQ against all-ones: the carryless product's low half
+            # is exactly the inclusive XOR-scan (simdjson's x86 kernels).
+            var prod = llvm_intrinsic[
+                "llvm.x86.pclmulqdq", SIMD[DType.uint64, 2]
+            ](
+                SIMD[DType.uint64, 2](bitmask, 0),
+                SIMD[DType.uint64, 2](UInt64.MAX, 0),
+                Int8(0),
+            )
+            return prod[0]
     return prefix_xor_portable(bitmask)
 
 
@@ -63,7 +113,10 @@ def movemask64(a: _Bool16, b: _Bool16, c: _Bool16, d: _Bool16) -> UInt64:
 
     NEON path: per-lane bit weights + a three-level ADDP pairwise-add tree
     (simdjson's `neon::to_bitmask`) — much cheaper than `pack_bits`'s
-    horizontal reduction on aarch64. Portable/comptime path: `pack_bits`.
+    horizontal reduction on aarch64 (verified from --emit=asm: 19 insns
+    for the whole compare+mask kernel vs 34 via pack_bits).
+    Portable/comptime path: `pack_bits` (on x86 it lowers to PMOVMSKB
+    and needs no help).
     """
     comptime if _NEON:
         if not __is_run_in_comptime_interpreter:
@@ -103,8 +156,30 @@ struct SimdInput(Copyable, Movable):
         return result^
 
     @always_inline("nodebug")
+    def lo32(self) -> _Chunk32:
+        """Bytes 0-31 as one 32-byte vector (x86: a VINSERTI128 the
+        backend usually folds into a single 32-byte load)."""
+        return self.chunks[0].join(self.chunks[1])
+
+    @always_inline("nodebug")
+    def hi32(self) -> _Chunk32:
+        """Bytes 32-63 as one 32-byte vector."""
+        return self.chunks[2].join(self.chunks[3])
+
+    @always_inline("nodebug")
     def eq(self, target: UInt8) -> UInt64:
-        """Returns a 64-bit mask: bit i set if byte i == target."""
+        """Returns a 64-bit mask: bit i set if byte i == target.
+
+        The AVX2 recombine is not redundant: LLVM does not auto-fuse
+        four 16-byte compare+pack_bits into ymm ops (verified from
+        --emit=asm: 15 insns stay xmm-width vs 9 via explicit 32-byte
+        vectors)."""
+        comptime if _AVX2:
+            if not __is_run_in_comptime_interpreter:
+                var splat = _Chunk32(target)
+                var m0 = UInt64(pack_bits(self.lo32().eq(splat)))
+                var m1 = UInt64(pack_bits(self.hi32().eq(splat)))
+                return m0 | m1 << 32
         var splat = _Chunk16(target)
         return movemask64(
             self.chunks[0].eq(splat),
@@ -116,6 +191,12 @@ struct SimdInput(Copyable, Movable):
     @always_inline("nodebug")
     def lteq(self, target: UInt8) -> UInt64:
         """Returns a 64-bit mask: bit i set if byte i <= target (unsigned)."""
+        comptime if _AVX2:
+            if not __is_run_in_comptime_interpreter:
+                var splat = _Chunk32(target)
+                var m0 = UInt64(pack_bits(self.lo32().le(splat)))
+                var m1 = UInt64(pack_bits(self.hi32().le(splat)))
+                return m0 | m1 << 32
         var splat = _Chunk16(target)
         return movemask64(
             self.chunks[0].le(splat),

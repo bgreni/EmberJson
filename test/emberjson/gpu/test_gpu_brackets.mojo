@@ -82,11 +82,10 @@ def check_brackets(mut s: GpuSession, data: String, label: String) raises:
     assert_true(checked == oc_cnt, label + ": all containers checked")
 
 
-def test_brackets_corpora() raises:
+def _brackets_corpora(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         comptime files = [
             "bench_data/data/twitter.json",
             "bench_data/data/citm_catalog.json",
@@ -100,11 +99,10 @@ def test_brackets_corpora() raises:
             check_brackets(s, data, path)
 
 
-def test_brackets_shapes() raises:
+def _brackets_shapes(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         # Deep nesting (within limits).
         var deep = String()
         for _ in range(1000):
@@ -127,11 +125,10 @@ def test_brackets_shapes() raises:
         check_brackets(s, mixed, "mixed")
 
 
-def test_brackets_invalid() raises:
+def _brackets_invalid(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         check_brackets(s, String("[}"), "type mismatch")
         check_brackets(s, String("[[1, 2]"), "unclosed")
         check_brackets(s, String("[1, 2]]"), "extra close")
@@ -145,6 +142,19 @@ def test_brackets_invalid() raises:
         for _ in range(1025):
             too_deep += "]"
         check_brackets(s, too_deep, "depth 1025")
+
+
+def test_gpu_brackets_suite() raises:
+    """All bracket-matcher differentials on ONE shared session (a second
+    in-process GpuSession construction deadlocks on the current CUDA
+    toolchain; see test_gpu_utf8_suite)."""
+    comptime if not has_accelerator():
+        return
+    else:
+        var s = GpuSession()
+        _brackets_corpora(s)
+        _brackets_shapes(s)
+        _brackets_invalid(s)
 
 
 def main() raises:

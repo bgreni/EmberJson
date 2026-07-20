@@ -3,16 +3,17 @@
 Two layers, following the pattern of `_index/simd_ops.mojo`:
 
   * A scalar range-check validator that interprets cleanly at compile
-    time, serves non-NEON targets, and doubles as the differential-test
-    reference.
-  * A NEON fast path implementing the Keiser-Lemire lookup algorithm
-    ("Validating UTF-8 In Less Than One Instruction Per Byte", the
-    simdjson `utf8_validation` kernel): three nibble-table lookups on a
-    byte and its predecessor classify every illegal sequence class
-    (overlongs, surrogates, out-of-range, wrong continuation counts),
-    with a saturating-subtract check pairing 3/4-byte leads with their
-    required continuations. Guarded by `__is_run_in_comptime_interpreter`
-    so comptime evaluation takes the scalar path.
+    time and doubles as the differential-test reference.
+  * A SIMD path, taken at runtime on every target, implementing the
+    Keiser-Lemire lookup algorithm ("Validating UTF-8 In Less Than One
+    Instruction Per Byte", the simdjson `utf8_validation` kernel): three
+    nibble-table lookups on a byte and its predecessor (TBL1 on NEON,
+    PSHUFB on x86, via `simd_ops.lookup16`) classify every illegal
+    sequence class (overlongs, surrogates, out-of-range, wrong
+    continuation counts), with a saturating-subtract check pairing
+    3/4-byte leads with their required continuations. Guarded by
+    `__is_run_in_comptime_interpreter` so comptime evaluation takes the
+    scalar path.
 
 The `error` accumulator is only reduced at the end: the whole input is
 processed branch-free except for an all-ASCII fast path per 16-byte
@@ -20,7 +21,7 @@ chunk (where only a dangling-lead check from the previous chunk is
 needed).
 """
 
-from emberjson._index.simd_ops import _NEON
+from emberjson._index.simd_ops import lookup16
 from std.memory import memcpy, UnsafePointer
 from std.sys.intrinsics import llvm_intrinsic
 from std.collections import InlineArray
@@ -87,11 +88,6 @@ comptime _MAX_VALUE = _C16(
 
 
 @always_inline("nodebug")
-def _tbl1(table: _C16, idx: _C16) -> _C16:
-    return llvm_intrinsic["llvm.aarch64.neon.tbl1", _C16](table, idx)
-
-
-@always_inline("nodebug")
 def _satsub(a: _C16, b: _C16) -> _C16:
     return llvm_intrinsic["llvm.usub.sat.v16i8", _C16](a, b)
 
@@ -107,9 +103,9 @@ def _prev[n: Int](prev_chunk: _C16, cur: _C16) -> _C16:
 def _check_chunk(cur: _C16, prev_chunk: _C16, mut error: _C16):
     var prev1 = _prev[1](prev_chunk, cur)
     var sc = (
-        _tbl1(_BYTE_1_HIGH, prev1 >> 4)
-        & _tbl1(_BYTE_1_LOW, prev1 & 0xF)
-        & _tbl1(_BYTE_2_HIGH, cur >> 4)
+        lookup16(_BYTE_1_HIGH, prev1 >> 4)
+        & lookup16(_BYTE_1_LOW, prev1 & 0xF)
+        & lookup16(_BYTE_2_HIGH, cur >> 4)
     )
     var prev2 = _prev[2](prev_chunk, cur)
     var prev3 = _prev[3](prev_chunk, cur)
@@ -121,7 +117,19 @@ def _check_chunk(cur: _C16, prev_chunk: _C16, mut error: _C16):
     error |= must23_80 ^ sc
 
 
-def _is_valid_utf8_neon(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
+@always_inline("nodebug")
+def _all_ascii(cur: _C16) -> Bool:
+    """Whether no byte has its high bit set.
+
+    `reduce_or` is the one formulation LLVM lowers optimally on both
+    targets (verified from --emit=asm): PMOVMSKB + test on x86, and the
+    same CMLT+ADDP sequence on aarch64 that `reduce_max` or a pack_bits
+    sign-mask would produce (a naive horizontal max on x86 is a 20-insn
+    shuffle tree, so don't switch this back to `reduce_max`)."""
+    return (cur & 0x80).reduce_or() == 0
+
+
+def _is_valid_utf8_simd(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
     var error = _C16(0)
     var prev_chunk = _C16(0)
     var prev_incomplete = _C16(0)
@@ -129,7 +137,7 @@ def _is_valid_utf8_neon(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
     var i = 0
     while i + 16 <= n:
         var cur = (ptr + i).load[width=16]()
-        if (cur & 0x80).reduce_max() == 0:
+        if _all_ascii(cur):
             # All-ASCII chunk: only a dangling multi-byte sequence from
             # the previous chunk can be wrong.
             error |= prev_incomplete
@@ -205,9 +213,8 @@ def _is_valid_utf8_scalar(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
 def is_valid_utf8(s: Span[Byte, _]) -> Bool:
     """Whether `s` is valid UTF-8 (RFC 3629: no overlongs, no surrogates,
     nothing above U+10FFFF, no truncated sequences)."""
-    comptime if _NEON:
-        if not __is_run_in_comptime_interpreter:
-            return _is_valid_utf8_neon(s.unsafe_ptr(), len(s))
+    if not __is_run_in_comptime_interpreter:
+        return _is_valid_utf8_simd(s.unsafe_ptr(), len(s))
     return _is_valid_utf8_scalar(s.unsafe_ptr(), len(s))
 
 

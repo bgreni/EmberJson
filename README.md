@@ -612,6 +612,53 @@ def main() raises:
     write_lines(Path("output.jsonl"), lines)
 ```
 
+### GPU parsing
+
+On machines with a supported accelerator, JSON can be parsed on the GPU
+into the same immutable `Document` as `parse_document` — the output is
+byte-identical to the CPU engine (a contract enforced by differential
+tests and the fuzz oracle). These entry points fail loud: on a machine
+without an accelerator they raise rather than silently falling back to
+the CPU, and there is no hidden size-threshold dispatch — you choose the
+engine.
+
+Construct a `GpuSession` once and reuse it for all GPU work in a process
+— it owns the device context and reusable buffers, so repeated calls
+amortize setup, and it is the recommended entry point:
+
+```mojo
+from emberjson import GpuSession, to_string
+
+def main() raises:
+    var session = GpuSession()
+
+    # Parse a document (byte-identical to the CPU parse_document)
+    var d = session.parse_document('{"name": "ember", "versions": [1, 2.5]}')
+    print(d.root()["name"].string())        # ember
+    print(to_string(d))
+
+    # Parse JSON Lines in one batch, one Document per line (blank and
+    # malformed lines are skipped, matching read_lines)
+    var docs = session.parse_documents('{"a": 1}\n{"b": 2}\n{"c": 3}')
+    print(len(docs))                        # 3
+
+    # Validate UTF-8 (verdict-identical to the CPU is_valid_utf8)
+    print(session.is_valid_utf8('{"text": "héllo 🔥"}'))  # True
+```
+
+For a single parse there are one-shot free functions —
+`gpu_parse_document`, `gpu_parse_documents`, and `gpu_is_valid_utf8` —
+that construct a transient session internally. `try_gpu_parse_document`
+is the non-raising variant returning an `Optional[Document]` (also `None`
+when no accelerator is present):
+
+```mojo
+from emberjson import gpu_parse_document
+
+def main() raises:
+    var d = gpu_parse_document('{"a": 1}')
+```
+
 ## Acknowledgments
 
 EmberJson uses the [Teju Jagua](https://github.com/cassioneri/teju_jagua) algorithm for efficient floating-point formatting, developed by Cassio Neri and licensed under the Apache License, Version 2.0.

@@ -39,6 +39,7 @@ from emberjson._deserialize.tape_indexed import _walk_tape_from_index
 from emberjson._deserialize.tables import POWER_OF_FIVE_128
 from emberjson.document import Document, _finish_document
 from emberjson.utils import PaddedBuffer, lut
+from ._tensor import Vec, vec
 from .assemble import assemble_line
 from .brackets import (
     BracketBuffers,
@@ -140,7 +141,7 @@ struct GpuSession(Movable):
             var five = List[UInt64]()
             for i in range(1302):
                 five.append(lut[POWER_OF_FIVE_128](i))
-            self._s2 = Stage2Buffers(self.ctx, five.unsafe_ptr())
+            self._s2 = Stage2Buffers(self.ctx, Span(five))
             self._br = BracketBuffers(self.ctx)
             self.ctx.synchronize()
 
@@ -160,17 +161,167 @@ struct GpuSession(Movable):
             self.ctx.synchronize()
             self._input_cap = new_cap
         var hptr = self._staging.unsafe_ptr()
-        if n > 0:
-            memcpy(dest=hptr, src=bytes.unsafe_ptr(), count=n)
-        memset(hptr + n, 0, window - n)
         # Partial upload: only `window` bytes, not the buffer's whole
         # capacity (which may be much larger after a big parse). The
         # ptr-ptr-size overload is the only partial-copy form.
-        self.ctx.enqueue_copy(
-            dst_ptr=self._input.unsafe_ptr(),
-            src_ptr=hptr,
-            size=window,
-        )
+        comptime CHUNK = 8 << 20
+        if self.ctx.api() == "cuda" and n > CHUNK:
+            # Discrete memory: pipeline the host memcpy into pinned
+            # staging against the PCIe DMA in ~8 MB pieces — the copy
+            # of piece i+1 overlaps the (async) DMA of piece i, hiding
+            # the smaller of the two costs (measured 37 ms memcpy +
+            # 16 ms DMA serialized at 420 MB). Unified-memory backends
+            # keep the single-shot form: on Metal ~50 extra enqueues
+            # would cost more than the overlap saves.
+            var src = bytes.unsafe_ptr()
+            var off = 0
+            while off < n:
+                var c = min(CHUNK, n - off)
+                memcpy(dest=hptr + off, src=src + off, count=c)
+                self.ctx.enqueue_copy(
+                    dst_ptr=self._input.unsafe_ptr() + off,
+                    src_ptr=hptr + off,
+                    size=c,
+                )
+                off += c
+            memset(hptr + n, 0, window - n)
+            if window > n:
+                self.ctx.enqueue_copy(
+                    dst_ptr=self._input.unsafe_ptr() + n,
+                    src_ptr=hptr + n,
+                    size=window - n,
+                )
+        else:
+            if n > 0:
+                memcpy(dest=hptr, src=bytes.unsafe_ptr(), count=n)
+            memset(hptr + n, 0, window - n)
+            self.ctx.enqueue_copy(
+                dst_ptr=self._input.unsafe_ptr(),
+                src_ptr=hptr,
+                size=window,
+            )
+
+    def pinned_buffer(mut self, n: Int) raises -> HostBuffer[DType.uint8]:
+        """A pinned host buffer of `n` bytes, for `structural_index_pinned`.
+
+        Fill this directly — read a file into it, or build the document
+        in place — and the parse path never copies on the host side.
+        """
+        comptime if not has_accelerator():
+            raise Error(NO_ACCELERATOR_ERROR)
+        else:
+            return self.ctx.enqueue_create_host_buffer[DType.uint8](n)
+
+    def _upload_pinned(
+        mut self, mut src: HostBuffer[DType.uint8], n: Int, window: Int
+    ) raises:
+        """Uploads `n` bytes the caller already placed in pinned memory,
+        then zeroes the device tail through `window`.
+
+        This is `_stage_input` without its host->pinned memcpy, and that
+        copy is not a rounding error: measured at 420 MB it is ~37 ms
+        against ~16 ms of DMA — the majority of stage-1 wall clock. A
+        caller that can arrange its input in pinned memory skips it.
+        """
+        if self._input_cap < window:
+            var new_cap = max(window, self._input_cap * 2)
+            self._staging = self.ctx.enqueue_create_host_buffer[DType.uint8](
+                new_cap
+            )
+            self._input = self.ctx.enqueue_create_buffer[DType.uint8](new_cap)
+            self.ctx.synchronize()
+            self._input_cap = new_cap
+        if n > 0:
+            self.ctx.enqueue_copy(
+                dst_ptr=self._input.unsafe_ptr(),
+                src_ptr=src.unsafe_ptr(),
+                size=n,
+            )
+        # The kernels read a 64-byte-aligned window, so up to 127 bytes
+        # past `n` must be zero. Stage those few bytes through the
+        # session's own pinned buffer.
+        var pad = window - n
+        if pad > 0:
+            var hp = self._staging.unsafe_ptr()
+            memset(hp, 0, pad)
+            self.ctx.enqueue_copy(
+                dst_ptr=self._input.unsafe_ptr() + n, src_ptr=hp, size=pad
+            )
+
+    def structural_index_pinned[
+        options: ParseOptions = ParseOptions()
+    ](mut self, mut buf: HostBuffer[DType.uint8], n: Int) raises -> List[
+        UInt32
+    ]:
+        """Stage 1 over the first `n` bytes of the pinned `buf`.
+
+        Same result as `_structural_index_gpu` on the same bytes; the
+        difference is purely that no host-side copy happens.
+        """
+        comptime if not has_accelerator():
+            raise Error(NO_ACCELERATOR_ERROR)
+        else:
+            var num_chunks = max(ceildiv(n, 64), 1)
+            var chunk_off: List[UInt32] = [0, UInt32(num_chunks)]
+            var starts: List[UInt32] = [0]
+            var lens: List[UInt32] = [UInt32(n)]
+            var window = max((ceildiv(n, 64) + 2) * 64, num_chunks * 64)
+            # +2 (not +1): stage-1 SWAR `_load_u64` funnel-reads up
+            # to `n + 70`; two padding chunks guarantee `>= n + 128`.
+            self._upload_pinned(buf, n, window)
+            var r = self._index_staged[options](
+                n, window, chunk_off, starts, lens
+            )
+            if not r[1]:
+                raise Error("Invalid UTF-8 in input")
+            var positions = List[UInt32]()
+            swap(positions, r[0])
+            return positions^
+
+    def index_plus_pairs_pinned[
+        options: ParseOptions = ParseOptions()
+    ](mut self, mut buf: HostBuffer[DType.uint8], n: Int) raises -> Tuple[
+        Int, Int, Bool
+    ]:
+        """Structural index + bracket matching over the pinned `buf`.
+
+        Phase-matched to cuJSON's timed pipeline (validation +
+        tokenization + parsing/bracket-matching, transfer inclusive):
+        stage 1 -> K6 tokenize -> `_match_brackets`, which leaves every
+        container's partner in `_br.pair_tok` and reads the compact
+        pairing back to the host. Returns
+        `(structural_count, container_count, structurally_valid)`.
+
+        Benchmark-only. The production `parse_document` never calls the
+        bracket matcher — its structural validation is the CPU tape walk
+        (see `assemble.mojo`), so running these kernels there would be
+        redundant work. This entry point exists to produce an
+        apples-to-apples number against parsers that report bracket
+        matching inside their timed region.
+        """
+        comptime if not has_accelerator():
+            raise Error(NO_ACCELERATOR_ERROR)
+        else:
+            var num_chunks = max(ceildiv(n, 64), 1)
+            var chunk_off: List[UInt32] = [0, UInt32(num_chunks)]
+            var starts: List[UInt32] = [0]
+            var lens: List[UInt32] = [UInt32(n)]
+            var window = max((ceildiv(n, 64) + 2) * 64, num_chunks * 64)
+            self._upload_pinned(buf, n, window)
+            var r = self._index_staged[options](
+                n, window, chunk_off, starts, lens
+            )
+            if not r[1]:
+                raise Error("Invalid UTF-8 in input")
+            var num_structurals = len(r[0]) - 3
+            if num_structurals <= 0:
+                return (0, 0, True)
+            # Positions are still resident in `_s1.positions`; tokenize
+            # then match brackets off `_s2.types` in place.
+            self._s2.ensure_tokens(self.ctx, num_structurals, 1)
+            self._tokenize[options](num_structurals, 1)
+            var br = self._match_brackets(num_structurals)
+            return (num_structurals, br[0], br[1])
 
     def is_valid_utf8(mut self, s: StringSlice) raises -> Bool:
         """Validates `s` as UTF-8 (RFC 3629) on the GPU.
@@ -215,16 +366,39 @@ struct GpuSession(Movable):
             var num_chunks = Int(chunk_off[len(chunk_off) - 1])
             # Upload window: the furthest any chunk reads is its segment
             # start + local*64 + 64 <= n + 63, rounded up.
-            var window = max((ceildiv(n, 64) + 1) * 64, num_chunks * 64)
+            var window = max((ceildiv(n, 64) + 2) * 64, num_chunks * 64)
+            # +2 (not +1): stage-1 SWAR `_load_u64` funnel-reads up
+            # to `n + 70`; two padding chunks guarantee `>= n + 128`.
             self._stage_input(bytes, window)
+            return self._index_staged[options](
+                n, window, chunk_off, starts, lens
+            )
+
+    def _index_staged[
+        options: ParseOptions
+    ](
+        mut self,
+        n: Int,
+        window: Int,
+        chunk_off: List[UInt32],
+        starts: List[UInt32],
+        lens: List[UInt32],
+    ) raises -> Tuple[List[UInt32], Bool]:
+        """Stage 1 over input already resident in `_input` (through
+        `window` bytes, tail zeroed). Shared by the copying and pinned
+        entry points."""
+        comptime if not has_accelerator():
+            raise Error(NO_ACCELERATOR_ERROR)
+        else:
+            var num_chunks = Int(chunk_off[len(chunk_off) - 1])
             comptime if options.validate_utf8:
                 self._err_flag.enqueue_fill(0)
             self._s1.ensure(self.ctx, num_chunks, n)
             self._s1.upload_segments(self.ctx, chunk_off, starts, lens)
             run_stage1_pipeline[options.validate_utf8](
                 self.ctx,
-                self._input,
-                self._err_flag,
+                vec(self._input, window),
+                vec(self._err_flag, 1),
                 self._s1,
                 len(starts),
                 num_chunks,
@@ -282,6 +456,31 @@ struct GpuSession(Movable):
             swap(positions, r[0])
             return positions^
 
+    def _tokenize[
+        options: ParseOptions
+    ](mut self, num_tokens: Int, num_segs: Int) raises:
+        """K6: classify + validate each structural token into `_s2.types`
+        (and `_s2.pairs`). Caller has already sized `_s2` for
+        `num_tokens`. Shared by `_run_stage2` and the bracket-matching
+        benchmark path so the tokenize launch has one definition."""
+        comptime if has_accelerator():
+            comptime k6 = tokenize_kernel[options.ignore_unicode]
+            self.ctx.enqueue_function[k6](
+                vec(self._input, self._input_cap),
+                # Read one past the last token (the close-quote lookup),
+                # which the stage-1 sentinels cover.
+                vec(self._s1.positions, num_tokens + 1),
+                vec(self._s1.masks, 5 * self._s1.chunk_cap),
+                vec(self._s1.seg_chunk_off, num_segs + 1),
+                vec(self._s1.seg_starts, num_segs),
+                vec(self._s2.types, num_tokens),
+                vec(self._s2.pairs, num_tokens),
+                num_segs,
+                self._s1.chunk_cap,
+                grid_dim=ceildiv(num_tokens, BLOCK),
+                block_dim=BLOCK,
+            )
+
     def _run_stage2[
         options: ParseOptions
     ](mut self, num_tokens: Int, num_segs: Int) raises -> Tuple[Int, Int]:
@@ -293,52 +492,34 @@ struct GpuSession(Movable):
         else:
             self._s2.ensure_tokens(self.ctx, num_tokens, num_segs)
             var grid = ceildiv(num_tokens, BLOCK)
-            comptime k6 = tokenize_kernel[options.ignore_unicode]
-            self.ctx.enqueue_function[k6](
-                self._input.unsafe_ptr(),
-                self._s1.positions.unsafe_ptr(),
-                self._s1.masks.unsafe_ptr(),
-                self._s1.seg_chunk_off.unsafe_ptr(),
-                self._s1.seg_starts.unsafe_ptr(),
-                self._s2.types.unsafe_ptr(),
-                self._s2.pairs.unsafe_ptr(),
-                num_tokens,
-                num_segs,
-                self._s1.chunk_cap,
-                grid_dim=grid,
-                block_dim=BLOCK,
-            )
+            self._tokenize[options](num_tokens, num_segs)
             self.ctx.enqueue_function[pair_scan_block_kernel](
-                self._s2.pairs.unsafe_ptr(),
-                self._s2.excl.unsafe_ptr(),
-                self._s2.block_aggs.unsafe_ptr(),
-                num_tokens,
+                vec(self._s2.pairs, num_tokens),
+                vec(self._s2.excl, num_tokens),
+                vec(self._s2.block_aggs, grid),
                 grid_dim=grid,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[pair_scan_aggs_kernel](
-                self._s2.block_aggs.unsafe_ptr(),
-                self._s2.block_bases.unsafe_ptr(),
-                self._s2.totals.unsafe_ptr(),
-                grid,
+                vec(self._s2.block_aggs, grid),
+                vec(self._s2.block_bases, grid),
+                vec(self._s2.totals, 1),
                 grid_dim=1,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[pair_scan_apply_kernel](
-                self._s2.excl.unsafe_ptr(),
-                self._s2.block_bases.unsafe_ptr(),
-                num_tokens,
+                vec(self._s2.excl, num_tokens),
+                vec(self._s2.block_bases, grid),
                 grid_dim=grid,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[line_bases_kernel](
-                self._s1.positions.unsafe_ptr(),
-                self._s2.excl.unsafe_ptr(),
-                self._s2.totals.unsafe_ptr(),
-                self._s1.seg_starts.unsafe_ptr(),
-                self._s2.line_tape_base.unsafe_ptr(),
-                self._s2.line_arena_base.unsafe_ptr(),
-                num_tokens,
+                vec(self._s1.positions, num_tokens + 1),
+                vec(self._s2.excl, num_tokens),
+                vec(self._s2.totals, 1),
+                vec(self._s1.seg_starts, num_segs),
+                vec(self._s2.line_tape_base, num_segs),
+                vec(self._s2.line_arena_base, num_segs),
                 num_segs,
                 grid_dim=ceildiv(num_segs, BLOCK),
                 block_dim=BLOCK,
@@ -356,16 +537,15 @@ struct GpuSession(Movable):
 
             comptime k8 = materialize_kernel[options.ignore_unicode]
             self.ctx.enqueue_function[k8](
-                self._input.unsafe_ptr(),
-                self._s1.positions.unsafe_ptr(),
-                self._s2.types.unsafe_ptr(),
-                self._s2.excl.unsafe_ptr(),
-                self._s1.seg_starts.unsafe_ptr(),
-                self._s2.line_arena_base.unsafe_ptr(),
-                self._s2.tape_blob.unsafe_ptr(),
-                self._s2.arena_blob.unsafe_ptr(),
-                self._s2.five_table.unsafe_ptr(),
-                num_tokens,
+                vec(self._input, self._input_cap),
+                vec(self._s1.positions, num_tokens + 1),
+                vec(self._s2.types, num_tokens),
+                vec(self._s2.excl, num_tokens),
+                vec(self._s1.seg_starts, num_segs),
+                vec(self._s2.line_arena_base, num_segs),
+                vec(self._s2.tape_blob, tape_total + 1),
+                vec(self._s2.arena_blob, arena_total + 8),
+                vec(self._s2.five_table, 1302),
                 num_segs,
                 grid_dim=grid,
                 block_dim=BLOCK,
@@ -441,17 +621,15 @@ struct GpuSession(Movable):
             var grid_t = ceildiv(num_tokens, BLOCK)
             self._br.ensure(self.ctx, num_tokens, 1)
             self.ctx.enqueue_function[oc_count_kernel](
-                self._s2.types.unsafe_ptr(),
-                self._br.oc_counts.unsafe_ptr(),
-                num_tokens,
+                vec(self._s2.types, num_tokens),
+                vec(self._br.oc_counts, grid_t),
                 grid_dim=grid_t,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[scan_counts_kernel](
-                self._br.oc_counts.unsafe_ptr(),
-                self._br.oc_bases.unsafe_ptr(),
-                self._br.oc_total.unsafe_ptr(),
-                grid_t,
+                vec(self._br.oc_counts, grid_t),
+                vec(self._br.oc_bases, grid_t),
+                vec(self._br.oc_total, 1),
                 grid_dim=1,
                 block_dim=BLOCK,
             )
@@ -468,44 +646,39 @@ struct GpuSession(Movable):
             var grid_oc = ceildiv(oc_cnt, BLOCK)
 
             self.ctx.enqueue_function[oc_compact_kernel](
-                self._s2.types.unsafe_ptr(),
-                self._br.oc_bases.unsafe_ptr(),
-                self._br.oc_tok.unsafe_ptr(),
-                self._br.oc_delta.unsafe_ptr(),
-                num_tokens,
+                vec(self._s2.types, num_tokens),
+                vec(self._br.oc_bases, grid_t),
+                vec(self._br.oc_tok, oc_cnt),
+                vec(self._br.oc_delta, oc_cnt),
                 grid_dim=grid_t,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[depth_block_kernel](
-                self._br.oc_delta.unsafe_ptr(),
-                self._br.depth_incl.unsafe_ptr(),
-                self._br.depth_aggs.unsafe_ptr(),
-                oc_cnt,
+                vec(self._br.oc_delta, oc_cnt),
+                vec(self._br.depth_incl, oc_cnt),
+                vec(self._br.depth_aggs, grid_oc),
                 grid_dim=grid_oc,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[depth_aggs_kernel](
-                self._br.depth_aggs.unsafe_ptr(),
-                self._br.depth_bases.unsafe_ptr(),
-                grid_oc,
+                vec(self._br.depth_aggs, grid_oc),
+                vec(self._br.depth_bases, grid_oc),
                 grid_dim=1,
                 block_dim=BLOCK,
             )
             self._err_flag.enqueue_fill(0)
             self.ctx.enqueue_function[depth_finalize_kernel](
-                self._br.oc_delta.unsafe_ptr(),
-                self._br.depth_incl.unsafe_ptr(),
-                self._br.depth_bases.unsafe_ptr(),
-                self._br.depth_key.unsafe_ptr(),
-                self._err_flag.unsafe_ptr(),
-                oc_cnt,
+                vec(self._br.oc_delta, oc_cnt),
+                vec(self._br.depth_incl, oc_cnt),
+                vec(self._br.depth_bases, grid_oc),
+                vec(self._br.depth_key, oc_cnt),
+                vec(self._err_flag, 1),
                 grid_dim=grid_oc,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[hist_kernel](
-                self._br.depth_key.unsafe_ptr(),
-                self._br.block_hists.unsafe_ptr(),
-                oc_cnt,
+                vec(self._br.depth_key, oc_cnt),
+                vec(self._br.block_hists, grid_oc * MAX_BRACKET_DEPTH),
                 grid_oc,
                 grid_dim=grid_oc,
                 block_dim=BLOCK,
@@ -513,54 +686,48 @@ struct GpuSession(Movable):
             var hist_n = grid_oc * MAX_BRACKET_DEPTH
             var grid_h = ceildiv(hist_n, BLOCK)
             self.ctx.enqueue_function[u32_scan_block_kernel](
-                self._br.block_hists.unsafe_ptr(),
-                self._br.hist_scanned.unsafe_ptr(),
-                self._br.hist_scan_aggs.unsafe_ptr(),
-                hist_n,
+                vec(self._br.block_hists, hist_n),
+                vec(self._br.hist_scanned, hist_n),
+                vec(self._br.hist_scan_aggs, grid_h),
                 grid_dim=grid_h,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[scan_counts_kernel](
-                self._br.hist_scan_aggs.unsafe_ptr(),
-                self._br.hist_scan_bases.unsafe_ptr(),
-                self._br.oc_total.unsafe_ptr(),
-                grid_h,
+                vec(self._br.hist_scan_aggs, grid_h),
+                vec(self._br.hist_scan_bases, grid_h),
+                vec(self._br.oc_total, 1),
                 grid_dim=1,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[u32_scan_apply_kernel](
-                self._br.hist_scanned.unsafe_ptr(),
-                self._br.hist_scan_bases.unsafe_ptr(),
-                hist_n,
+                vec(self._br.hist_scanned, hist_n),
+                vec(self._br.hist_scan_bases, grid_h),
                 grid_dim=grid_h,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[sort_scatter_kernel](
-                self._br.depth_key.unsafe_ptr(),
-                self._br.oc_tok.unsafe_ptr(),
-                self._br.hist_scanned.unsafe_ptr(),
-                self._br.sorted_tok.unsafe_ptr(),
-                self._br.sorted_key.unsafe_ptr(),
-                oc_cnt,
+                vec(self._br.depth_key, oc_cnt),
+                vec(self._br.oc_tok, oc_cnt),
+                vec(self._br.hist_scanned, hist_n),
+                vec(self._br.sorted_tok, oc_cnt),
+                vec(self._br.sorted_key, oc_cnt),
                 grid_oc,
                 grid_dim=grid_oc,
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[pair_validate_kernel](
-                self._br.sorted_tok.unsafe_ptr(),
-                self._br.sorted_key.unsafe_ptr(),
-                self._s2.types.unsafe_ptr(),
-                self._br.pair_tok.unsafe_ptr(),
-                self._err_flag.unsafe_ptr(),
-                oc_cnt,
+                vec(self._br.sorted_tok, oc_cnt),
+                vec(self._br.sorted_key, oc_cnt),
+                vec(self._s2.types, num_tokens),
+                vec(self._br.pair_tok, num_tokens),
+                vec(self._err_flag, 1),
                 grid_dim=ceildiv(ceildiv(oc_cnt, 2), BLOCK),
                 block_dim=BLOCK,
             )
             self.ctx.enqueue_function[gather_pairs_kernel](
-                self._br.oc_tok.unsafe_ptr(),
-                self._br.pair_tok.unsafe_ptr(),
-                self._br.pair_compact.unsafe_ptr(),
-                oc_cnt,
+                vec(self._br.oc_tok, oc_cnt),
+                vec(self._br.pair_tok, num_tokens),
+                vec(self._br.pair_compact, oc_cnt),
                 grid_dim=grid_oc,
                 block_dim=BLOCK,
             )

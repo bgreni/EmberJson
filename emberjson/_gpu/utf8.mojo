@@ -24,12 +24,16 @@ NEON-guarded function from there is ever elaborated into the kernel.
 """
 
 from emberjson._utf8 import _BYTE_1_HIGH, _BYTE_1_LOW, _BYTE_2_HIGH, _MAX_VALUE
+from layout import Coord
 from std.atomic import Atomic
 from std.math import ceildiv
-from std.memory import UnsafePointer
 from std.sys import has_accelerator
+from std.sys.info import is_nvidia_gpu
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
+
+from ._tables import tbl16
+from ._tensor import Vec, vec
 
 comptime _C16 = SIMD[DType.uint8, 16]
 comptime _BLOCK = 256
@@ -39,15 +43,6 @@ comptime _BLOCK = 256
 def _satsub(a: _C16, b: _C16) -> _C16:
     """Per-byte saturating subtract without `llvm.usub.sat` (portable)."""
     return max(a, b) - b
-
-
-@always_inline
-def _tbl(table: _C16, idx: _C16) -> _C16:
-    """16-entry table lookup; Metal-safe per-lane extract formulation."""
-    var r = _C16(0)
-    comptime for i in range(16):
-        r[i] = table[Int(idx[i])]
-    return r
 
 
 @always_inline
@@ -61,9 +56,9 @@ def _check_block(cur: _C16, prev_chunk: _C16, mut error: _C16):
     """One 16-byte Keiser-Lemire step (see `_utf8._check_chunk`)."""
     var prev1 = _prev_shift[1](prev_chunk, cur)
     var sc = (
-        _tbl(_BYTE_1_HIGH, prev1 >> 4)
-        & _tbl(_BYTE_1_LOW, prev1 & 0xF)
-        & _tbl(_BYTE_2_HIGH, cur >> 4)
+        tbl16(_BYTE_1_HIGH, prev1 >> 4)
+        & tbl16(_BYTE_1_LOW, prev1 & 0xF)
+        & tbl16(_BYTE_2_HIGH, cur >> 4)
     )
     var prev2 = _prev_shift[2](prev_chunk, cur)
     var prev3 = _prev_shift[3](prev_chunk, cur)
@@ -75,25 +70,23 @@ def _check_block(cur: _C16, prev_chunk: _C16, mut error: _C16):
     error |= must23_80 ^ sc
 
 
-def _utf8_kernel(
-    inp: UnsafePointer[UInt8, MutAnyOrigin],
-    err_flag: UnsafePointer[Int32, MutAnyOrigin],
-    num_chunks: Int,
-):
-    var c = global_idx.x
-    if c >= num_chunks:
+def _utf8_kernel(inp: Vec[DType.uint8], err_flag: Vec[DType.int32]):
+    # `inp` is viewed as exactly the chunks this batch validates, so the
+    # chunk count is the view's own extent rather than a passed-in count.
+    var c = Int(global_idx.x)
+    if c >= inp.layout.size() // 64:
         return
-    var base = inp + c * 64
+    var base = c * 64
 
     var prev: _C16
     if c == 0:
         prev = _C16(0)
     else:
-        prev = (base - 16).load[width=16]()
+        prev = inp.raw_load[width=16, alignment=16](base - 16)
 
     var error = _C16(0)
     comptime for r in range(4):
-        var cur = (base + r * 16).load[width=16]()
+        var cur = inp.raw_load[width=16, alignment=16](base + r * 16)
         if (cur & 0x80).reduce_max() == 0:
             # All-ASCII block: only a dangling lead in prev can be wrong.
             error |= _satsub(prev, _MAX_VALUE)
@@ -102,7 +95,7 @@ def _utf8_kernel(
         prev = cur
 
     if error.reduce_max() != 0:
-        _ = Atomic.fetch_add(err_flag, 1)
+        _ = Atomic.fetch_add(err_flag.ptr, 1)
 
 
 @always_inline
@@ -127,9 +120,8 @@ def run_utf8_validation(
     """
     comptime if has_accelerator():
         ctx.enqueue_function[_utf8_kernel](
-            input_dev.unsafe_ptr(),
-            err_flag.unsafe_ptr(),
-            num_chunks,
+            vec(input_dev, num_chunks * 64),
+            vec(err_flag, 1),
             grid_dim=ceildiv(num_chunks, _BLOCK),
             block_dim=_BLOCK,
         )

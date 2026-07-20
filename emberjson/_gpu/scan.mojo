@@ -23,15 +23,16 @@ CPU; the kernels at the bottom run the small mid-level pass over
 per-block aggregates in a single threadgroup.
 """
 
+from layout import row_major, stack_allocation
 from std.bit import pop_count
 from std.math import ceildiv
-from std.memory import UnsafePointer, stack_allocation
 from std.sys import has_accelerator
 from std.gpu import barrier, thread_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu.memory import AddressSpace
 
 from emberjson._index.portable import escape_next, prefix_xor_portable
+from ._tensor import Vec
 
 comptime SCAN_BLOCK = 256
 
@@ -105,9 +106,8 @@ def chunk_transfer_element(
 
 
 def scan_aggregates_kernel(
-    aggs: UnsafePointer[UInt16, MutAnyOrigin],
-    block_states: UnsafePointer[UInt8, MutAnyOrigin],
-    num_blocks: Int,
+    aggs: Vec[DType.uint16],
+    block_states: Vec[DType.uint8],
 ):
     """Single-threadgroup pass: turns per-block aggregate elements into
     each block's carry-in state (evaluated from the (0,0) initial state).
@@ -117,9 +117,10 @@ def scan_aggregates_kernel(
     composition of aggregates [0, b)).
     """
     var tid = thread_idx.x
+    var num_blocks = aggs.layout.size()
     var shared = stack_allocation[
-        SCAN_BLOCK, UInt16, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint16, address_space=AddressSpace.SHARED
+    ](row_major[SCAN_BLOCK]())
     var carried: UInt16 = IDENTITY_ELEM
 
     var tile_start = 0
@@ -152,17 +153,17 @@ def scan_aggregates_kernel(
 
 
 def scan_counts_kernel(
-    count_aggs: UnsafePointer[UInt32, MutAnyOrigin],
-    count_bases: UnsafePointer[UInt32, MutAnyOrigin],
-    total_out: UnsafePointer[UInt32, MutAnyOrigin],
-    num_blocks: Int,
+    count_aggs: Vec[DType.uint32],
+    count_bases: Vec[DType.uint32],
+    total_out: Vec[DType.uint32],
 ):
     """Single-threadgroup exclusive sum over per-block structural counts;
     also writes the grand total (for the sentinel writer and readback)."""
     var tid = thread_idx.x
+    var num_blocks = count_aggs.layout.size()
     var shared = stack_allocation[
-        SCAN_BLOCK, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[SCAN_BLOCK]())
     var carried: UInt32 = 0
 
     var tile_start = 0

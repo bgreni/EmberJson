@@ -1,4 +1,4 @@
-from emberjson import GpuSession, gpu_is_valid_utf8, is_valid_utf8
+from emberjson import GpuSession, is_valid_utf8
 from emberjson._utf8 import _is_valid_utf8_scalar
 from std.sys import has_accelerator
 from std.testing import *
@@ -41,11 +41,10 @@ def sweep_gpu(
         check_gpu(s, buf, expected, label + " @pad " + String(pad))
 
 
-def test_gpu_valid_sequences() raises:
+def _valid_sequences(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         sweep_gpu(s, [0xC3, 0xA9], True, "é")
         sweep_gpu(s, [0xE2, 0x82, 0xAC], True, "€")
         sweep_gpu(s, [0xF0, 0x9F, 0x94, 0xA5], True, "🔥")
@@ -62,11 +61,10 @@ def test_gpu_valid_sequences() raises:
         check_gpu(s, List[Byte](), True, "empty input")
 
 
-def test_gpu_invalid_sequences() raises:
+def _invalid_sequences(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         sweep_gpu(s, [0x80], False, "bare continuation")
         sweep_gpu(s, [0xC0, 0xAF], False, "overlong 2-byte")
         sweep_gpu(s, [0xC1, 0xBF], False, "overlong 2-byte C1")
@@ -86,11 +84,10 @@ def test_gpu_invalid_sequences() raises:
         )
 
 
-def test_gpu_corpus_agrees_with_cpu() raises:
+def _corpus_agrees_with_cpu(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         comptime files = [
             "bench_data/data/twitter.json",
             "bench_data/data/citm_catalog.json",
@@ -107,14 +104,13 @@ def test_gpu_corpus_agrees_with_cpu() raises:
             assert_true(s.is_valid_utf8(sl), path)
 
 
-def test_gpu_random_mutation_agreement() raises:
+def _random_mutation_agreement(mut s: GpuSession) raises:
     """Mutation fuzz: random byte soups and corrupted valid strings must
     get identical verdicts from the GPU kernel and the scalar reference.
     Fixed seed for reproducibility."""
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         var rng = Rng(seed=0xE77BE12)
 
         # Random byte soups (mostly invalid) across chunk-count regimes.
@@ -144,11 +140,25 @@ def test_gpu_random_mutation_agreement() raises:
             assert_equal(got, expect, "corrupt @" + String(pos))
 
 
-def test_gpu_one_shot_free_function() raises:
+def test_gpu_utf8_suite() raises:
+    """All UTF-8 differentials on ONE shared session.
+
+    The current NVIDIA/CUDA toolchain deadlocks when a process
+    constructs a second DeviceContext-owning session (AsyncRT
+    multi-context hang; the first construction always works, Metal is
+    unaffected) — so this file runs every subtest against a single
+    session, which is also `GpuSession`'s documented usage pattern.
+    The `gpu_is_valid_utf8` one-shot wrapper (a transient session per
+    call) moved to test_gpu_free_functions.mojo for the same reason.
+    """
     comptime if not has_accelerator():
         return
     else:
-        assert_true(gpu_is_valid_utf8("héllo 🔥 wörld"))
+        var s = GpuSession()
+        _valid_sequences(s)
+        _invalid_sequences(s)
+        _corpus_agrees_with_cpu(s)
+        _random_mutation_agreement(s)
 
 
 def main() raises:

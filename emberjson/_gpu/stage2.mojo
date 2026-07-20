@@ -31,7 +31,7 @@ close-quotes 0 — matching the CPU tape layout exactly.
 
 from std.bit import count_leading_zeros
 from std.math import ceildiv
-from std.memory import UnsafePointer, stack_allocation
+from layout import row_major, stack_allocation
 from std.sys import has_accelerator
 from std.gpu import barrier, global_idx, thread_idx
 from std.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
@@ -42,8 +42,17 @@ from emberjson._deserialize._parser_helper import (
     largest_power,
     smallest_power,
 )
+from std.sys.info import is_nvidia_gpu
+from ._tensor import Vec, vec
 from .numbers import device_write_float_bits
-from .stage1 import BLOCK, _seg_of
+from .stage1 import (
+    BLOCK,
+    _SWAR_HIGH,
+    _SWAR_ONES,
+    _load_u64 as _load_u64_any,
+    _seg_of,
+    _swar_eq_mask,
+)
 
 # ---------------------------------------------------------------------
 # Token model
@@ -117,7 +126,7 @@ def _token_end_ok(b: UInt8) -> Bool:
 
 
 @always_inline
-def _hex4(p: UnsafePointer[UInt8, MutAnyOrigin]) -> Tuple[UInt32, Bool]:
+def _hex4(inp: Vec[DType.uint8], off: Int) -> Tuple[UInt32, Bool]:
     """Four hex digits -> value; mirrors `hex_to_u32` (which raises).
 
     Single-exit shape: early returns inside loops miscompile on Metal
@@ -126,7 +135,7 @@ def _hex4(p: UnsafePointer[UInt8, MutAnyOrigin]) -> Tuple[UInt32, Bool]:
     var v: UInt32 = 0
     var ok = True
     comptime for k in range(4):
-        var b = p[k]
+        var b = inp[off + k]
         if b >= UInt8(ord("0")) and b <= UInt8(ord("9")):
             v = (v << 4) | UInt32(b - UInt8(ord("0")))
         elif b >= UInt8(ord("a")) and b <= UInt8(ord("f")):
@@ -157,9 +166,11 @@ def _is_acceptable_escape(c: UInt8) -> Bool:
 def _device_string_pass[
     write: Bool, ignore_unicode: Bool
 ](
-    src: UnsafePointer[UInt8, MutAnyOrigin],
+    src: Vec[DType.uint8],
+    src_off: Int,
     n: Int,
-    dst: UnsafePointer[UInt8, MutAnyOrigin],
+    dst: Vec[DType.uint8],
+    dst_off: Int,
 ) -> Tuple[Int, Bool]:
     """Validate + measure (write=False) or decode (write=True) the string
     content span. Returns (unescaped length, ok).
@@ -178,26 +189,26 @@ def _device_string_pass[
     var w = 0
     var ok = True
     while ok and i < n:
-        var c = src[i]
+        var c = src[src_off + i]
         if c < 0x20:
             ok = False
         elif c != UInt8(ord("\\")):
             comptime if write:
-                dst[w] = c
+                dst[dst_off + w] = c
             w += 1
             i += 1
         elif i + 1 >= n:
             ok = False
         else:
-            var e = src[i + 1]
+            var e = src[src_off + i + 1]
             if not _is_acceptable_escape(e):
                 ok = False
             else:
                 comptime if ignore_unicode:
                     # Verbatim: keep the escape bytes (names validated).
                     comptime if write:
-                        dst[w] = c
-                        dst[w + 1] = e
+                        dst[dst_off + w] = c
+                        dst[dst_off + w + 1] = e
                     w += 2
                     i += 2
                 else:
@@ -216,14 +227,14 @@ def _device_string_pass[
                         else:
                             out = e  # " \ /
                         comptime if write:
-                            dst[w] = out
+                            dst[dst_off + w] = out
                         w += 1
                         i += 2
                     elif i + 5 >= n:
                         ok = False
                     else:
                         # \uXXXX (possibly a surrogate pair).
-                        var h = _hex4(src + i + 2)
+                        var h = _hex4(src, src_off + i + 2)
                         var cp = h[0]
                         var have = h[1]
                         if not have:
@@ -236,12 +247,12 @@ def _device_string_pass[
                             if i + 5 >= n + 1:
                                 ok = False
                             elif not (
-                                src[i] == UInt8(ord("\\"))
-                                and src[i + 1] == UInt8(ord("u"))
+                                src[src_off + i] == UInt8(ord("\\"))
+                                and src[src_off + i + 1] == UInt8(ord("u"))
                             ):
                                 ok = False
                             else:
-                                var h2 = _hex4(src + i + 2)
+                                var h2 = _hex4(src, src_off + i + 2)
                                 if not h2[1]:
                                     ok = False
                                 elif h2[0] < 0xDC00 or h2[0] >= 0xE000:
@@ -256,31 +267,37 @@ def _device_string_pass[
                         if ok:
                             if cp < 0x80:
                                 comptime if write:
-                                    dst[w] = UInt8(cp)
+                                    dst[dst_off + w] = UInt8(cp)
                                 w += 1
                             elif cp < 0x800:
                                 comptime if write:
-                                    dst[w] = UInt8(0xC0 | (cp >> 6))
-                                    dst[w + 1] = UInt8(0x80 | (cp & 0x3F))
+                                    dst[dst_off + w] = UInt8(0xC0 | (cp >> 6))
+                                    dst[dst_off + w + 1] = UInt8(
+                                        0x80 | (cp & 0x3F)
+                                    )
                                 w += 2
                             elif cp < 0x10000:
                                 comptime if write:
-                                    dst[w] = UInt8(0xE0 | (cp >> 12))
-                                    dst[w + 1] = UInt8(
+                                    dst[dst_off + w] = UInt8(0xE0 | (cp >> 12))
+                                    dst[dst_off + w + 1] = UInt8(
                                         0x80 | ((cp >> 6) & 0x3F)
                                     )
-                                    dst[w + 2] = UInt8(0x80 | (cp & 0x3F))
+                                    dst[dst_off + w + 2] = UInt8(
+                                        0x80 | (cp & 0x3F)
+                                    )
                                 w += 3
                             else:
                                 comptime if write:
-                                    dst[w] = UInt8(0xF0 | (cp >> 18))
-                                    dst[w + 1] = UInt8(
+                                    dst[dst_off + w] = UInt8(0xF0 | (cp >> 18))
+                                    dst[dst_off + w + 1] = UInt8(
                                         0x80 | ((cp >> 12) & 0x3F)
                                     )
-                                    dst[w + 2] = UInt8(
+                                    dst[dst_off + w + 2] = UInt8(
                                         0x80 | ((cp >> 6) & 0x3F)
                                     )
-                                    dst[w + 3] = UInt8(0x80 | (cp & 0x3F))
+                                    dst[dst_off + w + 3] = UInt8(
+                                        0x80 | (cp & 0x3F)
+                                    )
                                 w += 4
     return (w, ok)
 
@@ -291,18 +308,18 @@ def _device_string_pass[
 
 
 @always_inline
-def _load_u64_le(p: UnsafePointer[UInt8, MutAnyOrigin]) -> UInt64:
+def _load_u64_le(inp: Vec[DType.uint8], off: Int) -> UInt64:
     """Byte-wise unaligned u64 load: Metal silently rounds misaligned
     typed loads down to their natural alignment."""
     var v: UInt64 = 0
     comptime for k in range(8):
-        v |= UInt64(p[k]) << UInt64(8 * k)
+        v |= UInt64(inp[off + k]) << UInt64(8 * k)
     return v
 
 
 @always_inline
-def _swar_eight_digits(p: UnsafePointer[UInt8, MutAnyOrigin]) -> Bool:
-    var val = _load_u64_le(p)
+def _swar_eight_digits(inp: Vec[DType.uint8], off: Int) -> Bool:
+    var val = _load_u64_le(inp, off)
     return (
         (val & 0xF0F0F0F0F0F0F0F0)
         | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)
@@ -310,8 +327,8 @@ def _swar_eight_digits(p: UnsafePointer[UInt8, MutAnyOrigin]) -> Bool:
 
 
 @always_inline
-def _swar_parse_eight(p: UnsafePointer[UInt8, MutAnyOrigin]) -> UInt64:
-    var val = _load_u64_le(p)
+def _swar_parse_eight(inp: Vec[DType.uint8], off: Int) -> UInt64:
+    var val = _load_u64_le(inp, off)
     val = (val & 0x0F0F0F0F0F0F0F0F) * 2561 >> 8
     val = (val & 0x00FF00FF00FF00FF) * 6553601 >> 16
     val = (val & 0x0000FFFF0000FFFF) * 42949672960001 >> 32
@@ -325,14 +342,14 @@ def _isdigit(b: UInt8) -> Bool:
 
 @always_inline
 def _significant_digits(
-    p: UnsafePointer[UInt8, MutAnyOrigin], digit_count: Int
+    inp: Vec[DType.uint8], off: Int, digit_count: Int
 ) -> Int:
     """Mirror of `_parser_helper.significant_digits`: strip leading
     zeros (and the radix point while leading)."""
-    var start = p
+    var start = off
     var count = digit_count
     while count > 0:
-        var b = start[0]
+        var b = inp[start]
         if b == UInt8(ord("0")) or b == UInt8(ord(".")):
             start += 1
             count -= 1
@@ -343,82 +360,82 @@ def _significant_digits(
 
 @always_inline
 def device_parse_number(
-    inp: UnsafePointer[UInt8, MutAnyOrigin],
+    inp: Vec[DType.uint8],
     pos: Int,
-    five_table: UnsafePointer[UInt64, MutAnyOrigin],
+    five_table: Vec[DType.uint64],
 ) -> Tuple[UInt8, UInt64, Bool]:
     """(kind: 0 int64 / 1 uint64 / 2 float64 — RawNumber order, bits,
     ok). The input is padded, so 8-byte reads are always in-bounds
     (mirroring the CPU's `padded` mode). Any grammar error or slow path
     -> not ok (the host redo reproduces the exact value/verdict)."""
-    var p = inp + pos
-    if p[0] == UInt8(ord("+")):
+    var p = pos
+    if inp[p] == UInt8(ord("+")):
         return (UInt8(0), UInt64(0), False)
-    var neg = p[0] == UInt8(ord("-"))
+    var neg = inp[p] == UInt8(ord("-"))
     p += Int(neg)
 
     var start_digits = p
     var i: UInt64 = 0
-    while _swar_eight_digits(p):
-        i = i * 100_000_000 + _swar_parse_eight(p)
+    while _swar_eight_digits(inp, p):
+        i = i * 100_000_000 + _swar_parse_eight(inp, p)
         p += 8
-    while _isdigit(p[0]):
-        i = i * 10 + UInt64(p[0] - UInt8(ord("0")))
+    while _isdigit(inp[p]):
+        i = i * 10 + UInt64(inp[p] - UInt8(ord("0")))
         p += 1
 
-    var digit_count = Int(p) - Int(start_digits)
+    var digit_count = p - start_digits
     if digit_count == 0 or (
-        start_digits[0] == UInt8(ord("0")) and digit_count > 1
+        inp[start_digits] == UInt8(ord("0")) and digit_count > 1
     ):
         return (UInt8(0), UInt64(0), False)
 
     var exponent: Int64 = 0
     var is_float = False
 
-    if p[0] == UInt8(ord(".")):
+    if inp[p] == UInt8(ord(".")):
         is_float = True
         p += 1
         var first_after = p
-        while _swar_eight_digits(p):
-            i = i * 100_000_000 + _swar_parse_eight(p)
+        while _swar_eight_digits(inp, p):
+            i = i * 100_000_000 + _swar_parse_eight(inp, p)
             p += 8
-        while _isdigit(p[0]):
-            i = i * 10 + UInt64(p[0] - UInt8(ord("0")))
+        while _isdigit(inp[p]):
+            i = i * 10 + UInt64(inp[p] - UInt8(ord("0")))
             p += 1
-        exponent = Int64(Int(first_after) - Int(p))
+        exponent = Int64(first_after - p)
         if exponent == 0:
             return (UInt8(0), UInt64(0), False)
-        digit_count = Int(p) - Int(start_digits)
+        digit_count = p - start_digits
 
-    if p[0] == UInt8(ord("e")) or p[0] == UInt8(ord("E")):
+    if inp[p] == UInt8(ord("e")) or inp[p] == UInt8(ord("E")):
         is_float = True
         p += 1
-        var neg_exp = p[0] == UInt8(ord("-"))
-        p += Int(neg_exp or p[0] == UInt8(ord("+")))
-        if p[0] == UInt8(ord("e")) or p[0] == UInt8(ord("E")):
+        var neg_exp = inp[p] == UInt8(ord("-"))
+        p += Int(neg_exp or inp[p] == UInt8(ord("+")))
+        if inp[p] == UInt8(ord("e")) or inp[p] == UInt8(ord("E")):
             return (UInt8(0), UInt64(0), False)
         var start_exp = p
         var exp_number: Int64 = 0
-        while _isdigit(p[0]):
-            exp_number = exp_number * 10 + Int64(p[0] - UInt8(ord("0")))
+        while _isdigit(inp[p]):
+            exp_number = exp_number * 10 + Int64(inp[p] - UInt8(ord("0")))
             p += 1
         if p == start_exp:
             return (UInt8(0), UInt64(0), False)
-        if Int(p) > Int(start_exp) + 18:
-            while start_exp[0] == UInt8(ord("0")):
+        if p > start_exp + 18:
+            while inp[start_exp] == UInt8(ord("0")):
                 start_exp += 1
-            if Int(p) > Int(start_exp) + 18:
+            if p > start_exp + 18:
                 exp_number = 999999999999999999
         exponent += -exp_number if neg_exp else exp_number
 
     # Token end: the byte after the number must terminate it.
-    if not _token_end_ok(p[0]):
+    if not _token_end_ok(inp[p]):
         return (UInt8(0), UInt64(0), False)
 
     if is_float:
         var long_digits = (
             digit_count > 19
-            and _significant_digits(start_digits, digit_count) > 19
+            and _significant_digits(inp, start_digits, digit_count) > 19
         )
         var f = device_write_float_bits(
             exponent, i, neg, long_digits, five_table
@@ -452,18 +469,18 @@ def device_parse_number(
 def tokenize_kernel[
     ignore_unicode: Bool
 ](
-    inp: UnsafePointer[UInt8, MutAnyOrigin],
-    positions: UnsafePointer[UInt32, MutAnyOrigin],
-    masks: UnsafePointer[UInt64, MutAnyOrigin],
-    seg_chunk_off: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    types: UnsafePointer[UInt8, MutAnyOrigin],
-    pairs: UnsafePointer[UInt64, MutAnyOrigin],
-    num_tokens: Int,
+    inp: Vec[DType.uint8],
+    positions: Vec[DType.uint32],
+    masks: Vec[DType.uint64],
+    seg_chunk_off: Vec[DType.uint32],
+    seg_starts: Vec[DType.uint32],
+    types: Vec[DType.uint8],
+    pairs: Vec[DType.uint64],
     num_segs: Int,
     stride: Int,
 ):
     """Per structural position: type + (tape width << 32 | arena len)."""
+    var num_tokens = types.layout.size()
     var t = global_idx.x
     if t >= num_tokens:
         return
@@ -502,23 +519,36 @@ def tokenize_kernel[
                 ty = TOK_STRING | TOK_REDO
             else:
                 # Fast path: most strings have no escapes and no control
-                # bytes — one 16-wide SIMD sweep decides, and K8 then
-                # bulk-copies instead of running the decode loop.
-                var sp = inp + pos + 1
+                # bytes — one wide sweep decides, and K8 then
+                # bulk-copies instead of running the decode loop. On
+                # NVIDIA the sweep is u64 SWAR (byte-vector ops
+                # scalarize in PTX); the boolean-only classic HasLess
+                # trick is safe here because a false positive can only
+                # sit above a true positive.
+                var sp = pos + 1
                 var nn = close - pos - 1
                 var clean = True
                 var j = 0
-                while clean and j + 16 <= nn:
-                    var v = (sp + j).load[width=16]()
-                    var bad = v.lt(SIMD[DType.uint8, 16](0x20)) | v.eq(
-                        SIMD[DType.uint8, 16](0x5C)
-                    )
-                    if bad.cast[DType.uint8]().reduce_max() != 0:
-                        clean = False
-                    else:
-                        j += 16
+                comptime if is_nvidia_gpu():
+                    while clean and j + 8 <= nn:
+                        var x = _load_u64_any(inp, sp + j)
+                        var lt20 = (x - 0x20 * _SWAR_ONES) & ~x & _SWAR_HIGH
+                        if (lt20 | _swar_eq_mask(x, 0x5C)) != 0:
+                            clean = False
+                        else:
+                            j += 8
+                else:
+                    while clean and j + 16 <= nn:
+                        var v = inp.raw_load[width=16](sp + j)
+                        var bad = v.lt(SIMD[DType.uint8, 16](0x20)) | v.eq(
+                            SIMD[DType.uint8, 16](0x5C)
+                        )
+                        if bad.cast[DType.uint8]().reduce_max() != 0:
+                            clean = False
+                        else:
+                            j += 16
                 while clean and j < nn:
-                    var c2 = sp[j]
+                    var c2 = inp[sp + j]
                     if c2 < 0x20 or c2 == UInt8(0x5C):
                         clean = False
                     else:
@@ -528,7 +558,7 @@ def tokenize_kernel[
                     alen = 4 + nn + 1
                 else:
                     var r = _device_string_pass[False, ignore_unicode](
-                        sp, nn, inp
+                        inp, sp, nn, inp, 0
                     )
                     if r[1]:
                         alen = 4 + r[0] + 1
@@ -580,7 +610,7 @@ def tokenize_kernel[
 
 @always_inline
 def _byte_seg_of(
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
+    seg_starts: Vec[DType.uint32],
     num_segs: Int,
     pos: Int,
 ) -> Int:
@@ -603,20 +633,20 @@ def _byte_seg_of(
 
 
 def pair_scan_block_kernel(
-    pairs: UnsafePointer[UInt64, MutAnyOrigin],
-    excl: UnsafePointer[UInt64, MutAnyOrigin],
-    block_aggs: UnsafePointer[UInt64, MutAnyOrigin],
-    n: Int,
+    pairs: Vec[DType.uint64],
+    excl: Vec[DType.uint64],
+    block_aggs: Vec[DType.uint64],
 ):
     """K7a: per-block exclusive scan; writes block totals."""
+    var n = pairs.layout.size()
     var tid = thread_idx.x
     var g = global_idx.x
     var v: UInt64 = 0
     if g < n:
         v = pairs[g]
     var shared = stack_allocation[
-        BLOCK, UInt64, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint64, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = v
     barrier()
     var offset = 1
@@ -635,16 +665,16 @@ def pair_scan_block_kernel(
 
 
 def pair_scan_aggs_kernel(
-    block_aggs: UnsafePointer[UInt64, MutAnyOrigin],
-    block_bases: UnsafePointer[UInt64, MutAnyOrigin],
-    totals: UnsafePointer[UInt64, MutAnyOrigin],
-    num_blocks: Int,
+    block_aggs: Vec[DType.uint64],
+    block_bases: Vec[DType.uint64],
+    totals: Vec[DType.uint64],
 ):
     """K7b: single-threadgroup scan of block totals + grand total."""
+    var num_blocks = block_aggs.layout.size()
     var tid = thread_idx.x
     var shared = stack_allocation[
-        BLOCK, UInt64, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint64, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     var carried: UInt64 = 0
     var tile = 0
     while tile < num_blocks:
@@ -676,27 +706,27 @@ def pair_scan_aggs_kernel(
 
 
 def pair_scan_apply_kernel(
-    excl: UnsafePointer[UInt64, MutAnyOrigin],
-    block_bases: UnsafePointer[UInt64, MutAnyOrigin],
-    n: Int,
+    excl: Vec[DType.uint64],
+    block_bases: Vec[DType.uint64],
 ):
     """K7c: add each block's base to its exclusive prefixes."""
+    var n = excl.layout.size()
     var g = global_idx.x
     if g < n:
         excl[g] += block_bases[g // BLOCK]
 
 
 def line_bases_kernel(
-    positions: UnsafePointer[UInt32, MutAnyOrigin],
-    excl: UnsafePointer[UInt64, MutAnyOrigin],
-    totals: UnsafePointer[UInt64, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    line_tape_base: UnsafePointer[UInt32, MutAnyOrigin],
-    line_arena_base: UnsafePointer[UInt32, MutAnyOrigin],
-    num_tokens: Int,
+    positions: Vec[DType.uint32],
+    excl: Vec[DType.uint64],
+    totals: Vec[DType.uint64],
+    seg_starts: Vec[DType.uint32],
+    line_tape_base: Vec[DType.uint32],
+    line_arena_base: Vec[DType.uint32],
     num_segs: Int,
 ):
     """K7d: per segment, the tape/arena offsets of its first token."""
+    var num_tokens = excl.layout.size()
     var s = global_idx.x
     if s >= num_segs:
         return
@@ -727,18 +757,18 @@ def line_bases_kernel(
 def materialize_kernel[
     ignore_unicode: Bool
 ](
-    inp: UnsafePointer[UInt8, MutAnyOrigin],
-    positions: UnsafePointer[UInt32, MutAnyOrigin],
-    types: UnsafePointer[UInt8, MutAnyOrigin],
-    excl: UnsafePointer[UInt64, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    line_arena_base: UnsafePointer[UInt32, MutAnyOrigin],
-    tape_blob: UnsafePointer[UInt64, MutAnyOrigin],
-    arena_blob: UnsafePointer[UInt8, MutAnyOrigin],
-    five_table: UnsafePointer[UInt64, MutAnyOrigin],
-    num_tokens: Int,
+    inp: Vec[DType.uint8],
+    positions: Vec[DType.uint32],
+    types: Vec[DType.uint8],
+    excl: Vec[DType.uint64],
+    seg_starts: Vec[DType.uint32],
+    line_arena_base: Vec[DType.uint32],
+    tape_blob: Vec[DType.uint64],
+    arena_blob: Vec[DType.uint8],
+    five_table: Vec[DType.uint64],
     num_segs: Int,
 ):
+    var num_tokens = types.layout.size()
     var t = global_idx.x
     if t >= num_tokens:
         return
@@ -765,34 +795,36 @@ def materialize_kernel[
         var s = _byte_seg_of(seg_starts, num_segs, pos)
         var local_off = arena_g - Int(line_arena_base[s])
         var close = Int(positions[t + 1])
-        var content = arena_blob + arena_g + 4
+        var content = arena_g + 4
         var wlen: Int
         if (ty & TOK_CLEAN) != 0:
-            var sp = inp + pos + 1
+            var sp = pos + 1
             var nn = close - pos - 1
             var j = 0
             while j + 16 <= nn:
-                (content + j).store((sp + j).load[width=16]())
+                arena_blob.raw_store[width=16](
+                    content + j, inp.raw_load[width=16](sp + j)
+                )
                 j += 16
             while j < nn:
-                content[j] = sp[j]
+                arena_blob[content + j] = inp[sp + j]
                 j += 1
             wlen = nn
         else:
             var r = _device_string_pass[True, ignore_unicode](
-                inp + pos + 1, close - pos - 1, content
+                inp, pos + 1, close - pos - 1, arena_blob, content
             )
             wlen = r[0]
         # Byte-wise little-endian length: the arena is a packed byte
         # stream, and Metal silently rounds MISALIGNED typed stores down
         # to their natural alignment (probed via corrupted neighbors).
-        var w = arena_blob + arena_g
+        var w = arena_g
         var l = UInt32(wlen)
-        w[0] = UInt8(l & 0xFF)
-        w[1] = UInt8((l >> 8) & 0xFF)
-        w[2] = UInt8((l >> 16) & 0xFF)
-        w[3] = UInt8((l >> 24) & 0xFF)
-        content[wlen] = 0
+        arena_blob[w] = UInt8(l & 0xFF)
+        arena_blob[w + 1] = UInt8((l >> 8) & 0xFF)
+        arena_blob[w + 2] = UInt8((l >> 16) & 0xFF)
+        arena_blob[w + 3] = UInt8((l >> 24) & 0xFF)
+        arena_blob[content + wlen] = 0
         tape_blob[slot] = _pack_word(TapeTag.STRING, UInt64(local_off))
     elif kind == TOK_OPEN_OBJ:
         tape_blob[slot] = _pack_word(TapeTag.OBJECT_OPEN, 0)
@@ -835,9 +867,7 @@ struct Stage2Buffers(Movable):
     var tape_cap: Int
     var arena_cap: Int
 
-    def __init__(
-        out self, ctx: DeviceContext, five: UnsafePointer[UInt64, _]
-    ) raises:
+    def __init__(out self, ctx: DeviceContext, five: Span[UInt64, _]) raises:
         comptime MIN_TOK = 4096
         comptime MIN_SEG = 16
         comptime MIN_TAPE = 4096

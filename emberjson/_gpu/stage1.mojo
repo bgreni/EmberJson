@@ -47,8 +47,10 @@ lines to skip.
 
 from std.bit import count_trailing_zeros, pop_count
 from std.math import ceildiv
-from std.memory import UnsafePointer, memcpy, stack_allocation
+from layout import row_major, stack_allocation
+from std.memory import bitcast, memcpy, pack_bits
 from std.sys import has_accelerator
+from std.sys.info import is_nvidia_gpu
 from std.atomic import Atomic
 from std.gpu import barrier, global_idx, thread_idx
 from std.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
@@ -73,6 +75,8 @@ from .scan import (
     scan_aggregates_kernel,
     scan_counts_kernel,
 )
+from ._tables import tbl16
+from ._tensor import Vec, vec
 
 comptime _C16 = SIMD[DType.uint8, 16]
 comptime _B16 = SIMD[DType.bool, 16]
@@ -81,35 +85,98 @@ comptime BLOCK = 256
 
 @always_inline
 def _movemask16(v: _B16) -> UInt64:
-    """Bool16 -> 16-bit mask; Metal-safe unrolled extraction."""
-    var m: UInt64 = 0
-    comptime for i in range(16):
-        if v[i]:
-            m |= UInt64(1) << UInt64(i)
-    return m
+    """Bool16 -> 16-bit mask; native `pack_bits` on NVIDIA (probed
+    SUPPORTED on sm_86), Metal-safe unrolled extraction elsewhere
+    (`pack_bits` crashes the Metal shader compiler)."""
+    comptime if is_nvidia_gpu():
+        return UInt64(pack_bits(v))
+    else:
+        var m: UInt64 = 0
+        comptime for i in range(16):
+            if v[i]:
+                m |= UInt64(1) << UInt64(i)
+        return m
 
 
 @always_inline
 def _movemask64(a: _B16, b: _B16, c: _B16, d: _B16) -> UInt64:
-    return (
-        _movemask16(a)
-        | _movemask16(b) << 16
-        | _movemask16(c) << 32
-        | _movemask16(d) << 48
-    )
-
-
-@always_inline
-def _tbl(table: _C16, idx: _C16) -> _C16:
-    var r = _C16(0)
-    comptime for i in range(16):
-        r[i] = table[Int(idx[i])]
-    return r
+    comptime if is_nvidia_gpu():
+        return pack_bits(a.join(b).join(c.join(d)))
+    else:
+        return (
+            _movemask16(a)
+            | _movemask16(b) << 16
+            | _movemask16(c) << 32
+            | _movemask16(d) << 48
+        )
 
 
 @always_inline
 def _satsub(a: _C16, b: _C16) -> _C16:
     return max(a, b) - b
+
+
+# --- NVIDIA SWAR classification -------------------------------------
+# PTX has no 16-lane byte vectors: every `_C16` op scalarizes to ~16
+# instructions, which made K1 run ~50x above its memory floor (measured
+# 25 ms @ 420 MB vs 0.5 ms for the u64-scalar K3). The u64 SWAR forms
+# below classify 8 bytes per ALU op chain instead. Metal keeps the
+# byte-SIMD forms (native 16-byte vectors there); cuJSON's kernels use
+# the same word-parallel trick for the same reason.
+
+comptime _SWAR_ONES: UInt64 = 0x0101010101010101
+comptime _SWAR_HIGH: UInt64 = 0x8080808080808080
+comptime _SWAR_PACK: UInt64 = 0x0102040810204080
+
+
+@always_inline
+def _swar_eq_mask(x: UInt64, c: UInt8) -> UInt64:
+    """0x80 in every byte of `x` that equals `c`, 0 elsewhere.
+
+    Exact per-byte form (`~(t | ((t | HIGH) - ONES)) & HIGH`): the
+    subtraction cannot borrow across bytes because every byte of
+    `t | HIGH` is >= 0x80, unlike the classic zero-byte trick, which
+    false-positives on a 0x01 byte sitting above a true match."""
+    var t = x ^ (UInt64(c) * _SWAR_ONES)
+    return ~(t | ((t | _SWAR_HIGH) - _SWAR_ONES)) & _SWAR_HIGH
+
+
+@always_inline
+def _swar_pack8(m: UInt64) -> UInt64:
+    """Per-byte 0x80 flags -> 8-bit mask (byte j -> bit j)."""
+    return ((m >> 7) * _SWAR_PACK) >> 56
+
+
+@always_inline
+def _load_u64(inp: Vec[DType.uint8], offset: Int) -> UInt64:
+    """Little-endian u64 at any byte address.
+
+    A width-8 load at an unknown alignment lowers to an 8-iteration
+    per-byte loop on NVIDIA (the compiler cannot prove 8-byte alignment,
+    and a typed misaligned load faults on CUDA / address-rounds on
+    Metal) — ~24 PTX ops instead of one `ld.global.b64`. Instead, load
+    the two 8-aligned words straddling `offset` and funnel-shift.
+
+    Single-segment inputs have 64-aligned chunk bases, so `offset` is
+    8-aligned, `mis == 0`, and the second load is skipped. Only
+    misaligned (JSONL) segments pay for both loads.
+
+    Safety: the high word reads up to `offset + 15`. The caller's largest
+    `offset` is `base + 56`, and `base + 64` can round up to `n + 63`, so
+    the high load can touch `n + 70`. The staging window guarantees
+    >= `n + 128` zero-padded bytes (`ceildiv(n, 64) + 2` chunks), which
+    covers it.
+    """
+    var mis = offset & 7
+    var abase = offset - mis
+    var lo = bitcast[DType.uint64, 1](inp.raw_load[width=8, alignment=8](abase))
+    if mis == 0:
+        return lo
+    var hi = bitcast[DType.uint64, 1](
+        inp.raw_load[width=8, alignment=8](abase + 8)
+    )
+    var sh = UInt64(mis * 8)
+    return (lo >> sh) | (hi << (64 - sh))
 
 
 @always_inline
@@ -121,9 +188,9 @@ def _prev_shift[n: Int](prev_chunk: _C16, cur: _C16) -> _C16:
 def _utf8_check_block(cur: _C16, prev_chunk: _C16, mut error: _C16):
     var prev1 = _prev_shift[1](prev_chunk, cur)
     var sc = (
-        _tbl(_BYTE_1_HIGH, prev1 >> 4)
-        & _tbl(_BYTE_1_LOW, prev1 & 0xF)
-        & _tbl(_BYTE_2_HIGH, cur >> 4)
+        tbl16(_BYTE_1_HIGH, prev1 >> 4)
+        & tbl16(_BYTE_1_LOW, prev1 & 0xF)
+        & tbl16(_BYTE_2_HIGH, cur >> 4)
     )
     var prev2 = _prev_shift[2](prev_chunk, cur)
     var prev3 = _prev_shift[3](prev_chunk, cur)
@@ -135,7 +202,7 @@ def _utf8_check_block(cur: _C16, prev_chunk: _C16, mut error: _C16):
 
 @always_inline
 def _seg_of(
-    seg_chunk_off: UnsafePointer[UInt32, MutAnyOrigin],
+    seg_chunk_off: Vec[DType.uint32],
     num_segs: Int,
     c: Int,
 ) -> Int:
@@ -154,9 +221,9 @@ def _seg_of(
 
 @always_inline
 def _chunk_geometry(
-    seg_chunk_off: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_lens: UnsafePointer[UInt32, MutAnyOrigin],
+    seg_chunk_off: Vec[DType.uint32],
+    seg_starts: Vec[DType.uint32],
+    seg_lens: Vec[DType.uint32],
     num_segs: Int,
     c: Int,
 ) -> Tuple[Int, Int, Int]:
@@ -179,14 +246,14 @@ def _valid_mask(rem: Int) -> UInt64:
 def classify_kernel[
     validate_utf8: Bool
 ](
-    inp: UnsafePointer[UInt8, MutAnyOrigin],
-    masks: UnsafePointer[UInt64, MutAnyOrigin],
-    prefixes: UnsafePointer[UInt16, MutAnyOrigin],
-    aggs: UnsafePointer[UInt16, MutAnyOrigin],
-    err_flag: UnsafePointer[Int32, MutAnyOrigin],
-    seg_chunk_off: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_lens: UnsafePointer[UInt32, MutAnyOrigin],
+    inp: Vec[DType.uint8],
+    masks: Vec[DType.uint64],
+    prefixes: Vec[DType.uint16],
+    aggs: Vec[DType.uint16],
+    err_flag: Vec[DType.int32],
+    seg_chunk_off: Vec[DType.uint32],
+    seg_starts: Vec[DType.uint32],
+    seg_lens: Vec[DType.uint32],
     num_segs: Int,
     num_chunks: Int,
     stride: Int,
@@ -209,49 +276,82 @@ def classify_kernel[
         var byte_base = geo[0]
         var rem = geo[1]
         var local = geo[2]
-        var base = inp + byte_base
-        var r0 = base.load[width=16]()
-        var r1 = (base + 16).load[width=16]()
-        var r2 = (base + 32).load[width=16]()
-        var r3 = (base + 48).load[width=16]()
+        var base = Int(byte_base)
+        var backslash: UInt64
+        var quote: UInt64
+        var op: UInt64
+        var ws: UInt64
+        comptime if is_nvidia_gpu():
+            # u64 SWAR classification (see the helpers' rationale).
+            backslash = 0
+            quote = 0
+            op = 0
+            ws = 0
+            comptime for w in range(8):
+                var x = _load_u64(inp, base + w * 8)
+                backslash |= _swar_pack8(_swar_eq_mask(x, 0x5C)) << UInt64(
+                    8 * w
+                )
+                quote |= _swar_pack8(_swar_eq_mask(x, 0x22)) << UInt64(8 * w)
+                var m_op = (
+                    _swar_eq_mask(x, UInt8(ord("{")))
+                    | _swar_eq_mask(x, UInt8(ord("}")))
+                    | _swar_eq_mask(x, UInt8(ord("[")))
+                    | _swar_eq_mask(x, UInt8(ord("]")))
+                    | _swar_eq_mask(x, UInt8(ord(":")))
+                    | _swar_eq_mask(x, UInt8(ord(",")))
+                )
+                op |= _swar_pack8(m_op) << UInt64(8 * w)
+                var m_ws = (
+                    _swar_eq_mask(x, 0x20)
+                    | _swar_eq_mask(x, 0x09)
+                    | _swar_eq_mask(x, 0x0A)
+                    | _swar_eq_mask(x, 0x0D)
+                )
+                ws |= _swar_pack8(m_ws) << UInt64(8 * w)
+        else:
+            var r0 = inp.raw_load[width=16](base)
+            var r1 = inp.raw_load[width=16](base + 16)
+            var r2 = inp.raw_load[width=16](base + 32)
+            var r3 = inp.raw_load[width=16](base + 48)
 
-        var backslash = _movemask64(
-            r0.eq(_C16(0x5C)),
-            r1.eq(_C16(0x5C)),
-            r2.eq(_C16(0x5C)),
-            r3.eq(_C16(0x5C)),
-        )
-        var quote = _movemask64(
-            r0.eq(_C16(0x22)),
-            r1.eq(_C16(0x22)),
-            r2.eq(_C16(0x22)),
-            r3.eq(_C16(0x22)),
-        )
-        # Class descriptors via the shared nibble tables.
-        var d0 = _tbl(CLASSIFY_LOW_NIBBLE, r0 & 0xF) & _tbl(
-            CLASSIFY_HIGH_NIBBLE, r0 >> 4
-        )
-        var d1 = _tbl(CLASSIFY_LOW_NIBBLE, r1 & 0xF) & _tbl(
-            CLASSIFY_HIGH_NIBBLE, r1 >> 4
-        )
-        var d2 = _tbl(CLASSIFY_LOW_NIBBLE, r2 & 0xF) & _tbl(
-            CLASSIFY_HIGH_NIBBLE, r2 >> 4
-        )
-        var d3 = _tbl(CLASSIFY_LOW_NIBBLE, r3 & 0xF) & _tbl(
-            CLASSIFY_HIGH_NIBBLE, r3 >> 4
-        )
-        var op = _movemask64(
-            (d0 & CLASS_OP_BITS).ne(_C16(0)),
-            (d1 & CLASS_OP_BITS).ne(_C16(0)),
-            (d2 & CLASS_OP_BITS).ne(_C16(0)),
-            (d3 & CLASS_OP_BITS).ne(_C16(0)),
-        )
-        var ws = _movemask64(
-            (d0 & CLASS_WS_BITS).ne(_C16(0)),
-            (d1 & CLASS_WS_BITS).ne(_C16(0)),
-            (d2 & CLASS_WS_BITS).ne(_C16(0)),
-            (d3 & CLASS_WS_BITS).ne(_C16(0)),
-        )
+            backslash = _movemask64(
+                r0.eq(_C16(0x5C)),
+                r1.eq(_C16(0x5C)),
+                r2.eq(_C16(0x5C)),
+                r3.eq(_C16(0x5C)),
+            )
+            quote = _movemask64(
+                r0.eq(_C16(0x22)),
+                r1.eq(_C16(0x22)),
+                r2.eq(_C16(0x22)),
+                r3.eq(_C16(0x22)),
+            )
+            # Class descriptors via the shared nibble tables.
+            var d0 = tbl16(CLASSIFY_LOW_NIBBLE, r0 & 0xF) & tbl16(
+                CLASSIFY_HIGH_NIBBLE, r0 >> 4
+            )
+            var d1 = tbl16(CLASSIFY_LOW_NIBBLE, r1 & 0xF) & tbl16(
+                CLASSIFY_HIGH_NIBBLE, r1 >> 4
+            )
+            var d2 = tbl16(CLASSIFY_LOW_NIBBLE, r2 & 0xF) & tbl16(
+                CLASSIFY_HIGH_NIBBLE, r2 >> 4
+            )
+            var d3 = tbl16(CLASSIFY_LOW_NIBBLE, r3 & 0xF) & tbl16(
+                CLASSIFY_HIGH_NIBBLE, r3 >> 4
+            )
+            op = _movemask64(
+                (d0 & CLASS_OP_BITS).ne(_C16(0)),
+                (d1 & CLASS_OP_BITS).ne(_C16(0)),
+                (d2 & CLASS_OP_BITS).ne(_C16(0)),
+                (d3 & CLASS_OP_BITS).ne(_C16(0)),
+            )
+            ws = _movemask64(
+                (d0 & CLASS_WS_BITS).ne(_C16(0)),
+                (d1 & CLASS_WS_BITS).ne(_C16(0)),
+                (d2 & CLASS_WS_BITS).ne(_C16(0)),
+                (d3 & CLASS_WS_BITS).ne(_C16(0)),
+            )
 
         # Clip every class mask to the segment's content: bits past the
         # content belong to the delimiter / the next line / the padding
@@ -283,9 +383,18 @@ def classify_kernel[
                 # so the reset matches the CPU's initial state.
                 prev = _C16(0)
             else:
-                prev = (base - 16).load[width=16]()
+                prev = inp.raw_load[width=16](base - 16)
             var error = _C16(0)
-            var blocks: InlineArray[_C16, 4] = [r0, r1, r2, r3]
+            # Loaded here (not shared with classification): the NVIDIA
+            # classify path reads u64 words instead of these vectors,
+            # and on Metal the compiler folds these reloads into the
+            # identical loads above.
+            var blocks: InlineArray[_C16, 4] = [
+                inp.raw_load[width=16](base),
+                inp.raw_load[width=16](base + 16),
+                inp.raw_load[width=16](base + 32),
+                inp.raw_load[width=16](base + 48),
+            ]
             comptime for r in range(4):
                 var cur = blocks[r]
                 if (cur & 0x80).reduce_max() == 0:
@@ -302,12 +411,12 @@ def classify_kernel[
                 # checks naturally.)
                 error |= _satsub(prev, _MAX_VALUE)
             if error.reduce_max() != 0:
-                _ = Atomic.fetch_add(err_flag, 1)
+                _ = Atomic.fetch_add(err_flag.ptr, 1)
 
     # Block-level inclusive compose scan (all threads hit the barriers).
     var shared = stack_allocation[
-        BLOCK, UInt16, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint16, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = elem
     barrier()
     var offset = 1
@@ -333,15 +442,15 @@ def classify_kernel[
 
 
 def combine_kernel(
-    masks: UnsafePointer[UInt64, MutAnyOrigin],
-    prefixes: UnsafePointer[UInt16, MutAnyOrigin],
-    block_states: UnsafePointer[UInt8, MutAnyOrigin],
-    structurals_out: UnsafePointer[UInt64, MutAnyOrigin],
-    local_offsets: UnsafePointer[UInt32, MutAnyOrigin],
-    count_aggs: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_chunk_off: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_lens: UnsafePointer[UInt32, MutAnyOrigin],
+    masks: Vec[DType.uint64],
+    prefixes: Vec[DType.uint16],
+    block_states: Vec[DType.uint8],
+    structurals_out: Vec[DType.uint64],
+    local_offsets: Vec[DType.uint32],
+    count_aggs: Vec[DType.uint32],
+    seg_chunk_off: Vec[DType.uint32],
+    seg_starts: Vec[DType.uint32],
+    seg_lens: Vec[DType.uint32],
     num_segs: Int,
     num_chunks: Int,
     stride: Int,
@@ -396,8 +505,8 @@ def combine_kernel(
 
     # Block-level exclusive sum scan of counts.
     var shared = stack_allocation[
-        BLOCK, UInt32, address_space=AddressSpace.SHARED
-    ]()
+        DType.uint32, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK]())
     shared[tid] = count
     barrier()
     var offset = 1
@@ -417,14 +526,14 @@ def combine_kernel(
 
 
 def scatter_kernel(
-    structurals: UnsafePointer[UInt64, MutAnyOrigin],
-    local_offsets: UnsafePointer[UInt32, MutAnyOrigin],
-    count_bases: UnsafePointer[UInt32, MutAnyOrigin],
-    total: UnsafePointer[UInt32, MutAnyOrigin],
-    positions: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_chunk_off: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_starts: UnsafePointer[UInt32, MutAnyOrigin],
-    seg_lens: UnsafePointer[UInt32, MutAnyOrigin],
+    structurals: Vec[DType.uint64],
+    local_offsets: Vec[DType.uint32],
+    count_bases: Vec[DType.uint32],
+    total: Vec[DType.uint32],
+    positions: Vec[DType.uint32],
+    seg_chunk_off: Vec[DType.uint32],
+    seg_starts: Vec[DType.uint32],
+    seg_lens: Vec[DType.uint32],
     num_segs: Int,
     num_chunks: Int,
     input_len: Int,
@@ -452,8 +561,8 @@ def run_stage1_pipeline[
     validate_utf8: Bool
 ](
     ctx: DeviceContext,
-    mut input_dev: DeviceBuffer[DType.uint8],
-    mut err_flag: DeviceBuffer[DType.int32],
+    inp: Vec[DType.uint8],
+    err_flag: Vec[DType.int32],
     mut bufs: Stage1Buffers,
     num_segs: Int,
     num_chunks: Int,
@@ -467,14 +576,14 @@ def run_stage1_pipeline[
         var num_blocks = grid
         comptime k1 = classify_kernel[validate_utf8]
         ctx.enqueue_function[k1](
-            input_dev.unsafe_ptr(),
-            bufs.masks.unsafe_ptr(),
-            bufs.prefixes.unsafe_ptr(),
-            bufs.aggs.unsafe_ptr(),
-            err_flag.unsafe_ptr(),
-            bufs.seg_chunk_off.unsafe_ptr(),
-            bufs.seg_starts.unsafe_ptr(),
-            bufs.seg_lens.unsafe_ptr(),
+            inp,
+            vec(bufs.masks, 5 * bufs.chunk_cap),
+            vec(bufs.prefixes, num_chunks),
+            vec(bufs.aggs, num_blocks),
+            err_flag,
+            vec(bufs.seg_chunk_off, num_segs + 1),
+            vec(bufs.seg_starts, num_segs),
+            vec(bufs.seg_lens, num_segs),
             num_segs,
             num_chunks,
             bufs.chunk_cap,
@@ -482,22 +591,21 @@ def run_stage1_pipeline[
             block_dim=BLOCK,
         )
         ctx.enqueue_function[scan_aggregates_kernel](
-            bufs.aggs.unsafe_ptr(),
-            bufs.block_states.unsafe_ptr(),
-            num_blocks,
+            vec(bufs.aggs, num_blocks),
+            vec(bufs.block_states, num_blocks),
             grid_dim=1,
             block_dim=BLOCK,
         )
         ctx.enqueue_function[combine_kernel](
-            bufs.masks.unsafe_ptr(),
-            bufs.prefixes.unsafe_ptr(),
-            bufs.block_states.unsafe_ptr(),
-            bufs.structurals.unsafe_ptr(),
-            bufs.local_offsets.unsafe_ptr(),
-            bufs.count_aggs.unsafe_ptr(),
-            bufs.seg_chunk_off.unsafe_ptr(),
-            bufs.seg_starts.unsafe_ptr(),
-            bufs.seg_lens.unsafe_ptr(),
+            vec(bufs.masks, 5 * bufs.chunk_cap),
+            vec(bufs.prefixes, num_chunks),
+            vec(bufs.block_states, num_blocks),
+            vec(bufs.structurals, num_chunks),
+            vec(bufs.local_offsets, num_chunks),
+            vec(bufs.count_aggs, num_blocks),
+            vec(bufs.seg_chunk_off, num_segs + 1),
+            vec(bufs.seg_starts, num_segs),
+            vec(bufs.seg_lens, num_segs),
             num_segs,
             num_chunks,
             bufs.chunk_cap,
@@ -505,22 +613,24 @@ def run_stage1_pipeline[
             block_dim=BLOCK,
         )
         ctx.enqueue_function[scan_counts_kernel](
-            bufs.count_aggs.unsafe_ptr(),
-            bufs.count_bases.unsafe_ptr(),
-            bufs.total.unsafe_ptr(),
-            num_blocks,
+            vec(bufs.count_aggs, num_blocks),
+            vec(bufs.count_bases, num_blocks),
+            vec(bufs.total, 1),
             grid_dim=1,
             block_dim=BLOCK,
         )
         ctx.enqueue_function[scatter_kernel](
-            bufs.structurals.unsafe_ptr(),
-            bufs.local_offsets.unsafe_ptr(),
-            bufs.count_bases.unsafe_ptr(),
-            bufs.total.unsafe_ptr(),
-            bufs.positions.unsafe_ptr(),
-            bufs.seg_chunk_off.unsafe_ptr(),
-            bufs.seg_starts.unsafe_ptr(),
-            bufs.seg_lens.unsafe_ptr(),
+            vec(bufs.structurals, num_chunks),
+            vec(bufs.local_offsets, num_chunks),
+            vec(bufs.count_bases, num_blocks),
+            vec(bufs.total, 1),
+            # Written up to the device-side structural total, which the
+            # host only learns after this launch — so the view is the
+            # whole allocation.
+            vec(bufs.positions, bufs.pos_cap),
+            vec(bufs.seg_chunk_off, num_segs + 1),
+            vec(bufs.seg_starts, num_segs),
+            vec(bufs.seg_lens, num_segs),
             num_segs,
             num_chunks,
             input_len,

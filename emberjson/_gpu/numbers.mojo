@@ -22,8 +22,11 @@ from emberjson._deserialize._parser_helper import (
     largest_power,
     smallest_power,
 )
+from emberjson._deserialize.tables import full_multiplication
 from std.bit import count_leading_zeros
-from std.memory import UnsafePointer
+from std.sys.info import is_nvidia_gpu
+
+from ._tensor import Vec
 
 comptime _NEG_ZERO_BITS: UInt64 = UInt64(1) << 63
 
@@ -32,13 +35,17 @@ comptime _NEG_ZERO_BITS: UInt64 = UInt64(1) << 63
 #     64x64->128 multiply is done in 32-bit limbs instead.
 #   * comptime StackArray globals do not link into Metal kernels
 #     ("Undefined symbols: global_constant") — POWER_OF_FIVE_128 is
-#     uploaded once per session as a DeviceBuffer and passed by pointer.
+#     uploaded once per session as a DeviceBuffer and passed as a view.
 
 
 @always_inline
 def _mul_64x64_128(x: UInt64, y: UInt64) -> Tuple[UInt64, UInt64]:
-    """(hi, lo) of the 128-bit product, in 32-bit limbs (Metal-safe;
-    equivalent to `tables.full_multiplication`)."""
+    """(hi, lo) of the 128-bit product: native UInt128 on NVIDIA
+    (probed SUPPORTED), 32-bit limbs elsewhere (UInt128 arithmetic
+    crashes the Metal shader compiler)."""
+    comptime if is_nvidia_gpu():
+        var p = full_multiplication(x, y)
+        return (UInt64(p >> 64), UInt64(p))
     var x0 = x & 0xFFFFFFFF
     var x1 = x >> 32
     var y0 = y & 0xFFFFFFFF
@@ -76,7 +83,7 @@ def device_float_bits(
     power: Int64,
     var i: UInt64,
     negative: Bool,
-    five_table: UnsafePointer[UInt64, MutAnyOrigin],
+    five_table: Vec[DType.uint64],
 ) -> Tuple[UInt64, Bool]:
     """Mirror of `Parser.compute_float64` in integer form ->
     (IEEE-754 bits, ok). `five_table` is the uploaded
@@ -163,7 +170,7 @@ def device_write_float_bits(
     i: UInt64,
     negative: Bool,
     long_digits: Bool,
-    five_table: UnsafePointer[UInt64, MutAnyOrigin],
+    five_table: Vec[DType.uint64],
 ) -> Tuple[UInt64, Bool]:
     """Mirror of `Parser.write_float`'s dispatch. `long_digits` is the
     caller's >19-significant-digits determination (slow path)."""

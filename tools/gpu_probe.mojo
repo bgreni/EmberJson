@@ -6,14 +6,27 @@ failures, and prints a SUPPORTED / BROKEN / UNSUPPORTED matrix:
   SUPPORTED    compiles, runs, produces correct results
   BROKEN       compiles and runs but produces WRONG results (silent
                miscompile — the dangerous class)
-  UNSUPPORTED  the backend rejects it (raises at launch)
+  UNSUPPORTED  the backend rejects it (raises at launch/sync)
 
 This matrix decides the comptime fast-path dispatch in `emberjson/_gpu`
-(see NVIDIA_GPU_PLAN.md). Known result on Apple/Metal (M3 Pro):
-pack_bits, dynamic_shuffle, UInt128, and comptime StackArray tables are
-UNSUPPORTED; misaligned typed loads/stores and multi-exit runtime loops
-are BROKEN; everything else SUPPORTED. On NVIDIA everything is expected
-SUPPORTED — verify, don't assume.
+(see NVIDIA_GPU_PLAN.md). Known results:
+
+  Apple/Metal (M3 Pro): pack_bits, dynamic_shuffle, UInt128, and
+  comptime StackArray tables are UNSUPPORTED; misaligned typed
+  loads/stores and multi-exit runtime loops are BROKEN; everything
+  else SUPPORTED.
+
+  NVIDIA (RTX 3080, sm_86): pack_bits, dynamic_shuffle, UInt128,
+  comptime tables, multi-exit loops, shared atomics, and warp
+  prefix_sum all SUPPORTED; misaligned typed accesses fault
+  (CUDA_ERROR_MISALIGNED_ADDRESS) -> UNSUPPORTED; host-ptr zero-copy
+  wrap UNSUPPORTED (discrete memory).
+
+Isolation: on CUDA a faulting kernel POISONS its context — every later
+call on it fails, and releasing it aborts the process. The fault-prone
+misaligned probes therefore run LAST, each on a context that is heap-
+allocated and intentionally leaked (never released; the driver reclaims
+at process exit). Everything before them shares one healthy context.
 
 Note: UNSUPPORTED probes on Metal each take several seconds (the
 runtime retries pipeline creation before giving up). Run time ~1 min.
@@ -29,6 +42,7 @@ from std.atomic import Atomic
 from std.gpu import barrier, global_idx, thread_idx
 from std.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu.memory import AddressSpace
+from std.gpu.primitives import warp
 
 comptime _C16 = SIMD[DType.uint8, 16]
 comptime _TBL = _C16(3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3)
@@ -79,8 +93,9 @@ def k_misaligned_load(
     inp: UnsafePointer[UInt8, MutAnyOrigin],
     outp: UnsafePointer[UInt64, MutAnyOrigin],
 ):
-    """u64 typed load at byte offset 6 — BROKEN backends round the
-    address down instead of faulting or handling it."""
+    """U64-typed load at byte offset 6 — BROKEN backends round the
+    address down instead of faulting or handling it; CUDA faults
+    (poisoning its context — run this probe isolated and last)."""
     var t = global_idx.x
     if t == 0:
         outp[0] = (inp + 6).bitcast[UInt64]().load()
@@ -89,7 +104,7 @@ def k_misaligned_load(
 def k_misaligned_store(
     outp8: UnsafePointer[UInt8, MutAnyOrigin],
 ):
-    """u32 typed store at byte offset 6."""
+    """U32-typed store at byte offset 6 (isolated: may fault)."""
     var t = global_idx.x
     if t == 0:
         (outp8 + 6).bitcast[UInt32]().store(UInt32(0xAABBCCDD))
@@ -99,7 +114,7 @@ def k_stack_array_table(
     inp: UnsafePointer[UInt64, MutAnyOrigin],
     outp: UnsafePointer[UInt64, MutAnyOrigin],
 ):
-    """comptime StackArray global referenced from a kernel — fails to
+    """Comptime StackArray global referenced from a kernel — fails to
     link on Metal ("Undefined symbols: global_constant")."""
     var t = global_idx.x
     if t < 8:
@@ -146,6 +161,14 @@ def k_multi_exit(
     var r2 = _multi_exit_pass(sp, nn)
     outp[2] = UInt64(r2[0])
     outp[3] = UInt64(1) if r2[1] else UInt64(0)
+
+
+def k_warp_scan(outp: UnsafePointer[UInt32, MutAnyOrigin]):
+    """Warp-level inclusive prefix sum — the N4 scan-replacement lever."""
+    var t = thread_idx.x
+    var v = warp.prefix_sum(UInt32(t + 1))
+    if global_idx.x < 32:
+        outp[Int(global_idx.x)] = v
 
 
 def k_shared_atomics(
@@ -270,49 +293,6 @@ def main() raises:
             ok = False
         _verdict("UInt128 multiply    ", ok, correct)
 
-        # misaligned load
-        ok = True
-        correct = True
-        try:
-            ctx.enqueue_function[k_misaligned_load](
-                in8.unsafe_ptr(), out64.unsafe_ptr(), grid_dim=1, block_dim=32
-            )
-            ctx.synchronize()
-            with out64.map_to_host() as h:
-                var expect: UInt64 = 0
-                with in8.map_to_host() as hi:
-                    for k in range(8):
-                        expect |= UInt64(hi[6 + k]) << UInt64(8 * k)
-                correct = h[0] == expect
-        except:
-            ok = False
-        _verdict("misaligned u64 load ", ok, correct)
-
-        # misaligned store
-        ok = True
-        correct = True
-        try:
-            in8.enqueue_fill(0)
-            ctx.enqueue_function[k_misaligned_store](
-                in8.unsafe_ptr(), grid_dim=1, block_dim=32
-            )
-            ctx.synchronize()
-            with in8.map_to_host() as h:
-                correct = (
-                    h[6] == 0xDD
-                    and h[7] == 0xCC
-                    and h[8] == 0xBB
-                    and h[9] == 0xAA
-                    and h[4] == 0
-                    and h[5] == 0
-                )
-                # restore probe data
-                for i in range(1024):
-                    h[i] = UInt8(0x22) if i % 5 == 0 else UInt8(0x61)
-        except:
-            ok = False
-        _verdict("misaligned u32 store", ok, correct)
-
         # comptime StackArray table
         ok = True
         correct = True
@@ -369,6 +349,20 @@ def main() raises:
             ok = False
         _verdict("shared-mem atomics  ", ok, correct)
 
+        # warp prefix_sum (the N4 warp-scan lever)
+        ok = True
+        correct = True
+        try:
+            ctx.enqueue_function[k_warp_scan](
+                out32.unsafe_ptr(), grid_dim=1, block_dim=32
+            )
+            ctx.synchronize()
+            with out32.map_to_host() as h:
+                correct = h[0] == 1 and h[31] == 528
+        except:
+            ok = False
+        _verdict("warp prefix_sum     ", ok, correct)
+
         # host-pointer wrap (zero-copy aliasing)
         ok = True
         correct = True
@@ -388,6 +382,69 @@ def main() raises:
         except:
             ok = False
         _verdict("host-ptr zero-copy  ", ok, correct)
+
+        # ---- fault-prone probes: LAST, each on its own leaked context.
+        # A faulting kernel poisons a CUDA context (all later calls on
+        # it fail; releasing it aborts the process), so these run after
+        # every other verdict, on contexts that are heap-allocated and
+        # never destroyed — the driver reclaims them at process exit.
+
+        # misaligned load
+        ok = True
+        correct = True
+        try:
+            var pctx = alloc[DeviceContext](1)
+            pctx.unsafe_write(DeviceContext())
+            var pin8 = alloc[DeviceBuffer[DType.uint8]](1)
+            pin8.unsafe_write(pctx[].enqueue_create_buffer[DType.uint8](64))
+            var pout64 = alloc[DeviceBuffer[DType.uint64]](1)
+            pout64.unsafe_write(pctx[].enqueue_create_buffer[DType.uint64](8))
+            with pin8[].map_to_host() as h:
+                for i in range(64):
+                    h[i] = UInt8((i * 7 + 3) & 0xFF)
+            pctx[].enqueue_function[k_misaligned_load](
+                pin8[].unsafe_ptr(),
+                pout64[].unsafe_ptr(),
+                grid_dim=1,
+                block_dim=32,
+            )
+            pctx[].synchronize()
+            with pout64[].map_to_host() as h:
+                var expect: UInt64 = 0
+                for k in range(8):
+                    expect |= UInt64(UInt8(((6 + k) * 7 + 3) & 0xFF)) << UInt64(
+                        8 * k
+                    )
+                correct = h[0] == expect
+        except:
+            ok = False
+        _verdict("misaligned u64 load ", ok, correct)
+
+        # misaligned store
+        ok = True
+        correct = True
+        try:
+            var pctx2 = alloc[DeviceContext](1)
+            pctx2.unsafe_write(DeviceContext())
+            var pbuf = alloc[DeviceBuffer[DType.uint8]](1)
+            pbuf.unsafe_write(pctx2[].enqueue_create_buffer[DType.uint8](64))
+            pbuf[].enqueue_fill(0)
+            pctx2[].enqueue_function[k_misaligned_store](
+                pbuf[].unsafe_ptr(), grid_dim=1, block_dim=32
+            )
+            pctx2[].synchronize()
+            with pbuf[].map_to_host() as h:
+                correct = (
+                    h[6] == 0xDD
+                    and h[7] == 0xCC
+                    and h[8] == 0xBB
+                    and h[9] == 0xAA
+                    and h[4] == 0
+                    and h[5] == 0
+                )
+        except:
+            ok = False
+        _verdict("misaligned u32 store", ok, correct)
 
         print()
         print("Interpretation: see NVIDIA_GPU_PLAN.md — SUPPORTED unlocks")

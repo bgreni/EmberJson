@@ -11,7 +11,6 @@ from emberjson import (
     Document,
     GpuSession,
     ParseOptions,
-    gpu_parse_documents,
     to_string,
     try_parse_document,
 )
@@ -68,11 +67,10 @@ def check_batch[
         )
 
 
-def test_jsonl_checked_in_files() raises:
+def _jsonl_checked_in_files(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         comptime files = [
             "bench_data/jsonl.jsonl",
             "bench_data/big_lines.jsonl",
@@ -86,11 +84,10 @@ def test_jsonl_checked_in_files() raises:
             check_batch(s, data, path)
 
 
-def test_jsonl_handcrafted() raises:
+def _jsonl_handcrafted(mut s: GpuSession) raises:
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         check_batch(s, String(""), "empty input")
         check_batch(s, String("\n"), "lone newline")
         check_batch(s, String('{"a": 1}'), "single line no newline")
@@ -114,13 +111,12 @@ def test_jsonl_handcrafted() raises:
         )
 
 
-def test_jsonl_state_isolation() raises:
+def _jsonl_state_isolation(mut s: GpuSession) raises:
     """The critical segmentation property: a corrupt line's carry state
     (open string, trailing backslash) must not leak into later lines."""
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         # Unclosed string: without per-segment resets the open-string
         # state would swallow the next line's structurals.
         check_batch(
@@ -150,12 +146,11 @@ def test_jsonl_state_isolation() raises:
         check_batch(s, batch, "alternating odd quotes")
 
 
-def test_jsonl_utf8_line_isolation() raises:
+def _jsonl_utf8_line_isolation(mut s: GpuSession) raises:
     """With validation on, only the invalid-UTF-8 line is skipped."""
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         var bytes = List[Byte]()
         for b in String('{"ok": 1}\n{"bad": "').as_bytes():
             bytes.append(b)
@@ -175,12 +170,11 @@ def test_jsonl_utf8_line_isolation() raises:
         assert_equal(len(gpu_raw), 3, "raw mode keeps all lines")
 
 
-def test_jsonl_chunk_geometry() raises:
+def _jsonl_chunk_geometry(mut s: GpuSession) raises:
     """Lines sized around chunk (64) and block (16384) boundaries."""
     comptime if not has_accelerator():
         return
     else:
-        var s = GpuSession()
         for size in [3, 62, 63, 64, 65, 127, 128, 129, 1000]:
             var batch = String()
             for k in range(12):
@@ -208,13 +202,20 @@ def test_jsonl_chunk_geometry() raises:
         check_batch(s, batch, "block-crossing line")
 
 
-def test_jsonl_free_function() raises:
+def test_gpu_jsonl_suite() raises:
+    """All batch differentials on ONE shared session (a second
+    in-process GpuSession construction deadlocks on the current CUDA
+    toolchain; see test_gpu_utf8_suite). The gpu_parse_documents
+    one-shot wrapper moved to test_gpu_free_functions.mojo."""
     comptime if not has_accelerator():
         return
     else:
-        var docs = gpu_parse_documents('{"a": 1}\n{"b": 2}\n')
-        assert_equal(len(docs), 2)
-        assert_equal(docs[1].root()["b"].int(), 2)
+        var s = GpuSession()
+        _jsonl_checked_in_files(s)
+        _jsonl_handcrafted(s)
+        _jsonl_state_isolation(s)
+        _jsonl_utf8_line_isolation(s)
+        _jsonl_chunk_geometry(s)
 
 
 def main() raises:

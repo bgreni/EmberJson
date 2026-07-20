@@ -1,9 +1,17 @@
-"""GPU microbenchmarks (Phase 0): launch overhead and staging bandwidth.
+"""GPU benchmarks: the end-to-end parse pipeline.
 
 Separate from `bench.mojo` so the machine-pinned CPU baseline in
 `bench_result.txt` stays a clean regression oracle. Later phases add
-pipeline rows (UTF-8, stage 1, end-to-end parses) and the
+pipeline rows (UTF-8, stage 1, end-to-end batch parses) and the
 `--print-relative` harness against `bench_gpu_result.txt`.
+
+Only inputs at or above the GPU's measured crossover are benchmarked:
+batch JSONL from ~1 MB, single documents only above ~120-150 MB. The
+stage-1 and full-parse rows on the small single-document corpora
+(twitter/citm/canada) were dropped — they measured launch and staging
+floors, not throughput anyone would choose the GPU for. `GpuUtf8Canada`
+survives because UTF-8 validation's crossover is far lower, putting
+2.25 MB right at the turn of that curve.
 
 Skips (with a message) on machines without an accelerator.
 """
@@ -18,147 +26,27 @@ from std.benchmark import (
 )
 from emberjson import GpuSession, ParseOptions, try_parse_document
 from std.benchmark import keep
-from std.gpu import global_idx
 from std.gpu.host import DeviceContext
 from std.pathlib import Path
 from std.sys import has_accelerator
-from layout import TileTensor, row_major
-
-comptime MB11 = 11 << 20
-comptime _TOUCH_BYTES_PER_THREAD = 256
-comptime _TOUCH_THREADS = MB11 // _TOUCH_BYTES_PER_THREAD
-comptime _touch_out_layout = row_major[_TOUCH_THREADS]()
-
-
-def empty_kernel():
-    pass
-
-
-def touch_kernel(
-    inp: UnsafePointer[UInt8, MutAnyOrigin],
-    outp: TileTensor[DType.uint64, type_of(_touch_out_layout), MutAnyOrigin],
-):
-    """Streams 256 bytes per thread as u64 loads: device read bandwidth."""
-    comptime assert outp.flat_rank == 1
-    var tid = global_idx.x
-    if tid < _TOUCH_THREADS:
-        var base = inp + tid * _TOUCH_BYTES_PER_THREAD
-        var acc: UInt64 = 0
-        comptime for i in range(_TOUCH_BYTES_PER_THREAD // 8):
-            acc += base.bitcast[UInt64]().load(i)
-        outp[tid] = rebind[outp.ElementType](acc)
 
 
 def run_gpu_benches(mut m: Bench) raises:
     comptime if not has_accelerator():
         pass
     else:
-        var ctx = DeviceContext()
-        var dev = ctx.enqueue_create_buffer[DType.uint8](MB11)
-        var hbuf = ctx.enqueue_create_host_buffer[DType.uint8](MB11)
-        var touch_out = ctx.enqueue_create_buffer[DType.uint64](_TOUCH_THREADS)
-        dev.enqueue_fill(0x61)
-        ctx.synchronize()
-        var hptr = hbuf.unsafe_ptr()
-        for i in range(MB11):
-            hptr[i] = 0x61
-
-        @parameter
-        def bench_launch(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                ctx.enqueue_function[empty_kernel](grid_dim=1, block_dim=1)
-                ctx.synchronize()
-
-            b.iter[do]()
-
-        m.bench_function[bench_launch](BenchId("GpuLaunchOverhead"))
-
-        @parameter
-        def bench_pipeline_floor(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                # The stage-1 pipeline shape: ~20 enqueues, one sync.
-                for _ in range(20):
-                    ctx.enqueue_function[empty_kernel](grid_dim=1, block_dim=1)
-                ctx.synchronize()
-
-            b.iter[do]()
-
-        m.bench_function[bench_pipeline_floor](BenchId("GpuPipelineFloor20K"))
-
-        @parameter
-        def bench_upload(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                ctx.enqueue_copy(dst_buf=dev, src_buf=hbuf)
-                ctx.synchronize()
-
-            b.iter[do]()
-
-        m.bench_function[bench_upload](
-            BenchId("GpuUploadH2D11MB"),
-            [ThroughputMeasure(BenchMetric.bytes, MB11)],
-        )
-
-        @parameter
-        def bench_readback(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                ctx.enqueue_copy(dst_buf=hbuf, src_buf=dev)
-                ctx.synchronize()
-
-            b.iter[do]()
-
-        m.bench_function[bench_readback](
-            BenchId("GpuReadbackD2H11MB"),
-            [ThroughputMeasure(BenchMetric.bytes, MB11)],
-        )
-
-        @parameter
-        def bench_touch(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                ctx.enqueue_function[touch_kernel](
-                    dev.unsafe_ptr(),
-                    TileTensor(touch_out, _touch_out_layout),
-                    grid_dim=_TOUCH_THREADS // 256,
-                    block_dim=256,
-                )
-                ctx.synchronize()
-
-            b.iter[do]()
-
-        m.bench_function[bench_touch](
-            BenchId("GpuDeviceRead11MB"),
-            [ThroughputMeasure(BenchMetric.bytes, MB11)],
-        )
-
+        # ONE GpuSession per process. A second in-process
+        # DeviceContext-owning construction (raw ctx + later session, or
+        # two sessions) deadlocks on the current CUDA toolchain (AsyncRT
+        # multi-context hang; Metal unaffected).
+        var session = GpuSession()
         # --- UTF-8 validation, end-to-end (staging + upload + kernel +
-        # sync), comparable to the CPU Utf8Validate* rows' inputs. ---
-        var twitter = Path("./bench_data/data/twitter.json").read_text()
+        # sync), comparable to the CPU Utf8Validate* rows' inputs.
+        # Canada (2.25 MB) is kept as the near-crossover datapoint: the
+        # GPU validator only overtakes the 20-30 GB/s CPU one at several
+        # MB, so this row is where the curve turns. ---
         var canada = Path("./bench_data/data/canada.json").read_text()
         var jsonl = Path("./bench_data/big_lines_complex.jsonl").read_text()
-        var session = GpuSession()
-
-        @parameter
-        def bench_utf8_twitter(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                keep(session.is_valid_utf8(twitter))
-
-            b.iter[do]()
-
-        m.bench_function[bench_utf8_twitter](
-            BenchId("GpuUtf8Twitter"),
-            [ThroughputMeasure(BenchMetric.bytes, twitter.byte_length())],
-        )
 
         @parameter
         def bench_utf8_canada(mut b: Bencher) raises:
@@ -189,65 +77,10 @@ def run_gpu_benches(mut m: Bench) raises:
         )
 
         # --- Stage 1 end-to-end (staging + K1..K5 + sync + positions
-        # readback), UTF-8 off to match the CPU Stage1* rows. ---
-        var citm = Path("./bench_data/data/citm_catalog.json").read_text()
+        # readback), UTF-8 off to match the CPU Stage1* rows. Only the
+        # 11 MB batch input: the small single-document corpora sit far
+        # below the crossover where GPU stage 1 is worth running. ---
         comptime no_utf8 = ParseOptions(validate_utf8=False)
-
-        @parameter
-        def bench_s1_twitter(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                keep(
-                    len(
-                        session._structural_index_gpu[no_utf8](
-                            twitter.as_bytes()
-                        )
-                    )
-                )
-
-            b.iter[do]()
-
-        m.bench_function[bench_s1_twitter](
-            BenchId("GpuStage1Twitter"),
-            [ThroughputMeasure(BenchMetric.bytes, twitter.byte_length())],
-        )
-
-        @parameter
-        def bench_s1_citm(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                keep(
-                    len(session._structural_index_gpu[no_utf8](citm.as_bytes()))
-                )
-
-            b.iter[do]()
-
-        m.bench_function[bench_s1_citm](
-            BenchId("GpuStage1CitmCatalog"),
-            [ThroughputMeasure(BenchMetric.bytes, citm.byte_length())],
-        )
-
-        @parameter
-        def bench_s1_canada(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                keep(
-                    len(
-                        session._structural_index_gpu[no_utf8](
-                            canada.as_bytes()
-                        )
-                    )
-                )
-
-            b.iter[do]()
-
-        m.bench_function[bench_s1_canada](
-            BenchId("GpuStage1Canada"),
-            [ThroughputMeasure(BenchMetric.bytes, canada.byte_length())],
-        )
 
         @parameter
         def bench_s1_jsonl(mut b: Bencher) raises:
@@ -267,40 +100,12 @@ def run_gpu_benches(mut m: Bench) raises:
             [ThroughputMeasure(BenchMetric.bytes, jsonl.byte_length())],
         )
 
-        # --- Full parse end-to-end (GPU stage 1 + fused UTF-8 + CPU
-        # stage 2), comparable to CPU ParseTwitterDoc/ParseCanadaDoc. ---
-        @parameter
-        def bench_parse_twitter(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                var d = session.parse_document(twitter)
-                keep(len(d._tape))
-
-            b.iter[do]()
-
-        m.bench_function[bench_parse_twitter](
-            BenchId("GpuParseTwitterDoc"),
-            [ThroughputMeasure(BenchMetric.bytes, twitter.byte_length())],
-        )
-
-        @parameter
-        def bench_parse_canada(mut b: Bencher) raises:
-            @always_inline
-            @parameter
-            def do() raises:
-                var d = session.parse_document(canada)
-                keep(len(d._tape))
-
-            b.iter[do]()
-
-        m.bench_function[bench_parse_canada](
-            BenchId("GpuParseCanadaDoc"),
-            [ThroughputMeasure(BenchMetric.bytes, canada.byte_length())],
-        )
-
-        # --- Batch JSONL end-to-end (the headline workload) vs the fair
-        # in-memory CPU baseline (per-line parse_document loop). ---
+        # --- Batch JSONL end-to-end (GPU stage 1 + fused UTF-8 + CPU
+        # stage 2) vs the fair in-memory CPU baseline (per-line
+        # parse_document loop). This is the headline workload: batch
+        # parsing wins from ~1 MB up, whereas single-document GPU parse
+        # only overtakes the CPU above ~120-150 MB, so no single-doc row
+        # below that crossover is benchmarked here. ---
         @parameter
         def bench_batch_gpu(mut b: Bencher) raises:
             @always_inline
