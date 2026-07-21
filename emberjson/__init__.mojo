@@ -32,6 +32,26 @@ from .lazy import (
     LazyValue,
 )
 
+from .document import (
+    Document,
+    DocValue,
+    DocObject,
+    DocArray,
+    DocEntry,
+    parse_document,
+    try_parse_document,
+)
+
+from ._deserialize.query import parse_pointer, try_parse_pointer
+from ._utf8 import is_valid_utf8
+from .gpu import (
+    GpuSession,
+    gpu_is_valid_utf8,
+    gpu_parse_document,
+    gpu_parse_documents,
+    try_gpu_parse_document,
+)
+
 from .schema import (
     Range,
     ExclusiveRange,
@@ -81,6 +101,9 @@ def parse[
     Raises:
         If an invalid JSON string is provided.
     """
+    comptime if options.validate_utf8:
+        if not is_valid_utf8(s):
+            raise Error("Invalid UTF-8 in input")
     # Copy the input into a NUL-padded buffer (one memcpy, cheap relative to
     # parsing) so the parser's hot loops can skip per-byte bounds checks.
     # Safe because the returned Value owns all of its data. Tiny inputs skip
@@ -90,7 +113,7 @@ def parse[
         j = p.parse()
     else:
         var buf = PaddedBuffer(s.as_bytes())
-        var p = Parser[options=options._padded()](buf.span())
+        var p = Parser[options=options._padded()](padded=buf)
         j = p.parse()
 
 
@@ -102,6 +125,20 @@ def try_parse[
         return parse[options](s)
     except:
         return {}
+
+
+@always_inline
+def to_string(out s: String, d: Document):
+    """Stringifies the given `Document` (identical output to stringifying
+    the equivalent `Value`).
+
+    Args:
+        d: The input document to be stringified.
+
+    Returns:
+        The String representation of the document.
+    """
+    s = d.to_string()
 
 
 @always_inline

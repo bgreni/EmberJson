@@ -1,5 +1,22 @@
-from emberjson import parse, Array, Object, Value, Null, JSON
-from emberjson.utils import write_escaped_string
+from emberjson import (
+    parse,
+    parse_document,
+    to_string,
+    Array,
+    GpuSession,
+    Object,
+    Value,
+    Null,
+    JSON,
+    Parser,
+    ParseOptions,
+    Document,
+)
+from std.sys import has_accelerator
+from emberjson._deserialize.tape import TapeSink, _Arena, parse_document_tape
+from emberjson._deserialize.tape_indexed import parse_document_tape_indexed
+from emberjson.utils import write_escaped_string, PaddedBuffer
+from std.memory import UnsafePointer, alloc
 from std.utils.numerics import isinf
 from std.time import monotonic
 from std.testing import assert_equal
@@ -82,6 +99,265 @@ def coin_flip(mut rng: Rng) raises -> Bool:
     return rng.rand_bool()
 
 
+def _tape_doc[indexed: Bool](s: StringSlice) raises -> Document:
+    """Builds a Document through one specific tape engine (padding even
+    tiny inputs so both engines run on every fuzz case)."""
+    var sink = TapeSink(
+        tape_capacity=s.byte_length() // 3 + 8,
+        strings_capacity=s.byte_length() // 2 + 16,
+    )
+    var buf = PaddedBuffer(s.as_bytes())
+    var p = Parser[options=ParseOptions()._padded()](padded=buf)
+    comptime if indexed:
+        parse_document_tape_indexed(p, sink)
+    else:
+        parse_document_tape(p, sink)
+    var tape = List[UInt64]()
+    var strings = _Arena(capacity=0)
+    swap(tape, sink.tape)
+    swap(strings, sink.strings)
+    return Document(tape^, strings^, False)
+
+
+def check_engines_agree(
+    s: StringSlice, sess: UnsafePointer[GpuSession, MutAnyOrigin]
+) raises:
+    """Differential oracle: the byte-walk and index-driven tape engines
+    must return the same accept/reject verdict on any input and, on
+    accept, byte-identical serialization."""
+    var ok_walk: Bool
+    var out_walk = String()
+    try:
+        var d = _tape_doc[False](s)
+        out_walk = to_string(d)
+        ok_walk = True
+    except:
+        ok_walk = False
+
+    var ok_idx: Bool
+    var out_idx = String()
+    try:
+        var d = _tape_doc[True](s)
+        out_idx = to_string(d)
+        ok_idx = True
+    except:
+        ok_idx = False
+
+    assert_equal(ok_walk, ok_idx)
+    if ok_walk:
+        assert_equal(out_walk, out_idx)
+
+    # Third engine on GPU machines: the GPU stage-1 pipeline feeding the
+    # same stage-2 walk must agree with both CPU engines. validate_utf8
+    # is off to match the builders-only comparison above (the CPU
+    # engines here run without the UTF-8 pre-check). `sess` is the ONE
+    # process-wide session: constructing a second in-process session
+    # deadlocks on the current CUDA toolchain (AsyncRT multi-context
+    # hang; Metal unaffected).
+    comptime if has_accelerator():
+        var ok_gpu: Bool
+        var out_gpu = String()
+        try:
+            var d = sess[].parse_document[ParseOptions(validate_utf8=False)](s)
+            out_gpu = to_string(d)
+            ok_gpu = True
+        except:
+            ok_gpu = False
+        assert_equal(ok_walk, ok_gpu, "gpu engine verdict diverged")
+        if ok_walk:
+            assert_equal(out_walk, out_gpu)
+        # Fourth engine: full device stage-2 materialization + host
+        # grammar walk must agree as well.
+        var ok_s2: Bool
+        var out_s2 = String()
+        try:
+            var d2 = sess[].parse_document[
+                ParseOptions(validate_utf8=False), True
+            ](s)
+            out_s2 = to_string(d2)
+            ok_s2 = True
+        except:
+            ok_s2 = False
+        assert_equal(ok_walk, ok_s2, "gpu stage-2 engine verdict diverged")
+        if ok_walk:
+            assert_equal(out_walk, out_s2)
+
+
+def _mutate(s: StringSlice, mut rng: Rng) raises -> List[Byte]:
+    """Byte-level corruption of `s`.
+
+    Slicing a valid document (the other corruption mode) can only ever
+    produce a PREFIX/SUFFIX of valid bytes, so it never reaches the
+    validators that reject bad escapes, raw control characters, or
+    malformed UTF-8. This injects bytes drawn from exactly those
+    classes, which is where the GPU kernels have dedicated code.
+    """
+    var out = List[Byte]()
+    for b in s.as_bytes():
+        out.append(b)
+    if len(out) == 0:
+        return out^
+    # Known-nasty bytes: raw control chars, a lone backslash, and the
+    # lead bytes of overlong / surrogate / 5-byte UTF-8 sequences.
+    var nasty = List[Byte]()
+    nasty.append(0x00)
+    nasty.append(0x09)
+    nasty.append(0x1F)
+    nasty.append(0x5C)
+    nasty.append(0x22)
+    nasty.append(0xC0)
+    nasty.append(0x80)
+    nasty.append(0xED)
+    nasty.append(0xA0)
+    nasty.append(0xF8)
+    nasty.append(0xFF)
+    var edits = rng.rand_int(min=1, max=4)
+    for _ in range(edits):
+        var at = rng.rand_int(min=0, max=len(out) - 1)
+        var pick = rng.rand_int(min=0, max=len(nasty) - 1)
+        out[at] = nasty[pick]
+    return out^
+
+
+def check_utf8_engines_agree(
+    b: Span[Byte, _], sess: UnsafePointer[GpuSession, MutAnyOrigin]
+) raises:
+    """GPU vs CPU with UTF-8 validation ON on BOTH sides.
+
+    `check_engines_agree` deliberately runs validation off so the GPU
+    matches the builders-only CPU oracles. That leaves the fused
+    stage-1 validator — a different implementation from the standalone
+    `is_valid_utf8` kernel — almost untested. Here both engines
+    validate, so a divergence is a real disagreement.
+    """
+    comptime if has_accelerator():
+        comptime opts = ParseOptions(validate_utf8=True)
+        var sl = StringSlice(unsafe_from_utf8=b)
+        var ok_cpu: Bool
+        var out_cpu = String()
+        try:
+            var d = parse_document[opts](sl)
+            out_cpu = to_string(d)
+            ok_cpu = True
+        except:
+            ok_cpu = False
+        var ok_gpu: Bool
+        var out_gpu = String()
+        try:
+            var d = sess[].parse_document[opts](sl)
+            out_gpu = to_string(d)
+            ok_gpu = True
+        except:
+            ok_gpu = False
+        assert_equal(ok_cpu, ok_gpu, "gpu utf8-validating verdict diverged")
+        if ok_cpu:
+            assert_equal(
+                out_cpu, out_gpu, "gpu utf8-validating output diverged"
+            )
+
+        # And the standalone validator must agree with the parse path's
+        # fused one on the same bytes.
+        var standalone = sess[].is_valid_utf8(sl)
+        if not standalone:
+            assert_equal(
+                ok_gpu, False, "fused utf8 accepted what standalone rejected"
+            )
+
+
+def check_jsonl_engines_agree(
+    a: StringSlice,
+    b: StringSlice,
+    sess: UnsafePointer[GpuSession, MutAnyOrigin],
+) raises:
+    """Batch differential: joining docs (including corrupt ones) with
+    newlines, the GPU batch parser must match the per-line CPU oracle
+    (try-parse each line, skip failures) in count and serialization."""
+    comptime if has_accelerator():
+        comptime opts = ParseOptions(validate_utf8=False)
+        var batch = String(a) + "\n" + String(b) + "\n\n" + String(a)
+
+        var cpu = List[String]()
+        var bytes = batch.as_bytes()
+        var n = len(bytes)
+        var line_start = 0
+        var i = 0
+        while i <= n:
+            if i == n or bytes[i] == 0x0A:
+                if i > line_start:
+                    var line = StringSlice(
+                        unsafe_from_utf8=Span(
+                            ptr=bytes.unsafe_ptr() + line_start,
+                            length=i - line_start,
+                        )
+                    )
+                    try:
+                        var sink = TapeSink(
+                            tape_capacity=line.byte_length() // 3 + 8,
+                            strings_capacity=line.byte_length() // 2 + 16,
+                        )
+                        var lbuf = PaddedBuffer(line.as_bytes())
+                        var p = Parser[options=opts._padded()](padded=lbuf)
+                        parse_document_tape_indexed(p, sink)
+                        var tape = List[UInt64]()
+                        var strings = _Arena(capacity=0)
+                        swap(tape, sink.tape)
+                        swap(strings, sink.strings)
+                        cpu.append(to_string(Document(tape^, strings^, False)))
+                    except:
+                        pass
+                line_start = i + 1
+            i += 1
+
+        var gpu = sess[].parse_documents[opts](batch)
+        assert_equal(len(gpu), len(cpu), "jsonl engine count diverged")
+        for k in range(len(cpu)):
+            assert_equal(to_string(gpu[k]), cpu[k])
+
+
+def _run_fuzz_tests(gpu_sess: UnsafePointer[GpuSession, MutAnyOrigin]) raises:
+    print("Running fuzzy tests...")
+    var iters = 100
+
+    @parameter
+    def test_parse(s: String) raises:
+        var rng = Rng(seed=Int(perf_counter_ns()))
+        var j: Value = {}
+        if iters % 4 == 0:
+            var start = rng.rand_int(min=0, max=s.byte_length())
+            var end = rng.rand_int(min=start, max=s.byte_length())
+            var corrupted = s[byte=start:end]
+            try:
+                j = parse(corrupted)
+            except:
+                # Main thing is we don't want this to crash.
+                # But don't enforce failure on the off chance this slicing happens to
+                # produce valid json.
+                pass
+            # The two tape engines must agree even on garbage.
+            check_engines_agree(corrupted, gpu_sess)
+            # And the batch engine must agree with the per-line
+            # oracle on batches containing the garbage.
+            check_jsonl_engines_agree(s, corrupted, gpu_sess)
+            # Byte-mutated variants reach the escape / control-char /
+            # UTF-8 validators that slicing alone cannot.
+            var mutated = _mutate(s, rng)
+            check_utf8_engines_agree(Span(mutated), gpu_sess)
+            check_engines_agree(
+                StringSlice(unsafe_from_utf8=Span(mutated)), gpu_sess
+            )
+        else:
+            j = parse(s)
+            assert_equal(String(j), s)
+            check_engines_agree(s, gpu_sess)
+            check_utf8_engines_agree(s.as_bytes(), gpu_sess)
+        iters -= 1
+        keep(j)
+
+    var test = PropTest(config=PropTestConfig(runs=iters))
+    test.test[test_parse](JsonStringStrategy())
+    print("Test passed!")
+
+
 def main() raises:
     comptime if is_defined["GEN_JSONL"]():
         var rng = Rng(seed=Int(perf_counter_ns()))
@@ -92,30 +368,21 @@ def main() raises:
                 f.write(strat.value(rng), "\n")
 
     else:
-        print("Running fuzzy tests...")
-        var iters = 100
-
-        @parameter
-        def test_parse(s: String) raises:
-            var rng = Rng(seed=Int(perf_counter_ns()))
-            var j: Value = {}
-            if iters % 4 == 0:
-                var start = rng.rand_int(min=0, max=s.byte_length())
-                var end = rng.rand_int(min=start, max=s.byte_length())
-                var corrupted = s[byte=start:end]
-                try:
-                    j = parse(corrupted)
-                except:
-                    # Main thing is we don't want this to crash.
-                    # But don't enforce failure on the off chance this slicing happens to
-                    # produce valid json.
-                    pass
-            else:
-                j = parse(s)
-                assert_equal(String(j), s)
-            iters -= 1
-            keep(j)
-
-        var test = PropTest(config=PropTestConfig(runs=iters))
-        test.test[test_parse](JsonStringStrategy())
-        print("Test passed!")
+        # ONE stack-resident GPU session for the whole fuzz run, passed
+        # down by pointer: constructing a second in-process GpuSession
+        # deadlocks on the current CUDA toolchain (AsyncRT multi-context
+        # hang; Metal unaffected), and a HEAP-resident session's fields
+        # get corrupted intermittently by a runtime race on the same
+        # toolchain (SIGBUS on a poisoned buffer pointer; ASan-clean,
+        # deterministic replays always pass). Stack placement — the
+        # shape every GPU test suite uses — avoids both.
+        comptime if has_accelerator():
+            var sess = GpuSession()
+            _run_fuzz_tests(UnsafePointer(to=sess))
+            _ = sess^
+        else:
+            # CPU-only: the pointer is never dereferenced (every GPU
+            # block is comptime-gated); the slot is a dummy allocation
+            # because UnsafePointer is non-nullable.
+            var dummy = alloc[GpuSession](1)
+            _run_fuzz_tests(dummy)

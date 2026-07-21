@@ -2,6 +2,7 @@ from .object import Object
 from .value import Value
 from .traits import JsonValue, PrettyPrintable
 from .utils import PaddedBuffer, PAD_INPUT_THRESHOLD
+from ._utf8 import is_valid_utf8
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
 from std.python import PythonObject, Python
@@ -73,6 +74,9 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     def __init__(out self: Array, *, parse_string: String) raises:
+        # Default options: UTF-8 validation is on (see ParseOptions).
+        if not is_valid_utf8(StringSlice(parse_string)):
+            raise Error("Invalid UTF-8 in input")
         # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
         # tiny inputs skip the copy since it would cost more than the parse.
         if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
@@ -80,7 +84,7 @@ struct Array(JsonValue, Sized):
             self = p.parse_array()
         else:
             var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-            var p = Parser[options=ParseOptions()._padded()](buf.span())
+            var p = Parser[options=ParseOptions()._padded()](padded=buf)
             self = p.parse_array()
 
     @always_inline

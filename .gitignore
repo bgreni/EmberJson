@@ -14,3 +14,4 @@ emberjson.mojopkg
 __mojocache__
 kgen.trace.json**
 .claude
+bench_data/large/

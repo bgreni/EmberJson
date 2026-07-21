@@ -289,7 +289,12 @@ def _needs_escape(bytes: Span[Byte, _], n: Int) -> Bool:
     return False
 
 
+@always_inline
 def write_escaped_string(s: String, mut writer: Some[Writer]):
+    write_escaped_string(StringSlice(s), writer)
+
+
+def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
     var bytes = s.as_bytes()
     var n = s.byte_length()
 
