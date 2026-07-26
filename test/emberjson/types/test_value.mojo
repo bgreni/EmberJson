@@ -248,17 +248,17 @@ def test_repr_null() raises:
 
 def test_repr_value_int() raises:
     var v = Value(Int64(42))
-    assert_equal(repr(v), "SIMD[DType.int64, 1](42)")
+    assert_equal(repr(v), "Int64(42)")
 
 
 def test_repr_value_uint() raises:
     var v = Value(UInt64(99))
-    assert_equal(repr(v), "SIMD[DType.uint64, 1](99)")
+    assert_equal(repr(v), "UInt64(99)")
 
 
 def test_repr_value_float() raises:
     var v = Value(Float64(3.14))
-    assert_equal(repr(v), "SIMD[DType.float64, 1](3.14)")
+    assert_equal(repr(v), "Float64(3.14)")
 
 
 def test_repr_value_string() raises:
@@ -278,18 +278,12 @@ def test_repr_value_null() raises:
 
 def test_repr_value_array() raises:
     var v: Value = [1, 2, 3]
-    assert_equal(
-        repr(v),
-        (
-            "Array(SIMD[DType.int64, 1](1), SIMD[DType.int64, 1](2),"
-            " SIMD[DType.int64, 1](3))"
-        ),
-    )
+    assert_equal(repr(v), "Array(Int64(1), Int64(2), Int64(3))")
 
 
 def test_repr_value_object() raises:
     var v: Value = {"key": 42}
-    assert_equal(repr(v), 'Object{"key":SIMD[DType.int64, 1](42)}')
+    assert_equal(repr(v), 'Object{"key":Int64(42)}')
 
 
 def test_booling() raises:

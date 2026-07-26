@@ -30,7 +30,7 @@ gen_large = "python tools/gen_large_datasets.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=1.0.0b3.dev2026071006,<2"
+mojo = ">=1.0.0b3.dev2026072406,<2"
 
 
 
@@ -42,11 +42,11 @@ version = "0.3.4"
 backend = { name = "pixi-build-mojo", version = "0.1.*" }
 
 [package.host-dependencies]
-mojo-compiler = ">=1.0.0b3.dev2026071006,<2"
+mojo-compiler = ">=1.0.0b3.dev2026072406,<2"
 
 [package.build-dependencies]
-mojo-compiler = ">=1.0.0b3.dev2026071006,<2"
+mojo-compiler = ">=1.0.0b3.dev2026072406,<2"
 
 [package.run-dependencies]
-mojo-compiler = ">=1.0.0b3.dev2026071006,<2"
+mojo-compiler = ">=1.0.0b3.dev2026072406,<2"
 

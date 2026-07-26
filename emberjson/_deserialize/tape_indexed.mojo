@@ -92,7 +92,7 @@ comptime _TOKEN_END_OK: StackArray[Bool, 256] = _gen_token_end_table()
 
 @always_inline
 def _check_token_end[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](p: Parser[origin, options]) raises:
     """After a number/literal, the next byte must terminate the token."""
     var b = p.data.unsafe_get()
@@ -102,7 +102,7 @@ def _check_token_end[
 
 
 def _validate_escape_names[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](p: Parser[origin, options], off: Int, end_off: Int) raises:
     """Escape-name validation for the `ignore_unicode` verbatim path (the
     decode path validates names itself)."""
@@ -120,7 +120,7 @@ def _validate_escape_names[
 
 
 def _iscan_string[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](p: Parser[origin, options], start_off: Int, end_off: Int) raises -> Tuple[
     Bool, Int
 ]:
@@ -182,7 +182,7 @@ comptime _SCOPE_END: Int = 4
 
 
 def parse_document_tape_indexed[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     """Stage-1 + stage-2 parse of the parser's whole input.
 
@@ -203,7 +203,7 @@ def parse_document_tape_indexed[
 
 
 def _walk_tape_from_index[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](
     mut p: Parser[origin, options],
     mut sink: TapeSink,

@@ -16,7 +16,7 @@ from emberjson.array import Array
 from emberjson.object import Object, _ObjectParseIndex
 from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
-from std.memory import UnsafePointer, memset
+from std.memory import UnsafePointer, unsafe_memset
 from std.sys.intrinsics import unlikely, likely
 from std.collections import InlineArray
 from ._parser_helper import (
@@ -172,7 +172,7 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
         return res
 
 
-comptime IntegerParseResult[origin: ImmutOrigin, acc_type: DType] = Tuple[
+comptime IntegerParseResult[origin: ImmOrigin, acc_type: DType] = Tuple[
     Scalar[acc_type], Bool, CheckedPointer[origin], Int, CheckedPointer[origin]
 ]
 
@@ -191,7 +191,7 @@ struct RawNumber(TrivialRegisterPassable):
     var bits: UInt64
 
 
-struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
+struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer[Self.origin]
     var size: Int
 
@@ -245,7 +245,9 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         )
         # Safety: the buffer is borrowed for `Self.origin`, so viewing its
         # heap data through that origin is exactly the borrow contract.
-        var p = padded._data.unsafe_ptr().unsafe_origin_cast[Self.origin]()
+        var p: BytePtr[
+            Self.origin
+        ] = padded._data.unsafe_ptr().unsafe_origin_cast[Self.origin]()
         self.data = CheckedPointer(p, p, p + padded._len)
         self.size = padded._len
 
@@ -1200,7 +1202,8 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             while True:
                 if len(closers) == 0:
                     return Span(
-                        ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                        unsafe_ptr=start.p,
+                        length=ptr_dist(start.p, self.data.p),
                     )
 
                 self._skip_ws()
@@ -1273,7 +1276,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
                 self.data += block.quote_index()
                 self.data += 1
                 var res = Span(
-                    ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                    unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p)
                 )
                 return res
 
@@ -1294,7 +1297,7 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
             if c == `"`:
                 self.data += 1
                 var res = Span(
-                    ptr=start.p, length=ptr_dist(start.p, self.data.p)
+                    unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p)
                 )
                 return res
             elif c == `\\`:
@@ -1311,13 +1314,13 @@ struct Parser[origin: ImmutOrigin, options: ParseOptions = ParseOptions()]:
         self.skip_whitespace()
         var start = self.data
         self._validate_number[integer_only=True]()
-        return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
+        return Span(unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
     def expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
         self.skip_whitespace()
         var start = self.data
         self._validate_number()
-        return Span(ptr=start.p, length=ptr_dist(start.p, self.data.p))
+        return Span(unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
     def expect_object_bytes(mut self) raises -> Span[Byte, Self.origin]:
         self.skip_whitespace()
@@ -1394,7 +1397,9 @@ def minify(s: String, out out_str: String) raises:
 
             length += Int(block.quote_index() + 1)
             out_str += StringSlice(
-                unsafe_from_utf8=Span[Byte, ptr.origin](ptr=ptr, length=length)
+                unsafe_from_utf8=Span[Byte, ptr.origin](
+                    unsafe_ptr=ptr, length=length
+                )
             )
             ptr += length
 
@@ -1407,7 +1412,7 @@ def minify(s: String, out out_str: String) raises:
                 valid_bits = min(valid_bits, count_trailing_zeros(quotes))
             out_str += StringSlice(
                 unsafe_from_utf8=Span[Byte, ptr.origin](
-                    ptr=ptr, length=Int(valid_bits)
+                    unsafe_ptr=ptr, length=Int(valid_bits)
                 )
             )
             ptr += valid_bits

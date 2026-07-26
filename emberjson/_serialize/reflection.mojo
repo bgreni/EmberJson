@@ -1,6 +1,7 @@
 from std.reflection import (
     reflect,
 )
+from std.builtin.rebind import downcast
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
@@ -235,9 +236,23 @@ def __serialize_iterable[
 ):
     writer.begin_array()
     var len = len(value)
-    for i, item in enumerate(value):
-        var add_comma = i != len - 1
-        writer.write_item(item, add_comma)
+    # Driven off the raw iterator rather than `for ... in enumerate(value)`:
+    # a generic `Iterator.Element` is only `Movable`, so both the loop
+    # binding and `enumerate`'s `Tuple` would be values the compiler cannot
+    # drop. Taking each element by hand lets us consume it through a
+    # `downcast` that carries `ImplicitlyDeletable`.
+    var i = 0
+    var it = value.__iter__()
+    while True:
+        try:
+            var item = it.__next__()
+            writer.write_item(item, i != len - 1)
+            i += 1
+            _ = rebind_var[
+                downcast[type_of(item), Movable & ImplicitlyDeletable]
+            ](item^)
+        except StopIteration:
+            break
 
     writer.end_array()
 

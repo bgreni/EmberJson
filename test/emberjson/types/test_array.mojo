@@ -95,14 +95,18 @@ def test_list_ctr() raises:
 def test_iter() raises:
     var arr = Array(False, 123, None)
 
+    # `el` and `arr[i]` are both interior references into `arr._data`, and
+    # forming the second invalidates the first, so copy out before indexing.
     var i = 0
     for el in arr:
-        assert_equal(el, arr[i])
+        var got = el.copy()
+        assert_equal(got, arr[i])
         i += 1
 
     i = 2
     for el in arr.reversed():
-        assert_equal(el, arr[i])
+        var got = el.copy()
+        assert_equal(got, arr[i])
         i -= 1
 
 
@@ -148,14 +152,14 @@ def test_repr_empty() raises:
 
 def test_repr_single() raises:
     var arr = Array(42)
-    assert_equal(repr(arr), "Array(SIMD[DType.int64, 1](42))")
+    assert_equal(repr(arr), "Array(Int64(42))")
 
 
 def test_repr_multiple() raises:
     var arr = Array(1, "foo", None)
     assert_equal(
         repr(arr),
-        "Array(SIMD[DType.int64, 1](1), 'foo', Null())",
+        "Array(Int64(1), 'foo', Null())",
     )
 
 
@@ -164,7 +168,7 @@ def test_repr_nested() raises:
     var outer = Array(inner.copy(), "end")
     assert_equal(
         repr(outer),
-        "Array(Array(SIMD[DType.int64, 1](1), SIMD[DType.int64, 1](2)), 'end')",
+        "Array(Array(Int64(1), Int64(2)), 'end')",
     )
 
 

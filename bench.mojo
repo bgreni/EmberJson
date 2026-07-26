@@ -676,7 +676,7 @@ def benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     b.iter[do]()
 
 
-comptime LazyCatalogData[origin: ImmutOrigin] = Lazy[CatalogData, origin]
+comptime LazyCatalogData[origin: ImmOrigin] = Lazy[CatalogData, origin]
 
 
 struct CatalogData(Defaultable, Movable):

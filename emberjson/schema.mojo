@@ -36,7 +36,7 @@ struct AllOf[T: _Base, *validators: Validator](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -86,7 +86,7 @@ struct Validated[
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -216,12 +216,37 @@ Parameters:
 
 @always_inline
 def __has_unique_elements[T: _Base & Iterable](value: T) -> Bool:
-    for i, a in enumerate(value):
-        for j, b in enumerate(value):
-            if i != j and rebind[downcast[type_of(a), Equatable]](a) == rebind[
-                downcast[type_of(b), Equatable]
-            ](b):
-                return False
+    # Driven off the raw iterators rather than `for ... in enumerate(value)`:
+    # a generic `Iterator.Element` is only `Movable`, so both the loop binding
+    # and `enumerate`'s `Tuple` would be values the compiler cannot drop.
+    # Taking each element by hand lets us consume it through a `downcast` that
+    # carries `ImplicitlyDeletable`.
+    comptime Elem = downcast[
+        T.IteratorType[origin_of(value)].Element,
+        Equatable & Movable & ImplicitlyDeletable,
+    ]
+    var i = 0
+    var outer = value.__iter__()
+    while True:
+        try:
+            var a = rebind_var[Elem](outer.__next__())
+            var j = 0
+            var inner = value.__iter__()
+            while True:
+                try:
+                    var b = rebind_var[Elem](inner.__next__())
+                    var dup = i != j and a == b
+                    _ = b^
+                    if dup:
+                        _ = a^
+                        return False
+                    j += 1
+                except StopIteration:
+                    break
+            _ = a^
+            i += 1
+        except StopIteration:
+            break
     return True
 
 
@@ -303,7 +328,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -357,7 +382,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -405,7 +430,7 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -476,7 +501,7 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -513,7 +538,7 @@ struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -546,7 +571,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
@@ -586,7 +611,7 @@ struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {Self.func(deserialize[Value](p))}
 
@@ -708,7 +733,7 @@ struct Default[T: _Base, default: T](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         var op = deserialize[Optional[Self.T]](p)
         if op:
@@ -745,7 +770,7 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {Self.func(deserialize[Self.InT](p))}
 
@@ -806,7 +831,7 @@ struct CrossFieldValidator[
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.Type](p)}
         s.validate(s.value)

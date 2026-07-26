@@ -12,37 +12,37 @@ from std.builtin.rebind import downcast
 
 
 def _get_object_bytes[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_object_bytes()
 
 
 def _get_array_bytes[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_array_bytes()
 
 
 def _get_int_bytes[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_int_bytes()
 
 
 def _get_float_bytes[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_float_bytes()
 
 
 def _get_string_bytes[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_string_bytes()
 
 
 def _get_value_bytes[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
     return p.expect_value_bytes()
 
@@ -54,15 +54,15 @@ def _deserialize_bytes[
     return _deserialize_impl[T](p)
 
 
-comptime ReadBytesFn[origin: ImmutOrigin] = def(
+comptime ReadBytesFn[origin: ImmOrigin] = def(
     mut Parser[origin]
 ) thin raises -> Span[Byte, origin]
-comptime ParseFn[T: _Base, origin: ImmutOrigin] = def(
+comptime ParseFn[T: _Base, origin: ImmOrigin] = def(
     Span[Byte, origin]
 ) thin raises -> T
 
 
-def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:
+def __pick_byte_expect[T: _Base, origin: ImmOrigin]() -> ReadBytesFn[origin]:
     comptime if conforms_to(T, JsonDeserializable) and downcast[
         T, JsonDeserializable
     ].deserialize_as_array():
@@ -74,7 +74,7 @@ def __pick_byte_expect[T: _Base, origin: ImmutOrigin]() -> ReadBytesFn[origin]:
 @fieldwise_init
 struct Lazy[
     T: _Base,
-    origin: ImmutOrigin,
+    origin: ImmOrigin,
     parse_value: ReadBytesFn[origin] = __pick_byte_expect[T, origin](),
     extract_value: ParseFn[T, origin] = _deserialize_bytes[T, origin],
 ](Hashable, JsonDeserializable, JsonSerializable, TrivialRegisterPassable):
@@ -82,7 +82,7 @@ struct Lazy[
 
     @staticmethod
     def from_json[
-        o: ImmutOrigin, options: ParseOptions, //
+        o: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[o, options], out s: Self) raises:
         # TODO: Remove this restriction when compiler allows
         comptime assert (
@@ -114,22 +114,22 @@ struct Lazy[
         return StringSlice(unsafe_from_utf8=self._data[1:-1])
 
 
-comptime LazyString[origin: ImmutOrigin] = Lazy[
+comptime LazyString[origin: ImmOrigin] = Lazy[
     String, origin, _get_string_bytes[origin]
 ]
 
-comptime LazyInt[origin: ImmutOrigin] = Lazy[
+comptime LazyInt[origin: ImmOrigin] = Lazy[
     Int64, origin, _get_int_bytes[origin]
 ]
 
-comptime LazyUInt[origin: ImmutOrigin] = Lazy[
+comptime LazyUInt[origin: ImmOrigin] = Lazy[
     UInt64, origin, _get_int_bytes[origin]
 ]
 
-comptime LazyFloat[origin: ImmutOrigin] = Lazy[
+comptime LazyFloat[origin: ImmOrigin] = Lazy[
     Float64, origin, _get_float_bytes[origin]
 ]
 
-comptime LazyValue[origin: ImmutOrigin] = Lazy[
+comptime LazyValue[origin: ImmOrigin] = Lazy[
     Value, origin, _get_value_bytes[origin]
 ]

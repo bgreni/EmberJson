@@ -15,7 +15,7 @@ from std.testing import (
 )
 
 
-struct Mixed[origin: ImmutOrigin](Movable):
+struct Mixed[origin: ImmOrigin](Movable):
     """A struct mixing eagerly-parsed fields with lazily-captured ones:
     `heavy` and `note` only record their byte spans during deserialize
     and materialize on `.get()`."""

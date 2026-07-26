@@ -136,7 +136,8 @@ def test_lazy_value() raises:
 
 def test_lazy_init_from_bytes() raises:
     var s = "123.42"
-    var l = LazyFloat[origin_of(s)](s.as_bytes())
+    var b = s.as_bytes()
+    var l = LazyFloat[b.origin](b)
     assert_equal(l.get(), 123.42)
 
 

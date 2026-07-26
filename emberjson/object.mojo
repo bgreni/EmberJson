@@ -46,7 +46,7 @@ struct _ObjectIter[origin: Origin](Sized, TrivialRegisterPassable):
     @always_inline
     def __next__(
         mut self,
-    ) raises StopIteration -> ref[self.src[]._data] KeyValuePair:
+    ) raises StopIteration -> ref[self.src[]._data[self.idx]] KeyValuePair:
         if self.idx >= len(self.src[]):
             raise StopIteration()
         self.idx += 1
@@ -449,6 +449,6 @@ struct Object(JsonValue, Sized):
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.parse_object()

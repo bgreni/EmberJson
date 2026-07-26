@@ -121,7 +121,10 @@ def format_float(val: Float64) -> String:
         var base = String(parts[0])
         var exp = String(parts[1])
         if base.byte_length() > 6:
-            base = String(base[byte=0:6])
+            # Temporary: assigning the slice straight back aliases `base`
+            # while the `String` initializer is writing to it.
+            var truncated = String(base[byte=0:6])
+            base = truncated^
         return base + "e" + exp
     if s.byte_length() > 8:
         return String(s[byte=0:8])
@@ -155,7 +158,8 @@ def print_comparison(var results: BenchResults, names: List[String]) raises:
                 var speedup = s_val / t_val
                 speedup_str = String(speedup)
                 if speedup_str.byte_length() > 5:
-                    speedup_str = String(speedup_str[byte=0:5])
+                    var truncated = String(speedup_str[byte=0:5])
+                    speedup_str = truncated^
                 speedup_str += "x"
 
             var t_str = pad_right(format_float(t_val), 9)

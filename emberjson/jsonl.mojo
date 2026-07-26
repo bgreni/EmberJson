@@ -1,5 +1,6 @@
 from std.pathlib import Path
-from std.memory import ArcPointer, memset, Span, memcpy
+from std.collections import Span
+from std.memory import ArcPointer, unsafe_memset, unsafe_memcpy
 from .constants import `\n`, `\r`
 from std.os import PathLike
 from .simd import SIMD8_WIDTH
@@ -33,16 +34,16 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
         var p = self.ptr()
         for i in range(self.length):
             p[i] = p[i + n]
-        memset(p + self.length, 0, Self.BUFFER_SIZE - self.length)
+        unsafe_memset(p + self.length, 0, Self.BUFFER_SIZE - self.length)
 
     def clear(mut self):
-        memset(self.ptr(), 0, Self.BUFFER_SIZE)
+        unsafe_memset(self.ptr(), 0, Self.BUFFER_SIZE)
         self.length = 0
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write(
             StringSlice(
-                unsafe_from_utf8=Span(ptr=self.ptr(), length=self.length)
+                unsafe_from_utf8=Span(unsafe_ptr=self.ptr(), length=self.length)
             )
         )
 
@@ -79,7 +80,9 @@ struct JSONLinesIter(Iterator):
 
             try:
                 j = Value(
-                    parse_bytes=Span(ptr=line.unsafe_ptr(), length=len(line))
+                    parse_bytes=Span(
+                        unsafe_ptr=line.unsafe_ptr(), length=len(line)
+                    )
                 )
                 return
             except e:
@@ -106,13 +109,19 @@ struct JSONLinesIter(Iterator):
             var p = self.read_buf.ptr()
             var old_len = len(line)
             line.resize(old_len + newline_ind, 0)
-            memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=newline_ind)
+            unsafe_memcpy(
+                dest=line.unsafe_ptr().unsafe_offset(old_len),
+                src=p,
+                count=newline_ind,
+            )
             self.read_buf.clear(newline_ind + 1)
             return line^
 
         while True:
             buf_span = Span(
-                ptr=self.read_buf.ptr() + self.read_buf.length,
+                unsafe_ptr=self.read_buf.ptr().unsafe_offset(
+                    self.read_buf.length
+                ),
                 length=self.read_buf.BUFFER_SIZE - self.read_buf.length,
             )
             var read = file.read(buf_span)
@@ -124,7 +133,11 @@ struct JSONLinesIter(Iterator):
                     var old_len = len(line)
                     var count = len(self.read_buf)
                     line.resize(old_len + count, 0)
-                    memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=count)
+                    unsafe_memcpy(
+                        dest=line.unsafe_ptr().unsafe_offset(old_len),
+                        src=p,
+                        count=count,
+                    )
                     self.read_buf.clear()
                 # Distinguish a true EOF from a blank line. A blank line returns
                 # an empty buffer via the `\n` branch above; only here, with no
@@ -140,8 +153,10 @@ struct JSONLinesIter(Iterator):
                 var p = self.read_buf.ptr()
                 var old_len = len(line)
                 line.resize(old_len + newline_ind, 0)
-                memcpy(
-                    dest=line.unsafe_ptr() + old_len, src=p, count=newline_ind
+                unsafe_memcpy(
+                    dest=line.unsafe_ptr().unsafe_offset(old_len),
+                    src=p,
+                    count=newline_ind,
                 )
                 self.read_buf.clear(newline_ind + 1)
                 return line^
@@ -150,7 +165,11 @@ struct JSONLinesIter(Iterator):
                 var old_len = len(line)
                 var count = len(self.read_buf)
                 line.resize(old_len + count, 0)
-                memcpy(dest=line.unsafe_ptr() + old_len, src=p, count=count)
+                unsafe_memcpy(
+                    dest=line.unsafe_ptr().unsafe_offset(old_len),
+                    src=p,
+                    count=count,
+                )
                 self.read_buf.clear()
 
 

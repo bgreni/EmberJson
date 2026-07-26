@@ -64,7 +64,7 @@ struct Null(JsonValue, TrivialRegisterPassable):
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.parse_null()
 
@@ -190,7 +190,7 @@ struct Value(JsonValue, Sized):
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.parse_value()
 

@@ -31,7 +31,7 @@ from emberjson.constants import (
     `\f`,
     acceptable_escapes,
 )
-from std.memory import memcpy, memcmp, alloc, UnsafePointer
+from std.memory import unsafe_memcpy, unsafe_memcmp, alloc, UnsafePointer
 from std.sys.intrinsics import unlikely, likely
 
 
@@ -120,7 +120,7 @@ struct _Arena(Movable):
 
     Deliberately not a `List`: string writes are the hottest allocation
     path in the tape builder, and `List.resize` both zero-fills the new
-    region (the memcpy right after overwrites it anyway) and re-checks
+    region (the unsafe_memcpy right after overwrites it anyway) and re-checks
     capacity per call. Here capacity is checked once per string and
     content is written exactly once."""
 
@@ -142,7 +142,7 @@ struct _Arena(Movable):
         if new_cap < needed:
             new_cap = needed
         var new_ptr = alloc[Byte](new_cap)
-        memcpy(dest=new_ptr, src=self._ptr, count=self._len)
+        unsafe_memcpy(dest=new_ptr, src=self._ptr, count=self._len)
         self._ptr.free()
         self._ptr = new_ptr
         self._cap = new_cap
@@ -167,7 +167,7 @@ def _arena_view(strings: _Arena, off: Int) -> StringSlice[ImmutAnyOrigin]:
         .as_immutable()
         .unsafe_origin_cast[ImmutAnyOrigin]()
     )
-    var span = Span[Byte, ImmutAnyOrigin](ptr=ptr, length=n)
+    var span = Span[Byte, ImmutAnyOrigin](unsafe_ptr=ptr, length=n)
     return StringSlice(unsafe_from_utf8=span)
 
 
@@ -177,7 +177,8 @@ def _arena_str_eq(strings: _Arena, off_a: Int, off_b: Int) -> Bool:
     if len_a != _arena_len(strings, off_b):
         return False
     return (
-        memcmp(strings._ptr + off_a + 4, strings._ptr + off_b + 4, len_a) == 0
+        unsafe_memcmp(strings._ptr + off_a + 4, strings._ptr + off_b + 4, len_a)
+        == 0
     )
 
 
@@ -202,7 +203,7 @@ struct TapeSink(Movable):
 
 
 def _handle_unicode_codepoint_ptr[
-    o1: ImmutOrigin, o2: ImmutOrigin, //
+    o1: ImmOrigin, o2: ImmOrigin, //
 ](
     mut p: BytePtr[o1],
     mut w: UnsafePointer[Byte, MutUntrackedOrigin],
@@ -287,7 +288,7 @@ def _arena_write[
         var p = start + first_escape
 
         if first_escape > 0:
-            memcpy(dest=w, src=start, count=first_escape)
+            unsafe_memcpy(dest=w, src=start, count=first_escape)
             w += first_escape
 
         while p < end:
@@ -297,7 +298,7 @@ def _arena_write[
 
             if p > chunk_start:
                 var chunk_len = ptr_dist(chunk_start, p)
-                memcpy(dest=w, src=chunk_start, count=chunk_len)
+                unsafe_memcpy(dest=w, src=chunk_start, count=chunk_len)
                 w += chunk_len
 
             if p < end:
@@ -343,7 +344,7 @@ def _arena_write[
                         raise Error("Invalid escape sequence")
         final_len = Int(w) - Int(content)
     else:
-        memcpy(dest=content, src=start, count=raw_len)
+        unsafe_memcpy(dest=content, src=start, count=raw_len)
         final_len = raw_len
 
     (strings._ptr + off).bitcast[UInt32]()[] = UInt32(final_len)
@@ -353,7 +354,7 @@ def _arena_write[
 
 
 def _tape_string[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     """Scans the string at the cursor (mirroring `Parser.find` /
     `Parser.read_serial`) and appends it to the arena + tape."""
@@ -448,7 +449,7 @@ comptime _DISC_PRIME: UInt64 = 0x9E3779B185EBCA87
 def _key_disc(strings: _Arena, off: Int) -> UInt64:
     """A cheap 64-bit discriminator over a key's arena bytes.
 
-    Not a quality hash — collisions only cost a confirming memcmp in
+    Not a quality hash — collisions only cost a confirming unsafe_memcmp in
     `_push_and_check_key`, so all that matters is that equal keys map to
     equal values and typical distinct keys (including sequential numeric
     ids) usually differ. Short keys are one masked load; longer keys use
@@ -489,7 +490,7 @@ def _push_and_check_key(mut sink: TapeSink, base: Int, key_off: Int) raises:
 
 
 def _tape_object[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     p.data += 1
     p.skip_whitespace()
@@ -552,7 +553,7 @@ def _tape_object[
 
 
 def _tape_array[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     p.data += 1
     p.skip_whitespace()
@@ -595,7 +596,7 @@ def _tape_array[
 
 
 def _tape_value[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     p.skip_whitespace()
     var b = p.cur()
@@ -624,7 +625,7 @@ def _tape_value[
 
 
 def parse_document_tape[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     """Parses the parser's whole input onto `sink`, enforcing the same
     grammar, strictness and trailing-input rules as `Parser.parse`."""
