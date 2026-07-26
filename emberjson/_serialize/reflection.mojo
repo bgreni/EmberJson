@@ -368,14 +368,14 @@ __extension Optional(JsonSerializable):
 
 __extension List(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        __serialize_iterable(self, writer)
-        # writer.begin_array()
-
-        # for i in range(len(self)):
-        #     var add_comma = i != len(self) - 1
-        #     writer.write_item(self[i], add_comma)
-
-        # writer.end_array()
+        # Indexed rather than `__serialize_iterable`: `self[i]` is a
+        # reference, so there is no owned per-element temporary for the
+        # compiler to have to destroy.
+        writer.begin_array()
+        var n = len(self)
+        for i in range(n):
+            writer.write_item(self[i], i != n - 1)
+        writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:
@@ -384,7 +384,11 @@ __extension List(JsonSerializable):
 
 __extension InlineArray(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        __serialize_iterable(self, writer)
+        # Indexed, for the same reason as `List` above.
+        writer.begin_array()
+        for i in range(Self.length):
+            writer.write_item(self[i], i != Self.length - 1)
+        writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:
