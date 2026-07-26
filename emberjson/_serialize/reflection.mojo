@@ -1,7 +1,6 @@
 from std.reflection import (
     reflect,
 )
-from std.builtin.rebind import downcast
 from std.collections import Set
 from std.memory import ArcPointer, OwnedPointer
 from std.format._utils import _WriteBufferStack
@@ -229,34 +228,6 @@ def _default_serialize[
         writer.end_object()
 
 
-def __serialize_iterable[
-    T: Iterable & Sized
-](value: T, mut writer: Some[Serializer]) where conforms_to(
-    T.IteratorType[origin_of(value)], Copyable
-):
-    writer.begin_array()
-    var len = len(value)
-    # Driven off the raw iterator rather than `for ... in enumerate(value)`:
-    # a generic `Iterator.Element` is only `Movable`, so both the loop
-    # binding and `enumerate`'s `Tuple` would be values the compiler cannot
-    # drop. Taking each element by hand lets us consume it through a
-    # `downcast` that carries `ImplicitlyDeletable`.
-    var i = 0
-    var it = value.__iter__()
-    while True:
-        try:
-            var item = it.__next__()
-            writer.write_item(item, i != len - 1)
-            i += 1
-            _ = rebind_var[
-                downcast[type_of(item), Movable & ImplicitlyDeletable]
-            ](item^)
-        except StopIteration:
-            break
-
-    writer.end_array()
-
-
 # ===============================================
 # Primitives
 # ===============================================
@@ -368,9 +339,9 @@ __extension Optional(JsonSerializable):
 
 __extension List(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        # `List`'s iterator yields references, unlike the generic
-        # `Iterator` protocol `__serialize_iterable` has to go through, so
-        # there is no owned per-element temporary here.
+        # `List`'s iterator yields references (it overrides the `Iterator`
+        # protocol's by-value `__next__`), so there is no owned per-element
+        # temporary for the compiler to have to destroy.
         writer.begin_array()
         var n = len(self)
         var i = 0
@@ -433,7 +404,15 @@ __extension Tuple(JsonSerializable):
 
 __extension Set(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        __serialize_iterable(self, writer)
+        # Same as `List` above: `Set`'s iterator (a `_DictKeyIter`) yields
+        # references, so there is no owned per-element temporary.
+        writer.begin_array()
+        var n = len(self)
+        var i = 0
+        for item in self:
+            writer.write_item(item, i != n - 1)
+            i += 1
+        writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:
