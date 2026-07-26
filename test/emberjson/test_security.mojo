@@ -3,6 +3,7 @@
 
 from emberjson import (
     parse,
+    parse_document,
     Array,
     Object,
     Value,
@@ -208,6 +209,52 @@ def test_truncation_at_chunk_boundaries() raises:
         assert_equal(parse(padded_to(total, "1234")).int(), 1234)
         assert_equal(parse(padded_to(total, '"ok"')).string(), "ok")
         assert_equal(len(parse(padded_to(total, "[1,2]")).array()), 2)
+
+
+# ===========================================================================
+# An embedded NUL after a scalar must be rejected, not treated as the
+# `PaddedBuffer` pad. The index-driven engine (which `parse_document` takes
+# for inputs >= PAD_INPUT_THRESHOLD) whitelisted NUL as a token terminator,
+# so `123<NUL>4` parsed as `123` while the byte-walk engine rejected the
+# same bytes — a parser differential that silently changed the value.
+# ===========================================================================
+def test_embedded_nul_after_scalar_is_rejected() raises:
+    def with_nul(prefix: StringSlice, suffix: StringSlice) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(0)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    # Short inputs (byte-walk engine) and padded inputs (index engine) must
+    # agree, so pad past PAD_INPUT_THRESHOLD as well as staying under it.
+    var filler = String()
+    for i in range(12):
+        filler += '"k' + String(i) + '":"vvvvvvvvvvvvvvvv",'
+
+    for lead in [String(""), filler]:
+        var after_number = with_nul("{" + lead + '"a":123', "4}")
+        with assert_raises():
+            _ = parse_document(as_slice(after_number))
+        with assert_raises():
+            _ = parse(as_slice(after_number))
+
+        var after_literal = with_nul("{" + lead + '"a":true', "}")
+        with assert_raises():
+            _ = parse_document(as_slice(after_literal))
+        with assert_raises():
+            _ = parse(as_slice(after_literal))
+
+        var in_array = with_nul("[" + "1", "2]")
+        with assert_raises():
+            _ = parse_document(as_slice(in_array))
+        with assert_raises():
+            _ = parse(as_slice(in_array))
 
 
 def main() raises:

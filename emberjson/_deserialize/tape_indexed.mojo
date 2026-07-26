@@ -73,7 +73,10 @@ from std.sys.intrinsics import unlikely, likely
 
 def _gen_token_end_table(out t: StackArray[Bool, 256]):
     t = StackArray[Bool, 256](fill=False)
-    t.unsafe_get(0) = True  # NUL padding at end-of-input
+    # NUL is deliberately NOT in this table. It terminates a token only
+    # when it is `PaddedBuffer`'s padding rather than a byte of the
+    # input, which the table alone cannot tell apart; `_check_token_end`
+    # settles that case against the logical end-of-input.
     t.unsafe_get(Int(` `)) = True
     t.unsafe_get(0x09) = True
     t.unsafe_get(0x0A) = True
@@ -97,6 +100,13 @@ def _check_token_end[
     """After a number/literal, the next byte must terminate the token."""
     var b = p.data.unsafe_get()
     if likely(lut[_TOKEN_END_OK](Int(b))):
+        return
+    # A NUL read at or past the logical end of input is `PaddedBuffer`'s
+    # padding, which ends the token. A NUL *inside* the input is a real
+    # byte and must be rejected, exactly as the byte-walk builder does —
+    # otherwise `123<NUL>4` parses as `123` and the two engines disagree
+    # on the same bytes.
+    if b == 0 and p.data.dist() <= 0:
         return
     raise Error("Invalid json value: ", to_string(b))
 
