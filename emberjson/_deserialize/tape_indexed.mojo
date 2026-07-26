@@ -214,7 +214,7 @@ def _walk_tape_from_index[
 
     Pointer contract: entries `[0, n_structurals)` are strictly ascending
     byte offsets `< p.size` (as produced by `structural_index[True]` or
-    the GPU pipeline); entries `[n_structurals, n_structurals + 3)` equal
+    a batch producer); entries `[n_structurals, n_structurals + 3)` equal
     `p.size`; and the byte at `base[p.size]` must fail every token
     dispatch (the padding NUL — or a `\\n`/`\\r` line delimiter when
     walking one line of a whole-file buffer in batch mode).

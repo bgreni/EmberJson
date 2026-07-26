@@ -17,8 +17,6 @@ format = { cmd = "mojo format -l 80 ." }
 test = { cmd = "python run_tests.py" }
 build_bench = "mojo build bench.mojo"
 bench = { cmd = "./bench && rm bench", depends-on=["build_bench"] }
-build_bench_gpu = "mojo build bench_gpu.mojo"
-bench_gpu = { cmd = "./bench_gpu && rm bench_gpu", depends-on=["build_bench_gpu"] }
 bench_compare = { cmd = "./bench --print-relative && rm bench", depends-on=["build_bench"] }
 bench_float = "mojo compare_algo.mojo"
 bench_write_results = { cmd = "./bench --overwrite && rm bench", depends-on=["build_bench"] }

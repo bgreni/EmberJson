@@ -42,7 +42,7 @@ struct CharacterBlock(Copyable, Movable):
     var op: UInt64
 
 
-# Class-bit tables (see `portable.mojo`, shared with the GPU kernels),
+# Class-bit tables (see `portable.mojo`),
 # indexed by a byte's low/high nibble. A byte's class descriptor is
 # LOW[b & 0xF] & HIGH[b >> 4]:
 #   ','  0x2C -> 1     ':'  0x3A -> 2     '[' ']' '{' '}' -> 4

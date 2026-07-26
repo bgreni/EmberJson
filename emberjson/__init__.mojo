@@ -44,13 +44,6 @@ from .document import (
 
 from ._deserialize.query import parse_pointer, try_parse_pointer
 from ._utf8 import is_valid_utf8
-from .gpu import (
-    GpuSession,
-    gpu_is_valid_utf8,
-    gpu_parse_document,
-    gpu_parse_documents,
-    try_gpu_parse_document,
-)
 
 from .schema import (
     Range,
