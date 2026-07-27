@@ -32,9 +32,8 @@ struct EscapeScanner:
         """Given a backslash bitmask, returns the escaped-byte bitmask.
 
         The formulation (simdjson's `json_escape_scanner`, with its
-        subtle carried-escape handling) lives in `portable.escape_next`,
-        shared with the GPU kernels; this scanner just threads the carry
-        across chunks.
+        subtle carried-escape handling) lives in `portable.escape_next`;
+        this scanner just threads the carry across chunks.
         """
         var r = escape_next(backslash, self.next_is_escaped)
         self.next_is_escaped = r[1]

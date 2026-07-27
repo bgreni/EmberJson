@@ -228,20 +228,6 @@ def _default_serialize[
         writer.end_object()
 
 
-def __serialize_iterable[
-    T: Iterable & Sized
-](value: T, mut writer: Some[Serializer]) where conforms_to(
-    T.IteratorType[origin_of(value)], Copyable
-):
-    writer.begin_array()
-    var len = len(value)
-    for i, item in enumerate(value):
-        var add_comma = i != len - 1
-        writer.write_item(item, add_comma)
-
-    writer.end_array()
-
-
 # ===============================================
 # Primitives
 # ===============================================
@@ -353,14 +339,16 @@ __extension Optional(JsonSerializable):
 
 __extension List(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        __serialize_iterable(self, writer)
-        # writer.begin_array()
-
-        # for i in range(len(self)):
-        #     var add_comma = i != len(self) - 1
-        #     writer.write_item(self[i], add_comma)
-
-        # writer.end_array()
+        # `List`'s iterator yields references (it overrides the `Iterator`
+        # protocol's by-value `__next__`), so there is no owned per-element
+        # temporary for the compiler to have to destroy.
+        writer.begin_array()
+        var n = len(self)
+        var i = 0
+        for item in self:
+            writer.write_item(item, i != n - 1)
+            i += 1
+        writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:
@@ -369,7 +357,13 @@ __extension List(JsonSerializable):
 
 __extension InlineArray(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        __serialize_iterable(self, writer)
+        # Same as `List` above.
+        writer.begin_array()
+        var i = 0
+        for item in self:
+            writer.write_item(item, i != Self.length - 1)
+            i += 1
+        writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:
@@ -410,7 +404,15 @@ __extension Tuple(JsonSerializable):
 
 __extension Set(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        __serialize_iterable(self, writer)
+        # Same as `List` above: `Set`'s iterator (a `_DictKeyIter`) yields
+        # references, so there is no owned per-element temporary.
+        writer.begin_array()
+        var n = len(self)
+        var i = 0
+        for item in self:
+            writer.write_item(item, i != n - 1)
+            i += 1
+        writer.end_array()
 
     @staticmethod
     def serialize_as_array() -> Bool:

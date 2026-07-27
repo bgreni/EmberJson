@@ -12,7 +12,7 @@ from emberjson.utils import to_string
 from ._parser_helper import NULL, copy_to_string, _next_backslash
 from emberjson._utf8 import is_valid_utf8
 from std.hashlib.hasher import Hasher
-from std.memory import memcmp
+from std.memory import forget_deinit, unsafe_memcmp
 from std.sys import bit_width_of
 
 
@@ -39,7 +39,7 @@ trait Deserializer:
 trait JsonDeserializable(_Base):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = _default_deserialize[Self, Self.deserialize_as_array()](p)
 
@@ -59,7 +59,7 @@ def try_deserialize[T: _Base](s: String) -> Optional[T]:
 
 
 def try_deserialize[
-    origin: ImmutOrigin, options: ParseOptions, //, T: _Base
+    origin: ImmOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options]) -> Optional[T]:
     try:
         return _deserialize_impl[T](p)
@@ -79,14 +79,14 @@ def deserialize[T: _Base](s: String, out res: T) raises:
 
 # @always_inline
 def deserialize[
-    origin: ImmutOrigin, options: ParseOptions, //, T: _Base
+    origin: ImmOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
 
 # @always_inline
 def deserialize[
-    origin: ImmutOrigin, options: ParseOptions, //, T: _Base
+    origin: ImmOrigin, options: ParseOptions, //, T: _Base
 ](var p: Parser[origin, options], out res: T) raises:
     res = _deserialize_impl[T](p)
 
@@ -121,12 +121,12 @@ def _field_key_eq(
         return decoded == name
     if len(kb) != name.byte_length():
         return False
-    return memcmp(kb.unsafe_ptr(), name.unsafe_ptr(), len(kb)) == 0
+    return unsafe_memcmp(kb.unsafe_ptr(), name.unsafe_ptr(), len(kb)) == 0
 
 
 @always_inline
 def _default_deserialize[
-    origin: ImmutOrigin,
+    origin: ImmOrigin,
     options: ParseOptions,
     //,
     T: _Base,
@@ -176,7 +176,7 @@ def _default_deserialize[
             p.expect(`:`)
 
             var kb = Span(
-                ptr=key_span.unsafe_ptr() + 1, length=len(key_span) - 2
+                unsafe_ptr=key_span.unsafe_ptr() + 1, length=len(key_span) - 2
             )
             var kb_end = kb.unsafe_ptr() + len(kb)
             var escaped = _next_backslash(kb.unsafe_ptr(), kb_end) < kb_end
@@ -228,7 +228,7 @@ def _default_deserialize[
 
 
 def _deserialize_impl[
-    origin: ImmutOrigin, options: ParseOptions, //, T: _Base
+    origin: ImmOrigin, options: ParseOptions, //, T: _Base
 ](mut p: Parser[origin, options], out s: T) raises:
     comptime assert reflect[T].is_struct(), non_struct_error
 
@@ -246,7 +246,7 @@ def _deserialize_impl[
 __extension String(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.read_string()
 
@@ -262,7 +262,7 @@ __extension String(JsonDeserializable):
 __extension Bool(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.expect_bool()
 
@@ -274,7 +274,7 @@ __extension Bool(JsonDeserializable):
 __extension SIMD(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
 
@@ -311,7 +311,7 @@ __extension SIMD(JsonDeserializable):
 __extension IntLiteral(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
         var i = p.expect_int()
@@ -326,7 +326,7 @@ __extension IntLiteral(JsonDeserializable):
 __extension FloatLiteral(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
         var f = p.expect_float()
@@ -346,7 +346,7 @@ __extension FloatLiteral(JsonDeserializable):
 __extension ArcPointer(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
 
@@ -358,7 +358,7 @@ __extension ArcPointer(JsonDeserializable):
 __extension OwnedPointer(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = rebind_var[Self](
             OwnedPointer(_deserialize_impl[downcast[Self.T, _Base]](p))
@@ -377,7 +377,7 @@ __extension OwnedPointer(JsonDeserializable):
 __extension Optional(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         if p.peek() == `n`:
             p.expect_null()
@@ -393,7 +393,7 @@ __extension Optional(JsonDeserializable):
 __extension List(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         p.expect(`[`)
 
@@ -418,7 +418,7 @@ __extension List(JsonDeserializable):
 __extension Dict(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         comptime assert (
             Self.K == String or reflect[Self.K].base_name() == "LazyString"
@@ -457,20 +457,52 @@ __extension Dict(JsonDeserializable):
 __extension Tuple(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
-        __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
+        # Claim `s` only after the opening bracket: a throw before this point
+        # leaves it untouched, so there is nothing to tear down.
         p.expect(`[`)
+        __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
+
+        # A `Tuple` whose elements are not known `ImplicitlyDeletable` has no
+        # implicit destructor, so every throwing path has to consume `s` by
+        # hand. `mark_initialized` above claims the whole tuple, but on a throw
+        # only elements `[0, n)` have actually been written — the rest are
+        # forgotten rather than destroyed.
+        @parameter
+        def drop_prefix[n: Int](var partial: Self):
+            @parameter
+            def drop_elt[idx: Int](var elt: Self.element_types[idx]):
+                comptime if idx < n:
+                    _ = rebind_var[downcast[Self.element_types[idx], _Base]](
+                        elt^
+                    )
+                else:
+                    forget_deinit(elt^)
+
+            partial^.deinit_with[drop_elt]()
 
         comptime for i in range(Self.__len__()):
-            UnsafePointer(to=s[i]).unsafe_write(
-                _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
-            )
+            try:
+                UnsafePointer(to=s[i]).unsafe_write(
+                    _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
+                )
+            except e:
+                drop_prefix[i](s^)
+                raise e^
 
             if i < Self.__len__() - 1:
-                p.expect(`,`)
+                try:
+                    p.expect(`,`)
+                except e:
+                    drop_prefix[i + 1](s^)
+                    raise e^
 
-        p.expect(`]`)
+        try:
+            p.expect(`]`)
+        except e:
+            drop_prefix[Self.__len__()](s^)
+            raise e^
 
     @staticmethod
     def deserialize_as_array() -> Bool:
@@ -480,27 +512,27 @@ __extension Tuple(JsonDeserializable):
 __extension InlineArray(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut j: Parser[origin, options], out s: Self) raises:
         j.expect(`[`)
 
         # Build into an array whose element type is downcast to `_Base` (which
         # is `ImplicitlyDeletable`) so cleanup is possible if a parse call
         # raises, then rebind back to `Self` (same layout).
-        var arr = InlineArray[downcast[Self.ElementType, _Base], size](
+        var arr = InlineArray[downcast[Self.T, _Base], Self.length](
             uninitialized=True
         )
 
-        for i in range(size):
+        for i in range(Self.length):
             UnsafePointer(to=arr[i]).unsafe_write(
-                _deserialize_impl[downcast[Self.ElementType, _Base]](j)
+                _deserialize_impl[downcast[Self.T, _Base]](j)
             )
 
-            if i != size - 1:
+            if i != Self.length - 1:
                 j.expect(`,`)
 
         j.expect(`]`)
-        s = rebind_var[Self](arr^)
+        s = rebind_var[downcast[Self, Movable]](arr^)
 
     @staticmethod
     def deserialize_as_array() -> Bool:
@@ -510,17 +542,28 @@ __extension InlineArray(JsonDeserializable):
 __extension Set(JsonDeserializable):
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut j: Parser[origin, options], out s: Self) raises:
         j.expect(`[`)
-        s = Self()
+
+        # `Set.add` now requires evidence that `T` is `ImplicitlyDeletable`,
+        # which the generic `Self.T` doesn't carry. Build into a set whose
+        # element type is downcast to supply that evidence, then rebind back
+        # to `Self` (same layout).
+        comptime T2 = downcast[
+            Self.T, Copyable & Hashable & Equatable & ImplicitlyDeletable
+        ]
+        var acc = Set[T2, Self.H]()
 
         while j.peek() != `]`:
-            s.add(_deserialize_impl[downcast[Self.T, _Base]](j))
+            acc.add(
+                rebind_var[T2](_deserialize_impl[downcast[Self.T, _Base]](j))
+            )
             j.skip_whitespace()
             if j.peek() != `]`:
                 j.expect(`,`)
         j.expect(`]`)
+        s = rebind_var[Self](acc^)
 
     @staticmethod
     def deserialize_as_array() -> Bool:

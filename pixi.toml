@@ -17,8 +17,6 @@ format = { cmd = "mojo format -l 80 ." }
 test = { cmd = "python run_tests.py" }
 build_bench = "mojo build bench.mojo"
 bench = { cmd = "./bench && rm bench", depends-on=["build_bench"] }
-build_bench_gpu = "mojo build bench_gpu.mojo"
-bench_gpu = { cmd = "./bench_gpu && rm bench_gpu", depends-on=["build_bench_gpu"] }
 bench_compare = { cmd = "./bench --print-relative && rm bench", depends-on=["build_bench"] }
 bench_float = "mojo compare_algo.mojo"
 bench_write_results = { cmd = "./bench --overwrite && rm bench", depends-on=["build_bench"] }
@@ -32,7 +30,7 @@ gen_large = "python tools/gen_large_datasets.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=1.0.0b3.dev2026071006,<2"
+mojo = ">=1.0.0b3.dev2026072406,<2"
 
 
 
@@ -44,11 +42,11 @@ version = "0.3.4"
 backend = { name = "pixi-build-mojo", version = "0.1.*" }
 
 [package.host-dependencies]
-mojo-compiler = ">=1.0.0b3.dev2026071006,<2"
+mojo-compiler = ">=1.0.0b3.dev2026072406,<2"
 
 [package.build-dependencies]
-mojo-compiler = ">=1.0.0b3.dev2026071006,<2"
+mojo-compiler = ">=1.0.0b3.dev2026072406,<2"
 
 [package.run-dependencies]
-mojo-compiler = ">=1.0.0b3.dev2026071006,<2"
+mojo-compiler = ">=1.0.0b3.dev2026072406,<2"
 

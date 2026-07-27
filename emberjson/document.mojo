@@ -21,7 +21,7 @@ from ._deserialize.tape import (
 from .teju import write_float
 from ._utf8 import is_valid_utf8
 from std.format._utils import _WriteBufferStack
-from std.memory import memcmp, UnsafePointer
+from std.memory import unsafe_memcmp, UnsafePointer
 from std.memory.unsafe import bitcast
 from std.sys.intrinsics import unlikely, likely
 
@@ -84,7 +84,7 @@ struct Document(Movable, Writable):
         writer.flush()
 
 
-struct DocValue[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
+struct DocValue[origin: ImmOrigin](Sized, TrivialRegisterPassable):
     """A read-only view of one value inside a `Document`."""
 
     var _doc: Pointer[Document, Self.origin]
@@ -216,14 +216,14 @@ struct DocValue[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
 
 
 @fieldwise_init
-struct DocEntry[origin: ImmutOrigin](TrivialRegisterPassable):
+struct DocEntry[origin: ImmOrigin](TrivialRegisterPassable):
     """One key-value pair yielded when iterating a `DocObject`."""
 
     var key: StringSlice[Self.origin]
     var value: DocValue[Self.origin]
 
 
-struct DocObject[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
+struct DocObject[origin: ImmOrigin](Sized, TrivialRegisterPassable):
     """A read-only view of an object inside a `Document`."""
 
     var _doc: Pointer[Document, Self.origin]
@@ -257,7 +257,7 @@ struct DocObject[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
             var off = Int(_payload_of(self._doc[]._tape[k]))
             if (
                 _arena_len(self._doc[]._strings, off) == n
-                and memcmp(
+                and unsafe_memcmp(
                     self._doc[]._strings._ptr + off + 4,
                     needle.unsafe_ptr(),
                     n,
@@ -289,7 +289,7 @@ struct DocObject[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
         return self.items()
 
 
-struct DocArray[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
+struct DocArray[origin: ImmOrigin](Sized, TrivialRegisterPassable):
     """A read-only view of an array inside a `Document`."""
 
     var _doc: Pointer[Document, Self.origin]
@@ -328,7 +328,7 @@ struct DocArray[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
         return _DocArrayIter(self._doc, self._open_idx + 1, self._close_idx())
 
 
-struct _DocArrayIter[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
+struct _DocArrayIter[origin: ImmOrigin](Sized, TrivialRegisterPassable):
     var _doc: Pointer[Document, Self.origin]
     var _cur: Int
     var _close: Int
@@ -361,7 +361,7 @@ struct _DocArrayIter[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
         return n
 
 
-struct _DocObjectIter[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
+struct _DocObjectIter[origin: ImmOrigin](Sized, TrivialRegisterPassable):
     var _doc: Pointer[Document, Self.origin]
     var _cur: Int
     var _close: Int
@@ -403,13 +403,13 @@ struct _DocObjectIter[origin: ImmutOrigin](Sized, TrivialRegisterPassable):
 
 @always_inline
 def _arena_slice[
-    origin: ImmutOrigin
+    origin: ImmOrigin
 ](strings: _Arena, off: Int) -> StringSlice[origin]:
     var n = _arena_len(strings, off)
     var ptr = (
         (strings._ptr + off + 4).as_immutable().unsafe_origin_cast[origin]()
     )
-    var span = Span[Byte, origin](ptr=ptr, length=n)
+    var span = Span[Byte, origin](unsafe_ptr=ptr, length=n)
     return StringSlice(unsafe_from_utf8=span)
 
 

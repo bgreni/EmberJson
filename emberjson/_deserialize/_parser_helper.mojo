@@ -1,5 +1,5 @@
 from emberjson.utils import BytePtr, CheckedPointer, select, ByteVec
-from std.memory import UnsafePointer, memcpy
+from std.memory import UnsafePointer, unsafe_memcpy
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
 from std.builtin.dtype import _uint_type_of_width
 from emberjson.constants import (
@@ -231,7 +231,7 @@ def handle_unicode_codepoint(
 
 @always_inline
 def _next_backslash[
-    o1: ImmutOrigin, o2: ImmutOrigin, //
+    o1: ImmOrigin, o2: ImmOrigin, //
 ](var p: BytePtr[o1], end: BytePtr[o2]) -> BytePtr[o1]:
     """Returns a pointer to the next backslash in [p, end), or `end`.
 
@@ -275,7 +275,7 @@ def copy_to_string[
 
         if first_escape > 0:
             dest.resize(first_escape, 0)
-            memcpy(dest=dest.unsafe_ptr(), src=start, count=first_escape)
+            unsafe_memcpy(dest=dest.unsafe_ptr(), src=start, count=first_escape)
 
         while p < end:
             # Fast scan for next backslash
@@ -287,8 +287,8 @@ def copy_to_string[
                 var chunk_len = ptr_dist(chunk_start, p)
                 var old_size = len(dest)
                 dest.resize(old_size + chunk_len, 0)
-                memcpy(
-                    dest=dest.unsafe_ptr() + old_size,
+                unsafe_memcpy(
+                    dest=dest.unsafe_ptr().unsafe_offset(old_size),
                     src=chunk_start,
                     count=chunk_len,
                 )
@@ -334,11 +334,13 @@ def copy_to_string[
             return decode_escaped()
         else:
             return String(
-                StringSlice(unsafe_from_utf8=Span(ptr=start, length=length))
+                StringSlice(
+                    unsafe_from_utf8=Span(unsafe_ptr=start, length=length)
+                )
             )
     else:
         return String(
-            StringSlice(unsafe_from_utf8=Span(ptr=start, length=length))
+            StringSlice(unsafe_from_utf8=Span(unsafe_ptr=start, length=length))
         )
 
 

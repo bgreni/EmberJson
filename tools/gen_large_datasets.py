@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Regenerates the large-scale GPU benchmark datasets (not committed).
+"""Regenerates the large-scale benchmark datasets (not committed).
 
 Produces, in bench_data/large/ (gitignored):
   batch_100mb.jsonl / batch_400mb.jsonl   - concatenated JSONL batches
   single_11mb.json / single_105mb.json / single_420mb.json
       - the same records joined into ONE valid JSON array (the
-        single-large-document workload where the GPU path beats the CPU
-        above ~120-150 MB on M3 Pro; see NVIDIA_GPU_PLAN.md baselines).
+        single-large-document workload).
 
 Source corpus: bench_data/big_lines_complex.jsonl (committed; itself
 regenerable via `pixi run gen_jsonl`).

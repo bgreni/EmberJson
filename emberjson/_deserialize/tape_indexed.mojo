@@ -73,7 +73,10 @@ from std.sys.intrinsics import unlikely, likely
 
 def _gen_token_end_table(out t: StackArray[Bool, 256]):
     t = StackArray[Bool, 256](fill=False)
-    t.unsafe_get(0) = True  # NUL padding at end-of-input
+    # NUL is deliberately NOT in this table. It terminates a token only
+    # when it is `PaddedBuffer`'s padding rather than a byte of the
+    # input, which the table alone cannot tell apart; `_check_token_end`
+    # settles that case against the logical end-of-input.
     t.unsafe_get(Int(` `)) = True
     t.unsafe_get(0x09) = True
     t.unsafe_get(0x0A) = True
@@ -92,17 +95,24 @@ comptime _TOKEN_END_OK: StackArray[Bool, 256] = _gen_token_end_table()
 
 @always_inline
 def _check_token_end[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](p: Parser[origin, options]) raises:
     """After a number/literal, the next byte must terminate the token."""
     var b = p.data.unsafe_get()
     if likely(lut[_TOKEN_END_OK](Int(b))):
         return
+    # A NUL read at or past the logical end of input is `PaddedBuffer`'s
+    # padding, which ends the token. A NUL *inside* the input is a real
+    # byte and must be rejected, exactly as the byte-walk builder does —
+    # otherwise `123<NUL>4` parses as `123` and the two engines disagree
+    # on the same bytes.
+    if b == 0 and p.data.dist() <= 0:
+        return
     raise Error("Invalid json value: ", to_string(b))
 
 
 def _validate_escape_names[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](p: Parser[origin, options], off: Int, end_off: Int) raises:
     """Escape-name validation for the `ignore_unicode` verbatim path (the
     decode path validates names itself)."""
@@ -120,7 +130,7 @@ def _validate_escape_names[
 
 
 def _iscan_string[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](p: Parser[origin, options], start_off: Int, end_off: Int) raises -> Tuple[
     Bool, Int
 ]:
@@ -182,7 +192,7 @@ comptime _SCOPE_END: Int = 4
 
 
 def parse_document_tape_indexed[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](mut p: Parser[origin, options], mut sink: TapeSink) raises:
     """Stage-1 + stage-2 parse of the parser's whole input.
 
@@ -203,7 +213,7 @@ def parse_document_tape_indexed[
 
 
 def _walk_tape_from_index[
-    origin: ImmutOrigin, options: ParseOptions, //
+    origin: ImmOrigin, options: ParseOptions, //
 ](
     mut p: Parser[origin, options],
     mut sink: TapeSink,
@@ -214,7 +224,7 @@ def _walk_tape_from_index[
 
     Pointer contract: entries `[0, n_structurals)` are strictly ascending
     byte offsets `< p.size` (as produced by `structural_index[True]` or
-    the GPU pipeline); entries `[n_structurals, n_structurals + 3)` equal
+    a batch producer); entries `[n_structurals, n_structurals + 3)` equal
     `p.size`; and the byte at `base[p.size]` must fail every token
     dispatch (the padding NUL — or a `\\n`/`\\r` line delimiter when
     walking one line of a whole-file buffer in batch mode).

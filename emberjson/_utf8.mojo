@@ -22,7 +22,7 @@ needed).
 """
 
 from emberjson._index.simd_ops import lookup16
-from std.memory import memcpy, UnsafePointer
+from std.memory import unsafe_memcpy, UnsafePointer
 from std.sys.intrinsics import llvm_intrinsic
 from std.collections import InlineArray
 
@@ -152,7 +152,7 @@ def _is_valid_utf8_simd(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
         # padding is ASCII, so any sequence left dangling at the true end
         # of input fails its continuation checks here.
         var tail = InlineArray[Byte, 16](fill=0)
-        memcpy(dest=tail.unsafe_ptr(), src=ptr + i, count=n - i)
+        unsafe_memcpy(dest=tail.unsafe_ptr(), src=ptr + i, count=n - i)
         var cur = tail.unsafe_ptr().load[width=16]()
         _check_chunk(cur, prev_chunk, error)
     else:

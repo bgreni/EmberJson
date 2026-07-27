@@ -25,7 +25,9 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
     def __iter__(self) -> Self:
         return self
 
-    def __next__(mut self) raises StopIteration -> ref[self.src[]._data] Value:
+    def __next__(
+        mut self,
+    ) raises StopIteration -> ref[self.src[]._data[self.index]] Value:
         if len(self) == 0:
             raise StopIteration()
 
@@ -88,7 +90,7 @@ struct Array(JsonValue, Sized):
             self = p.parse_array()
 
     @always_inline
-    def __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data] Value:
+    def __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data[ind]] Value:
         return self._data[ind]
 
     @always_inline
@@ -192,6 +194,6 @@ struct Array(JsonValue, Sized):
 
     @staticmethod
     def from_json[
-        origin: ImmutOrigin, options: ParseOptions, //
+        origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.parse_array()

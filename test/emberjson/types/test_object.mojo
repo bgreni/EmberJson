@@ -179,14 +179,14 @@ def test_repr_empty() raises:
 
 def test_repr_single_key() raises:
     var ob: Object = {"key": 42}
-    assert_equal(repr(ob), 'Object{"key":SIMD[DType.int64, 1](42)}')
+    assert_equal(repr(ob), 'Object{"key":Int64(42)}')
 
 
 def test_repr_multiple_keys() raises:
     var ob: Object = {"a": 1, "b": "hello"}
     assert_equal(
         repr(ob),
-        """Object{"a":SIMD[DType.int64, 1](1),"b":'hello'}""",
+        """Object{"a":Int64(1),"b":'hello'}""",
     )
 
 

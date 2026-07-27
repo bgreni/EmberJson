@@ -29,7 +29,7 @@ from emberjson._utf8 import is_valid_utf8
 from emberjson.value import Value
 from emberjson.utils import BytePtr
 from emberjson.constants import `{`, `}`, `[`, `]`, `,`, `"`, `:`
-from std.memory import memcmp
+from std.memory import unsafe_memcmp
 from std.sys.intrinsics import unlikely
 
 
@@ -77,7 +77,7 @@ def _key_matches(
     if bs >= end:
         if ptr_dist(start, end) != len(nb):
             return False
-        return memcmp(start, nb.unsafe_ptr(), len(nb)) == 0
+        return unsafe_memcmp(start, nb.unsafe_ptr(), len(nb)) == 0
     var decoded = copy_to_string[False](start, end, True, ptr_dist(start, bs))
     return decoded == needle
 

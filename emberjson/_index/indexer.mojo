@@ -21,7 +21,7 @@ indexed without any heap copy. `assume_padded=True` requires a
 """
 
 from std.bit import count_trailing_zeros, pop_count
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from emberjson.utils import BytePtr
 from .simd_ops import SimdInput
@@ -66,7 +66,7 @@ def structural_index[
     # buffer carries EMIT_SLACK extra slots; those over-writes are never
     # read.
     comptime EMIT_SLACK = 8
-    if positions.capacity < input_len + EMIT_SLACK:
+    if positions.capacity() < input_len + EMIT_SLACK:
         positions.reserve(input_len + EMIT_SLACK)
     # Length must cover the raw-pointer write phase.
     positions.resize(unsafe_uninit_length=input_len + EMIT_SLACK)
@@ -80,7 +80,12 @@ def structural_index[
     var prev_scalar_carry: UInt64 = 0
     var prev_base: UInt32 = 0
 
-    var out_ptr = positions.unsafe_ptr()
+    # Deliberately an `UnsafePointer`: the emit loop writes up to 7 slots past
+    # the true structural count (covered by `EMIT_SLACK`), so it wants raw
+    # offset indexing rather than the bounds-tracked `Pointer` `List` vends.
+    var out_ptr: UnsafePointer[
+        UInt32, origin_of(positions)
+    ] = positions.unsafe_ptr()
     var write_pos = 0
 
     @parameter
@@ -134,7 +139,7 @@ def structural_index[
                 # Final partial chunk: stage through a zeroed stack buffer
                 # so the borrowed input is never read past input_len.
                 var tail = InlineArray[Byte, 64](fill=0)
-                memcpy(
+                unsafe_memcpy(
                     dest=tail.unsafe_ptr(),
                     src=ptr + Int(base_idx),
                     count=input_len - Int(base_idx),

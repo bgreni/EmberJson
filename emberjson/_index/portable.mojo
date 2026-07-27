@@ -1,21 +1,25 @@
-"""Target-agnostic stage-1 bit algebra shared by CPU scanners and GPU kernels.
+"""Target-agnostic stage-1 bit algebra for the CPU scanners.
 
 Everything here is pure `UInt64` arithmetic or comptime data: no
 `llvm_intrinsic` calls, no `pack_bits` (which crashes the Metal shader
 compiler when lowered for Apple GPUs), no SIMD-width assumptions, and
-everything interprets cleanly in the comptime interpreter. GPU modules
-import shared math ONLY from this file so device codegen never sees
-NEON-specific symbols; the CPU fast paths in `simd_ops.mojo` /
-`classifier.mojo` are untouched and their portable branches delegate
-here, so both engines compute from one formulation.
+everything interprets cleanly in the comptime interpreter. The CPU fast
+paths in `simd_ops.mojo` / `classifier.mojo` are untouched and their
+portable branches delegate here, so there is one formulation of the
+algebra.
+
+The target-agnostic shape is deliberate and worth preserving: an
+accelerator backend can import the math from this file without device
+codegen ever seeing NEON-specific symbols. (GPU support previously lived
+in `emberjson/_gpu/`; it was removed when Mojo moved accelerator codegen
+into MAX, and is a candidate for a separate extension library.)
 
 Byte -> mask *extraction* (loading 64 bytes and producing per-class
 bitmasks) is deliberately NOT here: it is target-specific. The CPU uses
-`SimdInput` + NEON tbl/addp or `pack_bits`; the GPU uses its own
-extraction in `emberjson/_gpu/` built from verified-on-device ops.
+`SimdInput` + NEON tbl/addp or `pack_bits`.
 """
 
-# --- Classifier data (single source of truth, shared with the GPU) -----
+# --- Classifier data (single source of truth) --------------------------
 # Class-bit tables, indexed by a byte's low/high nibble. A byte's class
 # descriptor is CLASSIFY_LOW_NIBBLE[b & 0xF] & CLASSIFY_HIGH_NIBBLE[b >> 4]:
 #   ','  0x2C -> 1     ':'  0x3A -> 2     '[' ']' '{' '}' -> 4

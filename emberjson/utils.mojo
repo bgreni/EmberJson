@@ -4,8 +4,13 @@ from .constants import ` `, `\n`, `\t`, `\r`, `\b`, `\f`, `"`, `\\`
 from std.utils import Variant
 from std.utils.numerics import FPUtils
 from std.math import log10, log2
-from std.memory import Span
-from std.memory import memcmp, memcpy, memset, UnsafePointer
+from std.collections import Span
+from std.memory import (
+    unsafe_memcmp,
+    unsafe_memcpy,
+    unsafe_memset,
+    UnsafePointer,
+)
 from std.format._utils import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from .object import Object
@@ -19,16 +24,16 @@ from std.builtin.globals import global_constant
 
 comptime ByteVec = SIMD[DType.uint8, _]
 comptime ByteView = Span[Byte, _]
-comptime BytePtr[origin: ImmutOrigin] = UnsafePointer[Byte, origin]
+comptime BytePtr[origin: ImmOrigin] = UnsafePointer[Byte, origin]
 
 
 @always_inline
-def lut[A: StackArray](i: Some[Indexer]) -> A.ElementType:
+def lut[A: StackArray](i: Some[Indexer]) -> A.T:
     return global_constant[A]().unsafe_get(i).copy()
 
 
 @fieldwise_init
-struct CheckedPointer[origin: ImmutOrigin](Comparable, TrivialRegisterPassable):
+struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
     var p: BytePtr[Self.origin]
     var start: BytePtr[Self.origin]
     var end: BytePtr[Self.origin]
@@ -173,14 +178,16 @@ struct PaddedBuffer(Movable):
         var n = len(s)
         var total = (n + 63) // 64 * 64 + Self.PAD
         self._data = List[Byte](unsafe_uninit_length=total)
-        memcpy(dest=self._data.unsafe_ptr(), src=s.unsafe_ptr(), count=n)
-        memset(self._data.unsafe_ptr() + n, 0, total - n)
+        unsafe_memcpy(dest=self._data.unsafe_ptr(), src=s.unsafe_ptr(), count=n)
+        unsafe_memset(self._data.unsafe_ptr().unsafe_offset(n), 0, total - n)
         self._len = n
 
     @always_inline
     def span(ref self) -> ByteView[origin_of(self._data)]:
         """The logical input: `len` bytes, with readable NUL padding after."""
-        return Span(ptr=self._data.unsafe_ptr(), length=self._len)
+        return Span[Byte, origin_of(self._data)](
+            unsafe_ptr=self._data.unsafe_ptr(), length=self._len
+        )
 
 
 comptime DefaultPrettyIndent = 4
