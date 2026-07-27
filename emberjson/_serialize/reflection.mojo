@@ -355,7 +355,7 @@ __extension List(JsonSerializable):
         return False
 
 
-__extension InlineArray(JsonSerializable):
+__extension Array(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
         # Same as `List` above.
         writer.begin_array()

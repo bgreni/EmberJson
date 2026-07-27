@@ -113,7 +113,7 @@ def parse_pointer[
         var whole = Parser[options=options](s)
         return whole.parse()
 
-    var base = s.unsafe_ptr()
+    var base = UnsafePointer(s.unsafe_ptr())
     var positions = List[UInt32]()
     structural_index[False](base, s.byte_length(), positions)
     if unlikely(len(positions) == 0):

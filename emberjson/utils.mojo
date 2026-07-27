@@ -281,7 +281,7 @@ def _handle_escape(c: Byte, mut writer: Some[Writer]):
 
 @always_inline
 def _needs_escape(bytes: Span[Byte, _], n: Int) -> Bool:
-    var ptr = bytes.unsafe_ptr()
+    var ptr = UnsafePointer(bytes.unsafe_ptr())
     var i = 0
     while i + SIMD8_WIDTH <= n:
         var chunk = ptr.load[width=SIMD8_WIDTH](i)
@@ -312,7 +312,7 @@ def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
 
     # Slow path: string contains characters that need escaping
     writer.write('"')
-    var ptr = bytes.unsafe_ptr()
+    var ptr = UnsafePointer(bytes.unsafe_ptr())
     var i = 0
     var start = 0
 

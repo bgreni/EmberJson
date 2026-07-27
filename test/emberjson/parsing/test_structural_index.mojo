@@ -186,7 +186,7 @@ def test_classifier_exhaustive() raises:
     for i in range(256):
         bytes[i] = Byte(i)
     for chunk in range(4):
-        var input = SimdInput.load(bytes.unsafe_ptr() + chunk * 64)
+        var input = SimdInput.load(bytes.unsafe_ptr().unsafe_offset(chunk * 64))
         var block = classify(input)
         for lane in range(64):
             var b = Int(bytes[chunk * 64 + lane])

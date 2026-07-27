@@ -44,7 +44,7 @@ comptime NULL: UInt32 = _to_uint32("null")
 
 def _to_uint32(s: StaticString) -> UInt32:
     assert s.byte_length() > 3, "string is too small"
-    return s.unsafe_ptr().bitcast[UInt32]()[0]
+    return s.unsafe_ptr().unsafe_bitcast[UInt32]()[]
 
 
 @always_inline

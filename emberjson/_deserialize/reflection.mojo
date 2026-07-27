@@ -176,9 +176,10 @@ def _default_deserialize[
             p.expect(`:`)
 
             var kb = Span(
-                unsafe_ptr=key_span.unsafe_ptr() + 1, length=len(key_span) - 2
+                unsafe_ptr=key_span.unsafe_ptr().unsafe_offset(1),
+                length=len(key_span) - 2,
             )
-            var kb_end = kb.unsafe_ptr() + len(kb)
+            var kb_end = kb.unsafe_ptr().unsafe_offset(len(kb))
             var escaped = _next_backslash(kb.unsafe_ptr(), kb_end) < kb_end
             var decoded = String()
             if unlikely(escaped):
@@ -509,7 +510,7 @@ __extension Tuple(JsonDeserializable):
         return False
 
 
-__extension InlineArray(JsonDeserializable):
+__extension Array(JsonDeserializable):
     @staticmethod
     def from_json[
         origin: ImmOrigin, options: ParseOptions, //

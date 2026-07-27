@@ -153,7 +153,7 @@ def _is_valid_utf8_simd(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
         # of input fails its continuation checks here.
         var tail = InlineArray[Byte, 16](fill=0)
         unsafe_memcpy(dest=tail.unsafe_ptr(), src=ptr + i, count=n - i)
-        var cur = tail.unsafe_ptr().load[width=16]()
+        var cur = tail.unsafe_ptr().unsafe_load[width=16]()
         _check_chunk(cur, prev_chunk, error)
     else:
         # Input ended exactly on a chunk boundary: a trailing lead byte
