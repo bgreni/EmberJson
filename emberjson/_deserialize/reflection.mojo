@@ -290,7 +290,7 @@ __extension SIMD(JsonDeserializable):
                 else:
                     return p.expect_int[Self.dtype]()
             else:
-                return Scalar[Self.dtype](p.expect_bool())
+                return Scalar[Self.dtype](Int(p.expect_bool()))
 
         comptime if size > 1:
             p.expect(`[`)
@@ -380,11 +380,12 @@ __extension Optional(JsonDeserializable):
     def from_json[
         origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
+        comptime assert conforms_to(Self.T, _Base), "Optional element type must conform to _Base"
         if p.peek() == `n`:
             p.expect_null()
             s = None
         else:
-            s = Self(_deserialize_impl[downcast[Self.T, _Base]](p))
+            s = {_deserialize_impl[downcast[Self.T, _Base]](p)}
 
     @staticmethod
     def deserialize_as_array() -> Bool:

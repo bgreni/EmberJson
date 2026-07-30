@@ -203,7 +203,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
     @implicit
     def __init__(
-        out self: Parser[StaticConstantOrigin, Self.options], s: StringLiteral
+        out self: Parser[ImmStaticOrigin, Self.options], s: StringLiteral
     ):
         self = {StaticString(s)}
 

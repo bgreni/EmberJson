@@ -407,7 +407,7 @@ def _arena_slice[
 ](strings: _Arena, off: Int) -> StringSlice[origin]:
     var n = _arena_len(strings, off)
     var ptr = (
-        (strings._ptr + off + 4).as_immutable().unsafe_origin_cast[origin]()
+        (strings._ptr + off + 4).as_imm().unsafe_origin_cast[origin]()
     )
     var span = Span[Byte, origin](unsafe_ptr=ptr, length=n)
     return StringSlice(unsafe_from_utf8=span)

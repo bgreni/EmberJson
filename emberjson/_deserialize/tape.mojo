@@ -164,7 +164,7 @@ def _arena_view(strings: _Arena, off: Int) -> StringSlice[ImmutAnyOrigin]:
     var n = _arena_len(strings, off)
     var ptr = (
         (strings._ptr + off + 4)
-        .as_immutable()
+        .as_imm()
         .unsafe_origin_cast[ImmutAnyOrigin]()
     )
     var span = Span[Byte, ImmutAnyOrigin](unsafe_ptr=ptr, length=n)
