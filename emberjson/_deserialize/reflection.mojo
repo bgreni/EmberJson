@@ -19,7 +19,7 @@ from std.sys import bit_width_of
 comptime non_struct_error = "Cannot deserialize non-struct type"
 
 
-comptime _Base = ImplicitlyDeletable & Movable
+comptime _Base = Deinitable & Movable
 
 
 trait Deserializer:
@@ -105,7 +105,7 @@ def __all_dtors_are_trivial[T: AnyType]() -> Bool:
     comptime r = reflect[T]
     comptime for i in range(r.field_count()):
         comptime type = r.field_types()[i]
-        if not downcast[type, ImplicitlyDeletable].__del__is_trivial:
+        if not downcast[type, Deinitable].__del__is_trivial:
             return False
     return True
 
@@ -292,16 +292,16 @@ __extension SIMD(JsonDeserializable):
             else:
                 return Scalar[Self.dtype](Int(p.expect_bool()))
 
-        comptime if size > 1:
+        comptime if Self.length > 1:
             p.expect(`[`)
 
-        comptime for i in range(size):
+        comptime for i in range(Self.length):
             s[i] = parse_simd_element(p)
 
-            comptime if i < size - 1:
+            comptime if i < Self.length - 1:
                 p.expect(`,`)
 
-        comptime if size > 1:
+        comptime if Self.length > 1:
             p.expect(`]`)
 
     @staticmethod
@@ -380,7 +380,9 @@ __extension Optional(JsonDeserializable):
     def from_json[
         origin: ImmOrigin, options: ParseOptions, //
     ](mut p: Parser[origin, options], out s: Self) raises:
-        comptime assert conforms_to(Self.T, _Base), "Optional element type must conform to _Base"
+        comptime assert conforms_to(
+            Self.T, _Base
+        ), "Optional element type must conform to _Base"
         if p.peek() == `n`:
             p.expect_null()
             s = None
@@ -400,7 +402,7 @@ __extension List(JsonDeserializable):
         p.expect(`[`)
 
         # Build into a list whose element type is downcast to `_Base` (which is
-        # `ImplicitlyDeletable`) so the partially-built list can be cleaned up if
+        # `Deinitable`) so the partially-built list can be cleaned up if
         # a parse call raises, then rebind back to `Self` (same layout).
         var lst = List[downcast[Self.T, _Base]]()
 
@@ -428,13 +430,13 @@ __extension Dict(JsonDeserializable):
         p.expect(`{`)
 
         # `Dict.__setitem__` now requires evidence that `K` and `V` are
-        # `ImplicitlyDeletable`, which the generic `Self.K`/`Self.V` don't
+        # `Deinitable`, which the generic `Self.K`/`Self.V` don't
         # carry. Build into a dict whose key/value types are downcast to
         # supply that evidence, then rebind back to `Self` (same layout).
         comptime K2 = downcast[
-            Self.K, Copyable & Hashable & Equatable & ImplicitlyDeletable
+            Self.K, Copyable & Hashable & Equatable & Deinitable
         ]
-        comptime V2 = downcast[Self.V, Movable & ImplicitlyDeletable]
+        comptime V2 = downcast[Self.V, Movable & Deinitable]
         var d = Dict[K2, V2, Self.H]()
 
         while p.peek() != `}`:
@@ -466,7 +468,7 @@ __extension Tuple(JsonDeserializable):
         p.expect(`[`)
         __mlir_op.`lit.ownership.mark_initialized`(__get_mvalue_as_litref(s))
 
-        # A `Tuple` whose elements are not known `ImplicitlyDeletable` has no
+        # A `Tuple` whose elements are not known `Deinitable` has no
         # implicit destructor, so every throwing path has to consume `s` by
         # hand. `mark_initialized` above claims the whole tuple, but on a throw
         # only elements `[0, n)` have actually been written — the rest are
@@ -486,7 +488,7 @@ __extension Tuple(JsonDeserializable):
 
         comptime for i in range(Self.__len__()):
             try:
-                UnsafePointer(to=s[i]).unsafe_write(
+                Pointer(to=s[i]).unsafe_write(
                     _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
                 )
             except e:
@@ -519,14 +521,14 @@ __extension Array(JsonDeserializable):
         j.expect(`[`)
 
         # Build into an array whose element type is downcast to `_Base` (which
-        # is `ImplicitlyDeletable`) so cleanup is possible if a parse call
+        # is `Deinitable`) so cleanup is possible if a parse call
         # raises, then rebind back to `Self` (same layout).
         var arr = InlineArray[downcast[Self.T, _Base], Self.length](
             uninitialized=True
         )
 
         for i in range(Self.length):
-            UnsafePointer(to=arr[i]).unsafe_write(
+            Pointer(to=arr[i]).unsafe_write(
                 _deserialize_impl[downcast[Self.T, _Base]](j)
             )
 
@@ -548,12 +550,12 @@ __extension Set(JsonDeserializable):
     ](mut j: Parser[origin, options], out s: Self) raises:
         j.expect(`[`)
 
-        # `Set.add` now requires evidence that `T` is `ImplicitlyDeletable`,
+        # `Set.add` now requires evidence that `T` is `Deinitable`,
         # which the generic `Self.T` doesn't carry. Build into a set whose
         # element type is downcast to supply that evidence, then rebind back
         # to `Self` (same layout).
         comptime T2 = downcast[
-            Self.T, Copyable & Hashable & Equatable & ImplicitlyDeletable
+            Self.T, Copyable & Hashable & Equatable & Deinitable
         ]
         var acc = Set[T2, Self.H]()
 

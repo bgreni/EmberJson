@@ -16,7 +16,7 @@ from emberjson.array import Array
 from emberjson.object import Object, _ObjectParseIndex
 from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
-from std.memory import UnsafePointer, unsafe_memset
+from std.memory import unsafe_memset
 from std.sys.intrinsics import unlikely, likely
 from std.collections import InlineArray
 from ._parser_helper import (
@@ -218,7 +218,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
     def __init__(
         out self,
         *,
-        ptr: UnsafePointer[Byte, origin=Self.origin],
+        ptr: Pointer[Byte, origin=Self.origin],
         length: Int,
     ):
         # `_assume_padded` removes bounds checks from every hot loop, which
@@ -229,7 +229,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             "options with `_assume_padded` require a `PaddedBuffer`:"
             " construct with `Parser(padded=...)`"
         )
-        self.data = CheckedPointer(ptr, ptr, ptr + length)
+        self.data = CheckedPointer(ptr, ptr, ptr.unsafe_offset(length))
         self.size = length
 
     def __init__(
@@ -248,7 +248,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         var p: BytePtr[
             Self.origin
         ] = padded._data.unsafe_ptr().unsafe_origin_cast[Self.origin]()
-        self.data = CheckedPointer(p, p, p + padded._len)
+        self.data = CheckedPointer(p, p, p.unsafe_offset(padded._len))
         self.size = padded._len
 
     @always_inline
@@ -413,7 +413,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         if unlikely(self.bytes_remaining() < 4):
             raise Error('Encountered EOF when expecting "true"')
         # Safety: Safe because we checked the amount of bytes remaining
-        var w = self.data.p.bitcast[UInt32]()[]
+        var w = self.data.p.unsafe_bitcast[UInt32]()[]
         if w != TRUE:
             raise Error("Expected 'true', received: ", to_string(w))
         self.data += 4
@@ -425,7 +425,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         if unlikely(self.bytes_remaining() < 4):
             raise Error('Encountered EOF when expecting "false"')
         # Safety: Safe because we checked the amount of bytes remaining
-        var w = self.data.p.bitcast[UInt32]()[0]
+        var w = self.data.p.unsafe_bitcast[UInt32]()[]
         if w != ALSE:
             raise Error("Expected 'false', received: f", to_string(w))
         self.data += 4
@@ -633,7 +633,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         var lower = UInt64(first_product)
 
         if unlikely(upper & 0x1FF == 0x1FF):
-            second_product = full_multiplication(
+            var second_product = full_multiplication(
                 i, lut[POWER_OF_FIVE_128](index + 1)
             )
             var upper_s = UInt64(second_product >> 64)
@@ -1005,7 +1005,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         if unlikely(self.bytes_remaining() < 4):
             raise Error("Encountered EOF when expecting 'null'")
         # Safety: Safe because we checked the amount of bytes remaining
-        var w = self.data.p.bitcast[UInt32]()[0]
+        var w = self.data.p.unsafe_bitcast[UInt32]()[]
         if w != NULL:
             raise Error("Expected 'null', received: ", to_string(w))
         self.data += 4
@@ -1261,7 +1261,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         if esc == `u`:
             if unlikely(
                 ptr_dist(self.data.p, self.data.end) < 4
-                or not is_hex_digits(self.data.p.load[width=4]())
+                or not is_hex_digits(self.data.p.unsafe_load[width=4]())
             ):
                 raise Error("Invalid hex digit encountered")
             self.data += 4
@@ -1345,7 +1345,7 @@ def minify(s: String, out out_str: String) raises:
     out_str = String(capacity=s_len)
 
     var ptr = BytePtr[origin_of(s)](s.unsafe_ptr())
-    var end = ptr + s_len
+    var end = ptr.unsafe_offset(s_len)
 
     @always_inline
     @parameter
@@ -1353,30 +1353,30 @@ def minify(s: String, out out_str: String) raises:
         p: type_of(ptr), cond: Bool
     ) -> SIMD[DType.uint8, SIMD8_WIDTH]:
         if cond:
-            return ptr.load[width=SIMD8_WIDTH]()
+            return ptr.unsafe_load[width=SIMD8_WIDTH]()
         else:
             var chunk = SIMD[DType.uint8, SIMD8_WIDTH](` `)
 
             for i in range(Int(end) - Int(ptr)):
-                chunk[i] = ptr[i]
+                chunk[i] = ptr[unsafe_offset=i]
             return chunk
 
     while ptr < end:
-        var is_block_iter = likely(ptr + SIMD8_WIDTH < end)
+        var is_block_iter = likely(ptr.unsafe_offset(SIMD8_WIDTH) < end)
         var chunk = _load_chunk(ptr, is_block_iter)
 
         var bits = get_non_space_bits(chunk)
         while bits == 0 and ptr < end:
-            ptr += SIMD8_WIDTH
-            chunk = ptr.load[width=SIMD8_WIDTH]()
+            ptr = ptr.unsafe_offset(SIMD8_WIDTH)
+            chunk = ptr.unsafe_load[width=SIMD8_WIDTH]()
             bits = get_non_space_bits(chunk)
 
         var trailing = count_trailing_zeros(bits)
-        ptr += trailing
+        ptr = ptr.unsafe_offset(trailing)
 
         if ptr[] == `"`:
             var p = ptr
-            p += 1
+            p = p.unsafe_offset(1)
             var block = StringBlock.find(p)
             var length = 1
 
@@ -1386,13 +1386,13 @@ def minify(s: String, out out_str: String) raises:
                 elif block.has_backslash():
                     var ind = Int(block.bs_index()) + 2
                     length += ind
-                    p += ind
+                    p = p.unsafe_offset(ind)
                 else:
                     var ind = SIMD8_WIDTH if is_block_iter else (
                         Int(end) - Int(ptr)
                     )
                     length += ind
-                    p += ind
+                    p = p.unsafe_offset(ind)
                 block = StringBlock.find(p)
 
             length += Int(block.quote_index() + 1)
@@ -1401,7 +1401,7 @@ def minify(s: String, out out_str: String) raises:
                     unsafe_ptr=ptr, length=length
                 )
             )
-            ptr += length
+            ptr = ptr.unsafe_offset(length)
 
         else:
             var chunk = _load_chunk(ptr, is_block_iter)
@@ -1415,4 +1415,4 @@ def minify(s: String, out out_str: String) raises:
                     unsafe_ptr=ptr, length=Int(valid_bits)
                 )
             )
-            ptr += valid_bits
+            ptr = ptr.unsafe_offset(valid_bits)

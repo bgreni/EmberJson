@@ -22,7 +22,7 @@ needed).
 """
 
 from emberjson._index.simd_ops import lookup16
-from std.memory import unsafe_memcpy, UnsafePointer
+from std.memory import unsafe_memcpy
 from std.sys.intrinsics import llvm_intrinsic
 from std.collections import InlineArray
 
@@ -129,14 +129,14 @@ def _all_ascii(cur: _C16) -> Bool:
     return (cur & 0x80).reduce_or() == 0
 
 
-def _is_valid_utf8_simd(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
+def _is_valid_utf8_simd(ptr: Pointer[UInt8, _], n: Int) -> Bool:
     var error = _C16(0)
     var prev_chunk = _C16(0)
     var prev_incomplete = _C16(0)
 
     var i = 0
     while i + 16 <= n:
-        var cur = (ptr + i).load[width=16]()
+        var cur = (ptr.unsafe_offset(i)).unsafe_load[width=16]()
         if _all_ascii(cur):
             # All-ASCII chunk: only a dangling multi-byte sequence from
             # the previous chunk can be wrong.
@@ -152,7 +152,9 @@ def _is_valid_utf8_simd(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
         # padding is ASCII, so any sequence left dangling at the true end
         # of input fails its continuation checks here.
         var tail = InlineArray[Byte, 16](fill=0)
-        unsafe_memcpy(dest=tail.unsafe_ptr(), src=ptr + i, count=n - i)
+        unsafe_memcpy(
+            dest=tail.unsafe_ptr(), src=ptr.unsafe_offset(i), count=n - i
+        )
         var cur = tail.unsafe_ptr().unsafe_load[width=16]()
         _check_chunk(cur, prev_chunk, error)
     else:
@@ -163,11 +165,11 @@ def _is_valid_utf8_simd(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
     return error.reduce_max() == 0
 
 
-def _is_valid_utf8_scalar(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
+def _is_valid_utf8_scalar(ptr: Pointer[UInt8, _], n: Int) -> Bool:
     """Reference validator: explicit RFC 3629 range checks."""
     var i = 0
     while i < n:
-        var b = ptr[i]
+        var b = ptr[unsafe_offset=i]
         if b < 0x80:
             i += 1
             continue
@@ -199,11 +201,11 @@ def _is_valid_utf8_scalar(ptr: UnsafePointer[UInt8, _], n: Int) -> Bool:
             return False
         if i + need >= n:
             return False
-        var c1 = ptr[i + 1]
+        var c1 = ptr[unsafe_offset=i + 1]
         if c1 < lo or c1 > hi:
             return False
         for k in range(2, need + 1):
-            var ck = ptr[i + k]
+            var ck = ptr[unsafe_offset=i + k]
             if ck < 0x80 or ck > 0xBF:
                 return False
         i += need + 1

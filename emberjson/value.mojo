@@ -11,7 +11,6 @@ from .utils import (
 from std.utils.variant import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
 from std.collections import InlineArray
-from std.memory import UnsafePointer
 from std.sys.intrinsics import unlikely, likely
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer
@@ -82,7 +81,7 @@ struct Value(JsonValue, Sized):
     # deletable and refuses to synthesize the destructor/move. An explicit
     # (empty) `__del__` breaks the cycle: fields are still destroyed
     # automatically after it runs, and copy/move synthesis is re-enabled.
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         pass
 
     @always_inline
@@ -280,14 +279,14 @@ struct Value(JsonValue, Sized):
     def __getitem__(ref self, ind: Some[Indexer]) raises -> ref[self] Value:
         if not self.is_array():
             raise Error("Expected numerical index for array")
-        return UnsafePointer(to=self.array()[ind]).unsafe_origin_cast[
+        return Pointer(to=self.array()[ind]).unsafe_origin_cast[
             origin_of(self)
         ]()[]
 
     def __getitem__(ref self, key: String) raises -> ref[self] Value:
         if not self.is_object():
             raise Error("Expected string key for object")
-        return UnsafePointer(to=self.object()[key]).unsafe_origin_cast[
+        return Pointer(to=self.object()[key]).unsafe_origin_cast[
             origin_of(self)
         ]()[]
 
@@ -497,7 +496,7 @@ struct Value(JsonValue, Sized):
             return self.get(materialize[index.value()]())
         else:
             if self.is_object():
-                return UnsafePointer(to=self.object()[name]).unsafe_origin_cast[
+                return Pointer(to=self.object()[name]).unsafe_origin_cast[
                     origin_of(self)
                 ]()[]
             else:

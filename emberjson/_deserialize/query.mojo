@@ -37,7 +37,7 @@ from std.sys.intrinsics import unlikely
 def _q_byte(base: BytePtr, positions: List[UInt32], cur: Int) raises -> Byte:
     if unlikely(cur >= len(positions)):
         raise Error("Unexpected EOF")
-    return base[Int(positions[cur])]
+    return base[unsafe_offset=Int(positions[cur])]
 
 
 def _skip_value_positions(
@@ -56,7 +56,7 @@ def _skip_value_positions(
         while depth > 0:
             if unlikely(cur >= n):
                 raise Error("Unexpected EOF")
-            var c = base[Int(positions[cur])]
+            var c = base[unsafe_offset=Int(positions[cur])]
             depth += (
                 Int(c == `{`) + Int(c == `[`) - Int(c == `}`) - Int(c == `]`)
             )
@@ -70,8 +70,8 @@ def _key_matches(
 ) raises -> Bool:
     """Compares the key's DECODED bytes against `needle`; keys containing
     escapes (rare) are decoded before comparison."""
-    var start = base + start_off
-    var end = base + end_off
+    var start = base.unsafe_offset(start_off)
+    var end = base.unsafe_offset(end_off)
     var nb = needle.as_bytes()
     var bs = _next_backslash(start, end)
     if bs >= end:
@@ -113,7 +113,7 @@ def parse_pointer[
         var whole = Parser[options=options](s)
         return whole.parse()
 
-    var base = UnsafePointer(s.unsafe_ptr())
+    var base = Pointer(s.unsafe_ptr())
     var positions = List[UInt32]()
     structural_index[False](base, s.byte_length(), positions)
     if unlikely(len(positions) == 0):
@@ -187,7 +187,7 @@ def parse_pointer[
     # Materialize (and fully validate) just the target subtree.
     var off = Int(positions[cur])
     var p = Parser[options=options](
-        ptr=base + off, length=s.byte_length() - off
+        ptr=base.unsafe_offset(off), length=s.byte_length() - off
     )
     return p.parse_value()
 

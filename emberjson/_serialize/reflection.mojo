@@ -96,9 +96,9 @@ __extension _WriteBufferStack(Serializer):
 
 
 struct PrettySerializer[
-    T: Writer & Defaultable & Movable & ImplicitlyDeletable,
+    T: Writer & Defaultable & Movable & Deinitable,
     indent: String = "    ",
-](Defaultable, ImplicitlyDeletable, Serializer):
+](Defaultable, Deinitable, Serializer):
     var _data: Self.T
     var _skip_indent: Bool
     var _depth: Int
@@ -249,7 +249,7 @@ __extension String(JsonSerializable):
 
 __extension SIMD(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
-        comptime if size == 1:
+        comptime if Self.length == 1:
             comptime if Self.dtype.is_floating_point():
                 write_float(rebind[Scalar[Self.dtype]](self), writer)
             else:
@@ -257,8 +257,8 @@ __extension SIMD(JsonSerializable):
         else:
             writer.begin_array()
 
-            comptime for i in range(size):
-                comptime if i != size - 1:
+            comptime for i in range(Self.length):
+                comptime if i != Self.length - 1:
                     writer.write_item[True](self[i])
                 else:
                     writer.write_item[False](self[i])

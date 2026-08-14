@@ -19,7 +19,7 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
         self.length = 0
 
     @always_inline
-    def ptr(ref self) -> UnsafePointer[Byte, origin=origin_of(self.buf)]:
+    def ptr(ref self) -> Pointer[Byte, origin=origin_of(self.buf)]:
         return self.buf.unsafe_ptr()
 
     def index(self, b: Byte) -> Int:
@@ -33,8 +33,10 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
         self.length -= n
         var p = self.ptr()
         for i in range(self.length):
-            p[i] = p[i + n]
-        unsafe_memset(p + self.length, 0, Self.BUFFER_SIZE - self.length)
+            p[unsafe_offset=i] = p[unsafe_offset=i + n]
+        unsafe_memset(
+            p.unsafe_offset(self.length), 0, Self.BUFFER_SIZE - self.length
+        )
 
     def clear(mut self):
         unsafe_memset(self.ptr(), 0, Self.BUFFER_SIZE)
@@ -118,7 +120,7 @@ struct JSONLinesIter(Iterator):
             return line^
 
         while True:
-            buf_span = Span(
+            var buf_span = Span(
                 unsafe_ptr=self.read_buf.ptr().unsafe_offset(
                     self.read_buf.length
                 ),

@@ -4,7 +4,6 @@ from std.collections import List
 from std.utils import Variant
 from .object import Object
 from .array import Array
-from std.memory import UnsafePointer
 from std.sys.intrinsics import unlikely
 
 
@@ -18,7 +17,7 @@ def parse_int(s: String) raises -> Int:
         var b = bytes[i]
         if b < 48 or b > 57:
             raise Error("Invalid integer: " + s)
-        old = res
+        var old = res
         res = res * 10 + Int(b - 48)
 
         if res < old:
@@ -139,12 +138,12 @@ def _resolve_ref(
         return val
 
     if val.is_object():
-        var ptr = UnsafePointer[Object](to=val.object()).unsafe_origin_cast[
+        var ptr = Pointer[Object](to=val.object()).unsafe_origin_cast[
             origin_of(val)
         ]()
         return _resolve_ref(ptr[], tokens, idx)
     elif val.is_array():
-        var ptr = UnsafePointer[Array](to=val.array()).unsafe_origin_cast[
+        var ptr = Pointer[Array](to=val.array()).unsafe_origin_cast[
             origin_of(val)
         ]()
         return _resolve_ref(ptr[], tokens, idx)
@@ -183,9 +182,7 @@ def _resolve_ref(
         # obj[key] returns ref [obj._data] Value
         # We need ref [obj] Value.
         # Since obj owns _data, the lifetime of _data is at least as long as obj.
-        var ptr = UnsafePointer(to=obj[key]).unsafe_origin_cast[
-            origin_of(obj)
-        ]()
+        var ptr = Pointer(to=obj[key]).unsafe_origin_cast[origin_of(obj)]()
         return _resolve_ref(ptr[], tokens, idx + 1)
 
     raise Error("Key not found: " + key)
@@ -208,5 +205,5 @@ def _resolve_ref(
     if unlikely(i >= arr_len):
         raise Error("Index out of bounds")
 
-    var ptr = UnsafePointer(to=arr[i]).unsafe_origin_cast[origin_of(arr)]()
+    var ptr = Pointer(to=arr[i]).unsafe_origin_cast[origin_of(arr)]()
     return _resolve_ref(ptr[], tokens, idx + 1)

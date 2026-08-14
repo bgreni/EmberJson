@@ -1,5 +1,5 @@
 from emberjson.utils import BytePtr, CheckedPointer, select, ByteVec
-from std.memory import UnsafePointer, unsafe_memcpy
+from std.memory import unsafe_memcpy
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
 from std.builtin.dtype import _uint_type_of_width
 from emberjson.constants import (
@@ -143,7 +143,7 @@ struct StringBlock(TrivialRegisterPassable):
     @always_inline
     def find(src: BytePtr) -> StringBlock:
         # FIXME: Port minify to use CheckedPointer
-        var v = src.load[width=SIMD8_WIDTH]()
+        var v = src.unsafe_load[width=SIMD8_WIDTH]()
         # NOTE: ASCII first printable character ` ` https://www.ascii-code.com/
         return StringBlock(v.eq(`\\`), v.eq(`"`), v.lt(` `))
 
@@ -159,7 +159,7 @@ def is_hex_digits(c: ByteVec[4]) -> Bool:
 
 @always_inline
 def hex_to_u32(p: BytePtr) raises -> UInt32:
-    var bytes = p.load[width=4]()
+    var bytes = p.unsafe_load[width=4]()
 
     if unlikely(not is_hex_digits(bytes)):
         raise Error("Invalid hex digit encountered")
@@ -178,10 +178,10 @@ def handle_unicode_codepoint(
     # because theoretically no string can be built with "\u" only
     # But if this points to bytes received over the wire, it makes sense
     # unless we use _is_valid_utf8 at the beginning of where this is called
-    if unlikely(p + 3 >= end):
+    if unlikely(p.unsafe_offset(3) >= end):
         raise Error("Bad unicode codepoint")
     var c1 = hex_to_u32(p)
-    p += 4
+    p = p.unsafe_offset(4)
 
     if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
         raise Error("Invalid unicode: lone surrogate")
@@ -196,19 +196,19 @@ def handle_unicode_codepoint(
     # pair is a semantic decision that is determined by the specific processor.
     if c1 >= 0xD800 and c1 < 0xDC00:
         # TODO: same as the above TODO
-        if unlikely(p + 5 >= end):
+        if unlikely(p.unsafe_offset(5) >= end):
             raise Error("Bad unicode codepoint")
-        elif unlikely(not (p[0] == `\\` and p[1] == `u`)):
+        elif unlikely(not (p[] == `\\` and p[unsafe_offset=1] == `u`)):
             raise Error("Bad unicode codepoint")
 
-        p += 2
+        p = p.unsafe_offset(2)
         var c2 = hex_to_u32(p)
 
         if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
             raise Error("Bad unicode codepoint")
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
-        p += 4
+        p = p.unsafe_offset(4)
 
     if unlikely(c1 > 0x10FFFF):
         raise Error("Invalid unicode")
@@ -239,12 +239,12 @@ def _next_backslash[
     for unpadded buffers.
     """
     while ptr_dist(p, end) >= SIMD8_WIDTH:
-        var bs = pack_into_integer(p.load[width=SIMD8_WIDTH]().eq(`\\`))
+        var bs = pack_into_integer(p.unsafe_load[width=SIMD8_WIDTH]().eq(`\\`))
         if bs != 0:
-            return p + Int(count_trailing_zeros(bs))
-        p += SIMD8_WIDTH
+            return p.unsafe_offset(Int(count_trailing_zeros(bs)))
+        p = p.unsafe_offset(SIMD8_WIDTH)
     while p < end and p[] != `\\`:
-        p += 1
+        p = p.unsafe_offset(1)
     return p
 
 
@@ -271,7 +271,7 @@ def copy_to_string[
         # This will usually slightly overallocate if the string contains
         # escaped unicode
         var dest = List[UInt8](capacity=length)
-        var p = start + first_escape
+        var p = start.unsafe_offset(first_escape)
 
         if first_escape > 0:
             dest.resize(first_escape, 0)
@@ -295,36 +295,36 @@ def copy_to_string[
 
             # If we hit backslash, handle escape
             if p < end:
-                p += 1  # skip backslash
+                p = p.unsafe_offset(1)  # skip backslash
                 if p < end:
-                    var c = p[0]
+                    var c = p[]
                     if c == `u`:
-                        p += 1
+                        p = p.unsafe_offset(1)
                         handle_unicode_codepoint(p, dest, end)
                     elif c == `"`:
                         dest.append(`"`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `\\`:
                         dest.append(`\\`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `/`:
                         dest.append(`/`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `b`:
                         dest.append(`\b`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `f`:
                         dest.append(`\f`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `n`:
                         dest.append(`\n`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `r`:
                         dest.append(`\r`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     elif c == `t`:
                         dest.append(`\t`)
-                        p += 1
+                        p = p.unsafe_offset(1)
                     else:
                         raise Error("Invalid escape sequence")
         return String(unsafe_from_utf8=dest^)
@@ -361,7 +361,7 @@ def unsafe_is_made_of_eight_digits_fast(src: BytePtr) -> Bool:
     Safety:
         This is only safe if there are at least 8 bytes remaining.
     """
-    var val = src.bitcast[UInt64]()[0]
+    var val = src.unsafe_bitcast[UInt64]()[]
     return (
         (val & 0xF0F0F0F0F0F0F0F0)
         | (((val + 0x0606060606060606) & 0xF0F0F0F0F0F0F0F0) >> 4)
@@ -386,7 +386,7 @@ def unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
     Safety:
         This is only safe if there are at least 8 bytes remaining.
     """
-    val = p.bitcast[UInt64]()[0]
+    val = p.unsafe_bitcast[UInt64]()[]
     val = (val & 0x0F0F0F0F0F0F0F0F) * 2561 >> 8
     val = (val & 0x00FF00FF00FF00FF) * 6553601 >> 16
     val = (val & 0x0000FFFF0000FFFF) * 42949672960001 >> 32
@@ -424,6 +424,6 @@ def at_or_nul[assume_padded: Bool = False](p: CheckedPointer) -> Byte:
 def significant_digits(p: BytePtr, digit_count: Int) -> Int:
     var start = p
     while start[] == `0` or start[] == `.`:
-        start += 1
+        start = start.unsafe_offset(1)
 
     return digit_count - ptr_dist(p, start)

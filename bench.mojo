@@ -637,7 +637,7 @@ def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
 
 @parameter
 def benchmark_batch_deserialize[
-    T: Movable & ImplicitlyDeletable
+    T: Movable & Deinitable
 ](mut b: Bencher, docs: List[String]) raises:
     @always_inline
     @parameter
@@ -841,7 +841,7 @@ struct Friend(Copyable, Defaultable):
 
 @parameter
 def benchmark_deserialize_with_reflection[
-    T: Movable & ImplicitlyDeletable
+    T: Movable & Deinitable
 ](mut b: Bencher, s: String) raises:
     @always_inline
     @parameter

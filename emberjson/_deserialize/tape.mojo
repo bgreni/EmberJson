@@ -31,7 +31,8 @@ from emberjson.constants import (
     `\f`,
     acceptable_escapes,
 )
-from std.memory import unsafe_memcpy, unsafe_memcmp, alloc, UnsafePointer
+from std.memory import unsafe_memcpy, unsafe_memcmp
+from std.memory.alloc import unsafe_alloc
 from std.sys.intrinsics import unlikely, likely
 
 
@@ -124,26 +125,26 @@ struct _Arena(Movable):
     capacity per call. Here capacity is checked once per string and
     content is written exactly once."""
 
-    var _ptr: UnsafePointer[Byte, MutUntrackedOrigin]
+    var _ptr: Pointer[Byte, MutUntrackedOrigin]
     var _len: Int
     var _cap: Int
 
     def __init__(out self, *, capacity: Int):
         self._cap = capacity if capacity > 64 else 64
-        self._ptr = alloc[Byte](self._cap)
+        self._ptr = unsafe_alloc[Byte](self._cap)
         self._len = 0
 
-    def __del__(deinit self):
-        self._ptr.free()
+    def __deinit__(deinit self):
+        self._ptr.unsafe_free()
 
     @no_inline
     def _grow(mut self, needed: Int):
         var new_cap = self._cap * 2
         if new_cap < needed:
             new_cap = needed
-        var new_ptr = alloc[Byte](new_cap)
+        var new_ptr = unsafe_alloc[Byte](new_cap)
         unsafe_memcpy(dest=new_ptr, src=self._ptr, count=self._len)
-        self._ptr.free()
+        self._ptr.unsafe_free()
         self._ptr = new_ptr
         self._cap = new_cap
 
@@ -156,14 +157,14 @@ struct _Arena(Movable):
 
 @always_inline
 def _arena_len(strings: _Arena, off: Int) -> Int:
-    return Int((strings._ptr + off).bitcast[UInt32]()[])
+    return Int((strings._ptr.unsafe_offset(off)).unsafe_bitcast[UInt32]()[])
 
 
 @always_inline
 def _arena_view(strings: _Arena, off: Int) -> StringSlice[ImmutAnyOrigin]:
     var n = _arena_len(strings, off)
     var ptr = (
-        (strings._ptr + off + 4)
+        (strings._ptr.unsafe_offset(off).unsafe_offset(4))
         .as_imm()
         .unsafe_origin_cast[ImmutAnyOrigin]()
     )
@@ -177,7 +178,11 @@ def _arena_str_eq(strings: _Arena, off_a: Int, off_b: Int) -> Bool:
     if len_a != _arena_len(strings, off_b):
         return False
     return (
-        unsafe_memcmp(strings._ptr + off_a + 4, strings._ptr + off_b + 4, len_a)
+        unsafe_memcmp(
+            strings._ptr.unsafe_offset(off_a).unsafe_offset(4),
+            strings._ptr.unsafe_offset(off_b).unsafe_offset(4),
+            len_a,
+        )
         == 0
     )
 
@@ -206,7 +211,7 @@ def _handle_unicode_codepoint_ptr[
     o1: ImmOrigin, o2: ImmOrigin, //
 ](
     mut p: BytePtr[o1],
-    mut w: UnsafePointer[Byte, MutUntrackedOrigin],
+    mut w: Pointer[Byte, MutUntrackedOrigin],
     end: BytePtr[o2],
 ) raises:
     """`handle_unicode_codepoint` retargeted at a raw write pointer.
@@ -215,49 +220,49 @@ def _handle_unicode_codepoint_ptr[
         The caller must have reserved enough space behind `w`; a decoded
         codepoint never emits more bytes than its escape sequence spans.
     """
-    if unlikely(p + 3 >= end):
+    if unlikely(p.unsafe_offset(3) >= end):
         raise Error("Bad unicode codepoint")
     var c1 = hex_to_u32(p)
-    p += 4
+    p = p.unsafe_offset(4)
 
     if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
         raise Error("Invalid unicode: lone surrogate")
     if c1 >= 0xD800 and c1 < 0xDC00:
-        if unlikely(p + 5 >= end):
+        if unlikely(p.unsafe_offset(5) >= end):
             raise Error("Bad unicode codepoint")
-        elif unlikely(not (p[0] == `\\` and p[1] == `u`)):
+        elif unlikely(not (p[] == `\\` and p[unsafe_offset=1] == `u`)):
             raise Error("Bad unicode codepoint")
 
-        p += 2
+        p = p.unsafe_offset(2)
         var c2 = hex_to_u32(p)
 
         if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
             raise Error("Bad unicode codepoint")
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
-        p += 4
+        p = p.unsafe_offset(4)
 
     if unlikely(c1 > 0x10FFFF):
         raise Error("Invalid unicode")
 
     if c1 < 0x80:
-        w[0] = UInt8(c1)
-        w += 1
+        w[] = UInt8(c1)
+        w = w.unsafe_offset(1)
     elif c1 < 0x800:
-        w[0] = UInt8(0xC0 | (c1 >> 6))
-        w[1] = UInt8(0x80 | (c1 & 0x3F))
-        w += 2
+        w[] = UInt8(0xC0 | (c1 >> 6))
+        w[unsafe_offset=1] = UInt8(0x80 | (c1 & 0x3F))
+        w = w.unsafe_offset(2)
     elif c1 < 0x10000:
-        w[0] = UInt8(0xE0 | (c1 >> 12))
-        w[1] = UInt8(0x80 | ((c1 >> 6) & 0x3F))
-        w[2] = UInt8(0x80 | (c1 & 0x3F))
-        w += 3
+        w[] = UInt8(0xE0 | (c1 >> 12))
+        w[unsafe_offset=1] = UInt8(0x80 | ((c1 >> 6) & 0x3F))
+        w[unsafe_offset=2] = UInt8(0x80 | (c1 & 0x3F))
+        w = w.unsafe_offset(3)
     else:
-        w[0] = UInt8(0xF0 | (c1 >> 18))
-        w[1] = UInt8(0x80 | ((c1 >> 12) & 0x3F))
-        w[2] = UInt8(0x80 | ((c1 >> 6) & 0x3F))
-        w[3] = UInt8(0x80 | (c1 & 0x3F))
-        w += 4
+        w[] = UInt8(0xF0 | (c1 >> 18))
+        w[unsafe_offset=1] = UInt8(0x80 | ((c1 >> 12) & 0x3F))
+        w[unsafe_offset=2] = UInt8(0x80 | ((c1 >> 6) & 0x3F))
+        w[unsafe_offset=3] = UInt8(0x80 | (c1 & 0x3F))
+        w = w.unsafe_offset(4)
 
 
 def _arena_write[
@@ -279,17 +284,17 @@ def _arena_write[
     strings.reserve_extra(5 + raw_len + 8)
 
     var off = strings._len
-    var content = strings._ptr + off + 4
+    var content = strings._ptr.unsafe_offset(off).unsafe_offset(4)
     var final_len: Int
 
     comptime decode = not ignore_unicode
     if decode and found_escaped:
         var w = content
-        var p = start + first_escape
+        var p = start.unsafe_offset(first_escape)
 
         if first_escape > 0:
             unsafe_memcpy(dest=w, src=start, count=first_escape)
-            w += first_escape
+            w = w.unsafe_offset(first_escape)
 
         while p < end:
             # Fast scan for next backslash, bulk-copying the clean run.
@@ -299,47 +304,47 @@ def _arena_write[
             if p > chunk_start:
                 var chunk_len = ptr_dist(chunk_start, p)
                 unsafe_memcpy(dest=w, src=chunk_start, count=chunk_len)
-                w += chunk_len
+                w = w.unsafe_offset(chunk_len)
 
             if p < end:
-                p += 1  # skip backslash
+                p = p.unsafe_offset(1)  # skip backslash
                 if p < end:
-                    var c = p[0]
+                    var c = p[]
                     if c == `u`:
-                        p += 1
+                        p = p.unsafe_offset(1)
                         _handle_unicode_codepoint_ptr(p, w, end)
                     elif c == `"`:
-                        w[0] = `"`
-                        w += 1
-                        p += 1
+                        w[] = `"`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `\\`:
-                        w[0] = `\\`
-                        w += 1
-                        p += 1
+                        w[] = `\\`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `/`:
-                        w[0] = `/`
-                        w += 1
-                        p += 1
+                        w[] = `/`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `b`:
-                        w[0] = `\b`
-                        w += 1
-                        p += 1
+                        w[] = `\b`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `f`:
-                        w[0] = `\f`
-                        w += 1
-                        p += 1
+                        w[] = `\f`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `n`:
-                        w[0] = `\n`
-                        w += 1
-                        p += 1
+                        w[] = `\n`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `r`:
-                        w[0] = `\r`
-                        w += 1
-                        p += 1
+                        w[] = `\r`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     elif c == `t`:
-                        w[0] = `\t`
-                        w += 1
-                        p += 1
+                        w[] = `\t`
+                        w = w.unsafe_offset(1)
+                        p = p.unsafe_offset(1)
                     else:
                         raise Error("Invalid escape sequence")
         final_len = Int(w) - Int(content)
@@ -347,8 +352,10 @@ def _arena_write[
         unsafe_memcpy(dest=content, src=start, count=raw_len)
         final_len = raw_len
 
-    (strings._ptr + off).bitcast[UInt32]()[] = UInt32(final_len)
-    content[final_len] = 0
+    (strings._ptr.unsafe_offset(off)).unsafe_bitcast[UInt32]()[] = UInt32(
+        final_len
+    )
+    content[unsafe_offset=final_len] = 0
     strings._len = off + 4 + final_len + 1
     return off
 
@@ -456,21 +463,26 @@ def _key_disc(strings: _Arena, off: Int) -> UInt64:
     8-byte chunks with an overlapping final load. `_arena_write` reserves
     8 spare bytes so the short-key load stays inside the allocation."""
     var n = _arena_len(strings, off)
-    var p = strings._ptr + off + 4
+    var p = strings._ptr.unsafe_offset(off).unsafe_offset(4)
     if n <= 8:
         if n == 0:
             return _DISC_PRIME
-        var w = p.bitcast[UInt64]()[]
+        var w = p.unsafe_bitcast[UInt64]()[]
         var mask_shift = UInt64(64 - 8 * n)
         w = (w << mask_shift) >> mask_shift
         return (w ^ UInt64(n)) * _DISC_PRIME
     var acc = UInt64(n) * _DISC_PRIME
     var i = 0
     while i + 8 <= n:
-        acc = (acc ^ (p + i).bitcast[UInt64]()[]) * _DISC_PRIME
+        acc = (
+            acc ^ (p.unsafe_offset(i)).unsafe_bitcast[UInt64]()[]
+        ) * _DISC_PRIME
         i += 8
     if i < n:
-        acc = (acc ^ (p + n - 8).bitcast[UInt64]()[]) * _DISC_PRIME
+        acc = (
+            acc
+            ^ (p.unsafe_offset(n).unsafe_offset(-8)).unsafe_bitcast[UInt64]()[]
+        ) * _DISC_PRIME
     return acc
 
 

@@ -111,7 +111,7 @@ struct Lazy[
     ) -> StringSlice[Self.origin]:
         # TODO: Use where clause when that actually works
         comptime assert Self.T == String
-        return StringSlice(unsafe_from_utf8=self._data[1:-1])
+        return StringSlice(unsafe_from_utf8=self._data[1 : len(self._data) - 1])
 
 
 comptime LazyString[origin: ImmOrigin] = Lazy[

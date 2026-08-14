@@ -21,7 +21,7 @@ from ._deserialize.tape import (
 from .teju import write_float
 from ._utf8 import is_valid_utf8
 from std.format._utils import _WriteBufferStack
-from std.memory import unsafe_memcmp, UnsafePointer
+from std.memory import unsafe_memcmp
 from std.memory.unsafe import bitcast
 from std.sys.intrinsics import unlikely, likely
 
@@ -258,7 +258,9 @@ struct DocObject[origin: ImmOrigin](Sized, TrivialRegisterPassable):
             if (
                 _arena_len(self._doc[]._strings, off) == n
                 and unsafe_memcmp(
-                    self._doc[]._strings._ptr + off + 4,
+                    self._doc[]
+                    ._strings._ptr.unsafe_offset(off)
+                    .unsafe_offset(4),
                     needle.unsafe_ptr(),
                     n,
                 )
@@ -407,7 +409,9 @@ def _arena_slice[
 ](strings: _Arena, off: Int) -> StringSlice[origin]:
     var n = _arena_len(strings, off)
     var ptr = (
-        (strings._ptr + off + 4).as_imm().unsafe_origin_cast[origin]()
+        (strings._ptr.unsafe_offset(off).unsafe_offset(4))
+        .as_imm()
+        .unsafe_origin_cast[origin]()
     )
     var span = Span[Byte, origin](unsafe_ptr=ptr, length=n)
     return StringSlice(unsafe_from_utf8=span)

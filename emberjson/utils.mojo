@@ -9,7 +9,6 @@ from std.memory import (
     unsafe_memcmp,
     unsafe_memcpy,
     unsafe_memset,
-    UnsafePointer,
 )
 from std.format._utils import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
@@ -24,7 +23,7 @@ from std.builtin.globals import global_constant
 
 comptime ByteVec = SIMD[DType.uint8, _]
 comptime ByteView = Span[Byte, _]
-comptime BytePtr[origin: ImmOrigin] = UnsafePointer[Byte, origin]
+comptime BytePtr[origin: ImmOrigin] = Pointer[Byte, origin]
 
 
 @always_inline
@@ -40,11 +39,11 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
 
     @always_inline("nodebug")
     def __add__(self, v: Int) -> Self:
-        return {self.p + v, self.start, self.end}
+        return {self.p.unsafe_offset(v), self.start, self.end}
 
     @always_inline("nodebug")
     def __iadd__(mut self, v: Int):
-        self.p += v
+        self.p = self.p.unsafe_offset(v)
 
     @always_inline("nodebug")
     def __eq__(self, other: Self) -> Bool:
@@ -73,20 +72,20 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
     @always_inline("nodebug")
     def __add__(self, v: SIMD) -> Self:
         comptime assert v.dtype.is_integral()
-        return {self.p + v, self.start, self.end}
+        return {self.p.unsafe_offset(v), self.start, self.end}
 
     @always_inline("nodebug")
     def __iadd__(mut self, v: SIMD):
         comptime assert v.dtype.is_integral()
-        self.p += v
+        self.p = self.p.unsafe_offset(v)
 
     @always_inline("nodebug")
     def __sub__(self, i: Int) -> Self:
-        return {self.p - i, self.start, self.end}
+        return {self.p.unsafe_offset(-i), self.start, self.end}
 
     @always_inline("nodebug")
     def __isub__(mut self, i: Int):
-        self.p -= i
+        self.p = self.p.unsafe_offset(-i)
 
     @always_inline("nodebug")
     def __getitem__(
@@ -102,7 +101,7 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
     ) raises -> ref[Self.origin, self.p.address_space] Byte:
         if unlikely(self.dist() - i <= 0):
             raise Error("Unexpected EOF")
-        return self.p[i]
+        return self.p[unsafe_offset=i]
 
     @always_inline("nodebug")
     def unsafe_get(self) -> Byte:
@@ -122,7 +121,7 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
         Safety:
             See `unsafe_get()`.
         """
-        return self.p[i]
+        return self.p[unsafe_offset=i]
 
     @always_inline("nodebug")
     def dist(self) -> Int:
@@ -131,11 +130,11 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
     @always_inline("nodebug")
     def load_chunk(self) -> SIMD8xT:
         if self.dist() < SIMD8_WIDTH:
-            v = SIMD8xT(0)
+            var v = SIMD8xT(0)
             for i in range(self.dist()):
-                v[i] = self.p[i]
+                v[i] = self.p[unsafe_offset=i]
             return v
-        return self.p.load[width=SIMD8_WIDTH]()
+        return self.p.unsafe_load[width=SIMD8_WIDTH]()
 
     @always_inline("nodebug")
     def unsafe_load_chunk(self) -> SIMD8xT:
@@ -145,7 +144,7 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
             Only valid when the underlying buffer extends at least
             `SIMD8_WIDTH` bytes past `end` (see `PaddedBuffer`).
         """
-        return self.p.load[width=SIMD8_WIDTH]()
+        return self.p.unsafe_load[width=SIMD8_WIDTH]()
 
 
 comptime PAD_INPUT_THRESHOLD = 128
@@ -192,9 +191,7 @@ struct PaddedBuffer(Movable):
 
 comptime DefaultPrettyIndent = 4
 
-comptime StackArray[T: Copyable & ImplicitlyDeletable, size: Int] = InlineArray[
-    T, size
-]
+comptime StackArray[T: Copyable & Deinitable, size: Int] = InlineArray[T, size]
 
 
 @always_inline
@@ -234,9 +231,9 @@ def to_string(b: ByteView[_]) -> StringSlice[b.origin]:
 
 @always_inline
 def to_string(v: ByteVec, out s: String):
-    s = String(capacity=v.size)
+    s = String(capacity=v.length)
 
-    comptime for i in range(v.size):
+    comptime for i in range(v.length):
         s.append(Codepoint(v[i]))
 
 
@@ -250,7 +247,9 @@ def to_string(b: Byte, out s: String):
 @always_inline
 def to_string(var i: UInt32) -> String:
     # This is meant to be a sequence of 4 characters
-    return to_string(UnsafePointer(to=i).bitcast[Byte]().load[width=4]())
+    return to_string(
+        Pointer(to=i).unsafe_bitcast[Byte]().unsafe_load[width=4]()
+    )
 
 
 def constrain_json_type[T: Copyable]():
@@ -281,15 +280,15 @@ def _handle_escape(c: Byte, mut writer: Some[Writer]):
 
 @always_inline
 def _needs_escape(bytes: Span[Byte, _], n: Int) -> Bool:
-    var ptr = UnsafePointer(bytes.unsafe_ptr())
+    var ptr = Pointer(bytes.unsafe_ptr())
     var i = 0
     while i + SIMD8_WIDTH <= n:
-        var chunk = ptr.load[width=SIMD8_WIDTH](i)
+        var chunk = ptr.unsafe_load[width=SIMD8_WIDTH](i)
         if pack_bits(chunk.eq(`"`) | chunk.eq(`\\`) | chunk.lt(` `)) != 0:
             return True
         i += SIMD8_WIDTH
     while i < n:
-        var c = ptr[i]
+        var c = ptr[unsafe_offset=i]
         if c == `"` or c == `\\` or c < 32:
             return True
         i += 1
@@ -312,12 +311,12 @@ def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
 
     # Slow path: string contains characters that need escaping
     writer.write('"')
-    var ptr = UnsafePointer(bytes.unsafe_ptr())
+    var ptr = Pointer(bytes.unsafe_ptr())
     var i = 0
     var start = 0
 
     while i + SIMD8_WIDTH <= n:
-        var chunk = ptr.load[width=SIMD8_WIDTH](i)
+        var chunk = ptr.unsafe_load[width=SIMD8_WIDTH](i)
         var escape_bits = pack_bits(
             chunk.eq(`"`) | chunk.eq(`\\`) | chunk.lt(` `)
         )
@@ -332,12 +331,12 @@ def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
                     StringSlice(unsafe_from_utf8=bytes[start : i + pos])
                 )
             start = i + pos + 1
-            _handle_escape(ptr[i + pos], writer)
+            _handle_escape(ptr[unsafe_offset=i + pos], writer)
             bits &= bits - 1
         i += SIMD8_WIDTH
 
     while i < n:
-        var c = ptr[i]
+        var c = ptr[unsafe_offset=i]
         if c == `"` or c == `\\` or c < 32:
             if i > start:
                 writer.write(StringSlice(unsafe_from_utf8=bytes[start:i]))

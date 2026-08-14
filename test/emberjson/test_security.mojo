@@ -1,4 +1,4 @@
-"""Series of tests that cover a series of bugs claude discovered
+"""Series of tests that cover a series of bugs claude discovered.
 """
 
 from emberjson import (

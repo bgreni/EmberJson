@@ -13,12 +13,16 @@ Lemire, arXiv:1902.08318). Two layers:
     parsing coexist. PMULL replaces the six-step shift-XOR scan and an
     ADDP reduction tree replaces `pack_bits` for movemasks (simdjson's
     aarch64 kernel formulations).
-  * An x86 fast layer (`has_avx2()` targets, which implies SSSE3 and
-    PCLMULQDQ) with the same guard: PCLMULQDQ replaces the shift-XOR
-    scan (simdjson's westmere/haswell formulation) and the 64-byte
-    chunk ops recombine the four 16-byte registers into two 32-byte
-    vectors so compares and movemasks run at AVX2 width (VPCMPEQB +
-    VPMOVMSKB, simdjson's haswell kernel shape).
+  * An x86 fast layer (`has_avx2()` targets, which implies SSSE3) with
+    the same guard: PCLMULQDQ replaces the shift-XOR scan (simdjson's
+    westmere/haswell formulation) and the 64-byte chunk ops recombine
+    the four 16-byte registers into two 32-byte vectors so compares and
+    movemasks run at AVX2 width (VPCMPEQB + VPMOVMSKB, simdjson's
+    haswell kernel shape).
+
+  Each layer is gated on the target feature its instructions actually
+  require, which is not always the arch-family flag — see `_PMULL` and
+  `_PCLMUL` below.
 
   * `SimdInput` wraps the 64-byte logical chunk, abstracting the hardware
     SIMD width, and exposes `load`, `eq`, and `lteq` that produce 64-bit
@@ -34,9 +38,24 @@ from std.sys.intrinsics import llvm_intrinsic
 from .portable import prefix_xor_portable
 
 comptime _NEON = CompilationTarget.has_neon()
-# Every AVX2 CPU (Haswell+/Zen+) also has SSSE3 PSHUFB and PCLMULQDQ, so
-# one flag gates all three x86 fast paths.
+# Every AVX2 CPU (Haswell+/Zen+) also has SSSE3 PSHUFB, so this flag
+# gates the shuffle and movemask fast paths.
 comptime _AVX2 = CompilationTarget.has_avx2()
+
+# The carryless-multiply intrinsics need their own gates: PMULL64 lives
+# in the aarch64 crypto extension (+aes), not baseline NEON, and
+# PCLMULQDQ needs +pclmul, not merely +avx2. Every CPU we care about
+# ships both, but instruction selection consults the *target feature
+# set*, not the silicon: a build for a generic CPU — which is what
+# conda/rattler packaging does so one artifact runs on any machine of
+# the arch — gets +neon without +aes, and emitting PMULL there is a hard
+# "Cannot select" backend crash rather than a slow path. Falling back to
+# the portable scan keeps such builds working (and it is bit-identical).
+# The arch conjunction is load-bearing: `aes` is also a valid x86
+# feature name (AES-NI), so the feature query alone would not keep the
+# aarch64 intrinsic off an x86 target.
+comptime _PMULL = _NEON and CompilationTarget._has_feature["aes"]()
+comptime _PCLMUL = _AVX2 and CompilationTarget._has_feature["pclmul"]()
 
 comptime _Chunk16 = SIMD[DType.uint8, 16]
 comptime _Bool16 = SIMD[DType.bool, 16]
@@ -76,18 +95,18 @@ def prefix_xor(bitmask: UInt64) -> UInt64:
 
     Verified from --emit=asm that both intrinsics earn their keep: the
     shift-XOR chain is 17 dependent insns on x86 (no shifted-operand ALU)
-    vs 5 for PCLMULQDQ, and 7 vs 5 on aarch64. Note PMULL64 is part of
-    the aarch64 crypto extension (+aes), not baseline NEON — there is no
-    `has_aes()` query, but every supported aarch64 target (Apple
-    Silicon, Graviton, Ampere) ships it.
+    vs 5 for PCLMULQDQ, and 7 vs 5 on aarch64. Both are gated on the
+    exact target feature they need (`_PMULL`/`_PCLMUL`, see above) rather
+    than on the arch family, so a generic-CPU build degrades to the
+    portable scan instead of failing instruction selection.
     """
-    comptime if _NEON:
+    comptime if _PMULL:
         if not __is_run_in_comptime_interpreter:
             var prod = llvm_intrinsic["llvm.aarch64.neon.pmull64", _Chunk16](
                 bitmask, UInt64.MAX
             )
             return bitcast[DType.uint64, 2](prod)[0]
-    comptime if _AVX2:
+    comptime if _PCLMUL:
         if not __is_run_in_comptime_interpreter:
             # PCLMULQDQ against all-ones: the carryless product's low half
             # is exactly the inclusive XOR-scan (simdjson's x86 kernels).
@@ -144,15 +163,15 @@ struct SimdInput(Copyable, Movable):
 
     @always_inline("nodebug")
     @staticmethod
-    def load(ptr: UnsafePointer[UInt8, _]) -> SimdInput:
+    def load(ptr: Pointer[UInt8, _]) -> SimdInput:
         """Loads 64 bytes from ptr (unaligned)."""
         var result = SimdInput(
             chunks=InlineArray[_Chunk16, 4](fill=_Chunk16(0))
         )
-        result.chunks[0] = ptr.load[width=16]()
-        result.chunks[1] = (ptr + 16).load[width=16]()
-        result.chunks[2] = (ptr + 32).load[width=16]()
-        result.chunks[3] = (ptr + 48).load[width=16]()
+        result.chunks[0] = ptr.unsafe_load[width=16]()
+        result.chunks[1] = (ptr.unsafe_offset(16)).unsafe_load[width=16]()
+        result.chunks[2] = (ptr.unsafe_offset(32)).unsafe_load[width=16]()
+        result.chunks[3] = (ptr.unsafe_offset(48)).unsafe_load[width=16]()
         return result^
 
     @always_inline("nodebug")

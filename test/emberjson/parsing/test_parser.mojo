@@ -513,7 +513,7 @@ def test_expect_value_bytes() raises:
 
     with assert_raises(contains="Encountered EOF when expecting 'null'"):
         var p = Parser("nul")
-        p.parse_null()
+        _ = p.parse_null()
 
 
 def main() raises:

@@ -11,7 +11,6 @@ from ._parser_helper import (
 )
 from emberjson.utils import select, StackArray, CheckedPointer, lut
 from std.memory.unsafe import bitcast
-from std.memory import UnsafePointer
 from std.builtin.dtype import _uint_type_of_width
 from std.sys.info import bit_width_of
 from std.utils.numerics import FPUtils

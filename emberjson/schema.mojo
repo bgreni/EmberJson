@@ -220,10 +220,10 @@ def __has_unique_elements[T: _Base & Iterable](value: T) -> Bool:
     # a generic `Iterator.Element` is only `Movable`, so both the loop binding
     # and `enumerate`'s `Tuple` would be values the compiler cannot drop.
     # Taking each element by hand lets us consume it through a `downcast` that
-    # carries `ImplicitlyDeletable`.
+    # carries `Deinitable`.
     comptime Elem = downcast[
         T.IteratorType[origin_of(value)].Element,
-        Equatable & Movable & ImplicitlyDeletable,
+        Equatable & Movable & Deinitable,
     ]
     var i = 0
     var outer = value.__iter__()
@@ -261,7 +261,7 @@ Parameters:
 
 
 @always_inline
-def __is_eq[T: Equatable & ImplicitlyDeletable, //, value: T](a: T) -> Bool:
+def __is_eq[T: Equatable & Deinitable, //, value: T](a: T) -> Bool:
     return a == materialize[value]()
 
 

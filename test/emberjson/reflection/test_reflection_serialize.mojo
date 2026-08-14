@@ -186,7 +186,7 @@ struct DeepNode(Copyable):
     # Recursive type: an explicit (empty) `__del__` is required so the
     # compiler will synthesize the destructor/move (fields still destroyed
     # automatically afterward).
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         pass
 
 

@@ -8,7 +8,6 @@ from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._utf8 import is_valid_utf8
 from std.python import PythonObject, Python
 from std.os import abort
-from std.memory import UnsafePointer
 from std.hashlib.hasher import Hasher
 from std.hashlib import hash
 

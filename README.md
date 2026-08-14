@@ -5,7 +5,6 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 ![ci_badge](https://github.com/bgreni/EmberJson/actions/workflows/CI.yml/badge.svg)
-![CodeQL](https://github.com/bgreni/EmberJson/workflows/CodeQL/badge.svg)
 
 
 A lightweight JSON parsing library for Mojo.
@@ -43,11 +42,7 @@ if result:
 ### Fast immutable documents
 
 `parse_document` parses onto an immutable, self-contained tape `Document`
-(simdjson-style): a SIMD structural index feeds an iterative stage-2
-walker, containers are tape spans, and all strings share one arena — no
-per-node allocation and no byte-at-a-time scanning. That makes it 2-3x
-faster than `parse` across the bench corpus. The trade-off: the result is read-only, and navigation values
-borrow the `Document` (enforced at compile time by the origin system).
+(simdjson-style).
 
 ```mojo
 from emberjson import parse_document, to_string
@@ -78,8 +73,8 @@ def main() raises:
 When you need one value out of a large document, `parse_pointer` navigates
 the raw text to an RFC 6901 target using a SIMD structural index and
 parses only that subtree — sibling values are skipped with bracket hops,
-never visiting their contents. Sparse queries run 3-6x faster than even
-`parse_document` on the bench corpus (5-19x faster than `parse`).
+never visiting their contents. Sparse queries run 2-5x faster than even
+`parse_document` on the bench corpus (4.5-16x faster than `parse`).
 
 ```mojo
 from emberjson import parse_pointer
@@ -99,7 +94,7 @@ succeeds. Use `parse` when whole-document validation matters.
 JSON text is required to be UTF-8 (RFC 8259), and every parse entry
 point validates that by default: input containing overlongs, surrogates,
 truncated sequences, or code points above U+10FFFF is rejected before
-parsing. The check is a SIMD validator running at ~20-30 GB/s (with an
+parsing. The check is a SIMD validator running at ~19-30 GB/s (with an
 ASCII fast path), so it typically costs 2-4% of a parse. For trusted
 input you can opt out:
 
@@ -132,7 +127,7 @@ def main() raises:
     print(to_string[pretty=True](json))
 # prints:
 #{
-#   "key": 123
+#    "key": 123
 #}
 ```
 
@@ -191,7 +186,7 @@ var d = ob.to_dict()
 Using Mojo's reflection features, EmberJson can automatically serialize and deserialize JSON to and from Mojo structs without propagating trait implementations for all
 relevant types. Plain structs are treated as JSON objects by default. The logic recursively traverses struct fields until it finds conforming types, so nested structs work out of the box.
 
-Supported field types include: `Int`, `Float64`, `String`, `Bool`, `Optional[T]`, `List[T]`, `Dict[String, V]`, `Tuple[...]`, `Set[T]`, `InlineArray[T, N]`, `SIMD[dtype, size]`, `ArcPointer[T]`, `OwnedPointer[T]`, and nested structs.
+Supported field types include: `Int`, `Float64`, `String`, `Bool`, `Optional[T]`, `List[T]`, `Dict[String, V]`, `Tuple[...]`, `Set[T]`, `InlineArray[T, N]`, `SIMD[dtype, length]`, `ArcPointer[T]`, `OwnedPointer[T]`, and nested structs.
 
 To customize behavior, implement the `JsonSerializable` and/or `JsonDeserializable` traits.
 
@@ -334,7 +329,7 @@ outlive the source string.
 ```mojo
 from emberjson import deserialize, LazyValue, LazyString
 
-struct Event[origin: ImmutOrigin](Movable):
+struct Event[origin: ImmOrigin](Movable):
     var id: Int64                      # parsed eagerly
     var payload: LazyValue[Self.origin]  # span captured, parsed on demand
     var note: LazyString[Self.origin]
@@ -374,7 +369,7 @@ print(port2[])  # prints 443
 | `Ne[value]` | Inequality check | `Ne["forbidden"]` |
 | `MultipleOf[base]` | Divisibility check | `MultipleOf[Int64(10)]` |
 | `Unique[T]` | All elements unique | `Unique[List[Int]]` |
-| `Enum[T, *values]` | Set membership | `Enum[String, "red", "green", "blue"]` |
+| `Enum[*values]` | Set membership (element type is inferred) | `Enum["red", "green", "blue"]` |
 
 ```mojo
 from emberjson import *
@@ -385,8 +380,8 @@ var name = deserialize[NonEmpty[String]]('"Alice"')
 # Validate on construction
 var score = Range[Float64, 0.0, 100.0](95.5)
 
-# Enum-style validation
-comptime Color = Enum[String, "red", "green", "blue"]
+# Enum-style validation (the element type is inferred from the values)
+comptime Color = Enum["red", "green", "blue"]
 var c = deserialize[Color]('"red"')
 print(c[])  # prints red
 ```
@@ -463,28 +458,26 @@ Validators work as struct field types, enforcing constraints during deserializat
 ```mojo
 from emberjson import *
 
-@fieldwise_init
-struct Config(Defaultable, Movable):
-    var name: NonEmpty[String]
+struct Config(Movable):
     var port: Range[Int, 1, 65535]
+    var retries: Range[Int, 0, 10]
     var timeout: Default[Int, 30]
-    var password: Secret[String]
-
-    def __init__(out self):
-        self.name = "default"
-        self.port = 80
-        self.timeout = Default[Int, 30]()
-        self.password = ""
 
 def main() raises:
-    var cfg = deserialize[Config](
-        '{"name": "myapp", "port": 8080, "password": "s3cret"}'
-    )
-    print(cfg.name[])      # prints myapp
+    var cfg = deserialize[Config]('{"port": 8080, "retries": 3}')
     print(cfg.port[])      # prints 8080
+    print(cfg.retries[])   # prints 3
     print(cfg.timeout[])   # prints 30 (default, since missing from JSON)
-    print(serialize(cfg))  # password serialized as "********"
+    print(serialize(cfg))  # prints {"port":8080,"retries":3,"timeout":30}
 ```
+
+> **Current limitation:** a validator field whose wrapped type has a
+> non-trivial destructor (e.g. `NonEmpty[String]`, `Secret[String]`) cannot
+> be used as a struct field yet. Deserializing such a struct requires it to
+> be `Defaultable`, but validators only expose a raising constructor, so a
+> non-raising `__init__` cannot build one. Validators wrapping trivially
+> destructible types (`Int`, `Float64`, `Bool`, …) work as shown above, and
+> `deserialize[NonEmpty[String]](...)` works fine on its own.
 
 #### Cross-Field Validation
 
@@ -526,7 +519,7 @@ to the nested value. It also supports syntactic sugar via backticks.
 var j = Value(parse_string='{"foo": ["bar", "baz"]}')
 
 # Access nested values
-print(j.get("/foo/1").string())  # prints "baz"
+print(j.get("/foo/1").string())  # prints baz
 
 # Syntactic sugar via backticks
 print(j.`/foo/1`.string())
@@ -548,10 +541,10 @@ You can also use Python-style dot access for object keys, or backtick-identifier
 
 ```mojo
 # Dot access for standard identifiers
-print(j.foo)  # Equivalent to j.pointer("/foo")
+print(j.foo)  # Equivalent to j.get("/foo")
 
 # Backtick syntax for full pointer paths
-print(j.`/foo/1`.string())  # Equivalent to j.pointer("/foo/1")
+print(j.`/foo/1`.string())  # Equivalent to j.get("/foo/1")
 
 # In-place modification via backticks
 j.`/foo/1` = "updated"
@@ -559,7 +552,7 @@ print(j.`/foo/1`.string())  # prints "updated"
 
 # Chained access for nest objects
 j = {"foo": {"bar": [1, 2, 3]}}
-print(j.foo.bar[1])  # prints "2"
+print(j.foo.bar[1])  # prints 2
 ```
 
 ### JSON Patch

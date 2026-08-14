@@ -67,7 +67,6 @@ from emberjson.constants import (
 )
 from std.collections import InlineArray
 from std.bit import count_trailing_zeros
-from std.memory import UnsafePointer
 from std.sys.intrinsics import unlikely, likely
 
 
@@ -116,17 +115,20 @@ def _validate_escape_names[
 ](p: Parser[origin, options], off: Int, end_off: Int) raises:
     """Escape-name validation for the `ignore_unicode` verbatim path (the
     decode path validates names itself)."""
-    var q = p.data.start + off
-    var end = p.data.start + end_off
+    var q = p.data.start.unsafe_offset(off)
+    var end = p.data.start.unsafe_offset(end_off)
     while q < end:
         if q[] == `\\`:
-            if q + 1 >= end:
+            if q.unsafe_offset(1) >= end:
                 break
-            if unlikely((q + 1)[] not in acceptable_escapes):
-                raise Error("Invalid escape sequence: ", to_string((q + 1)[]))
-            q += 2
+            if unlikely((q.unsafe_offset(1))[] not in acceptable_escapes):
+                raise Error(
+                    "Invalid escape sequence: ",
+                    to_string((q.unsafe_offset(1))[]),
+                )
+            q = q.unsafe_offset(2)
             continue
-        q += 1
+        q = q.unsafe_offset(1)
 
 
 def _iscan_string[
@@ -139,14 +141,14 @@ def _iscan_string[
     Returns (found_escaped, first_escape offset within the span). Raises
     on unescaped control characters, mirroring the byte-walk scanner.
     """
-    var base = p.data.start + start_off
+    var base = p.data.start.unsafe_offset(start_off)
     var n = end_off - start_off
     var i = 0
     var found = False
     var first = 0
     while i < n:
         # Padded input: a full-width load past the span is safe.
-        var chunk = (base + i).load[width=SIMD8_WIDTH]()
+        var chunk = (base.unsafe_offset(i)).unsafe_load[width=SIMD8_WIDTH]()
         var ctrl = pack_into_integer(chunk.lt(` `))
         var bs = pack_into_integer(chunk.eq(`\\`))
         var valid = n - i
@@ -217,7 +219,7 @@ def _walk_tape_from_index[
 ](
     mut p: Parser[origin, options],
     mut sink: TapeSink,
-    idx_start: UnsafePointer[UInt32, _],
+    idx_start: Pointer[UInt32, _],
     n_structurals: Int,
 ) raises:
     """Stage-2 walk over a precomputed structural index.
@@ -241,7 +243,7 @@ def _walk_tape_from_index[
 
     var base = p.data.start
     var idx = idx_start
-    var idx_last = idx_start + n_structurals
+    var idx_last = idx_start.unsafe_offset(n_structurals)
 
     var stack = InlineArray[_Scope, _MAX_DEPTH](uninitialized=True)
     var depth = 0
@@ -249,21 +251,25 @@ def _walk_tape_from_index[
     @parameter
     @always_inline
     def advance(out off: Int):
-        off = Int(idx[0])
-        idx += 1
+        off = Int(idx[])
+        idx = idx.unsafe_offset(1)
 
     @parameter
     @always_inline
     def visit_string(off: Int, out arena_off: Int) raises:
         """The string opening at `off`: its closing quote is the next
         structural (escaped quotes are masked out of the index)."""
-        var close = Int(idx[0])
-        idx += 1
-        if unlikely(base[close] != `"`):
+        var close = Int(idx[])
+        idx = idx.unsafe_offset(1)
+        if unlikely(base[unsafe_offset=close] != `"`):
             raise Error("Unexpected EOF")
         var scan = _iscan_string(p, off + 1, close)
         arena_off = _arena_write[options.ignore_unicode](
-            sink.strings, base + off + 1, base + close, scan[0], scan[1]
+            sink.strings,
+            base.unsafe_offset(off).unsafe_offset(1),
+            base.unsafe_offset(close),
+            scan[0],
+            scan[1],
         )
         sink.tape.append(_pack_word(TapeTag.STRING, UInt64(arena_off)))
 
@@ -273,24 +279,24 @@ def _walk_tape_from_index[
         if b == `"`:
             _ = visit_string(off)
         elif is_numerical_component(b):
-            p.data.p = base + off
+            p.data.p = base.unsafe_offset(off)
             var r = p._parse_number_raw()
             # RawNumber kinds are ordered to match the number tags.
             sink.tape.append(_pack_word(TapeTag.INT64 + r.kind, 0))
             sink.tape.append(r.bits)
             _check_token_end(p)
         elif b == `t`:
-            p.data.p = base + off
+            p.data.p = base.unsafe_offset(off)
             _ = p.parse_true()
             sink.tape.append(_pack_word(TapeTag.TRUE, 0))
             _check_token_end(p)
         elif b == `f`:
-            p.data.p = base + off
+            p.data.p = base.unsafe_offset(off)
             _ = p.parse_false()
             sink.tape.append(_pack_word(TapeTag.FALSE, 0))
             _check_token_end(p)
         elif b == `n`:
-            p.data.p = base + off
+            p.data.p = base.unsafe_offset(off)
             _ = p.parse_null()
             sink.tape.append(_pack_word(TapeTag.NULL, 0))
             _check_token_end(p)
@@ -332,19 +338,19 @@ def _walk_tape_from_index[
 
     # ---- root dispatch (simdjson walk_document) ----
     var off = advance()
-    var b = base[off]
+    var b = base[unsafe_offset=off]
     var state: Int
     if b == `{`:
-        if base[Int(idx[0])] == `}`:
-            idx += 1
+        if base[unsafe_offset=Int(idx[])] == `}`:
+            idx = idx.unsafe_offset(1)
             emit_empty(TapeTag.OBJECT_OPEN, TapeTag.OBJECT_CLOSE)
             state = -1
         else:
             push_scope(True)
             state = _OBJECT_BEGIN
     elif b == `[`:
-        if base[Int(idx[0])] == `]`:
-            idx += 1
+        if base[unsafe_offset=Int(idx[])] == `]`:
+            idx = idx.unsafe_offset(1)
             emit_empty(TapeTag.ARRAY_OPEN, TapeTag.ARRAY_CLOSE)
             state = -1
         else:
@@ -358,27 +364,27 @@ def _walk_tape_from_index[
         if state == _OBJECT_BEGIN:
             # First key of a non-empty object.
             off = advance()
-            if unlikely(base[off] != `"`):
+            if unlikely(base[unsafe_offset=off] != `"`):
                 raise Error("Invalid identifier")
             visit_key(off)
             # object_field: colon then value.
             off = advance()
-            if unlikely(base[off] != `:`):
+            if unlikely(base[unsafe_offset=off] != `:`):
                 raise Error("Invalid identifier")
             stack.unsafe_get(depth - 1).count += 1
             off = advance()
-            b = base[off]
+            b = base[unsafe_offset=off]
             if b == `{`:
-                if base[Int(idx[0])] == `}`:
-                    idx += 1
+                if base[unsafe_offset=Int(idx[])] == `}`:
+                    idx = idx.unsafe_offset(1)
                     emit_empty(TapeTag.OBJECT_OPEN, TapeTag.OBJECT_CLOSE)
                     state = _OBJECT_CONTINUE
                 else:
                     push_scope(True)
                     state = _OBJECT_BEGIN
             elif b == `[`:
-                if base[Int(idx[0])] == `]`:
-                    idx += 1
+                if base[unsafe_offset=Int(idx[])] == `]`:
+                    idx = idx.unsafe_offset(1)
                     emit_empty(TapeTag.ARRAY_OPEN, TapeTag.ARRAY_CLOSE)
                     state = _OBJECT_CONTINUE
                 else:
@@ -389,11 +395,11 @@ def _walk_tape_from_index[
                 state = _OBJECT_CONTINUE
         elif state == _OBJECT_CONTINUE:
             off = advance()
-            b = base[off]
+            b = base[unsafe_offset=off]
             if b == `,`:
-                if base[Int(idx[0])] == `}`:
+                if base[unsafe_offset=Int(idx[])] == `}`:
                     comptime if allow_trailing:
-                        idx += 1
+                        idx = idx.unsafe_offset(1)
                         state = _SCOPE_END
                         continue
                     raise Error("Illegal trailing comma")
@@ -406,18 +412,18 @@ def _walk_tape_from_index[
             # Next element of a non-empty array.
             stack.unsafe_get(depth - 1).count += 1
             off = advance()
-            b = base[off]
+            b = base[unsafe_offset=off]
             if b == `{`:
-                if base[Int(idx[0])] == `}`:
-                    idx += 1
+                if base[unsafe_offset=Int(idx[])] == `}`:
+                    idx = idx.unsafe_offset(1)
                     emit_empty(TapeTag.OBJECT_OPEN, TapeTag.OBJECT_CLOSE)
                     state = _ARRAY_CONTINUE
                 else:
                     push_scope(True)
                     state = _OBJECT_BEGIN
             elif b == `[`:
-                if base[Int(idx[0])] == `]`:
-                    idx += 1
+                if base[unsafe_offset=Int(idx[])] == `]`:
+                    idx = idx.unsafe_offset(1)
                     emit_empty(TapeTag.ARRAY_OPEN, TapeTag.ARRAY_CLOSE)
                     state = _ARRAY_CONTINUE
                 else:
@@ -428,11 +434,11 @@ def _walk_tape_from_index[
                 state = _ARRAY_CONTINUE
         elif state == _ARRAY_CONTINUE:
             off = advance()
-            b = base[off]
+            b = base[unsafe_offset=off]
             if b == `,`:
-                if base[Int(idx[0])] == `]`:
+                if base[unsafe_offset=Int(idx[])] == `]`:
                     comptime if allow_trailing:
-                        idx += 1
+                        idx = idx.unsafe_offset(1)
                         state = _SCOPE_END
                         continue
                     raise Error("Illegal trailing comma")

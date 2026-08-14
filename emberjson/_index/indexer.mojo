@@ -80,12 +80,10 @@ def structural_index[
     var prev_scalar_carry: UInt64 = 0
     var prev_base: UInt32 = 0
 
-    # Deliberately an `UnsafePointer`: the emit loop writes up to 7 slots past
+    # Deliberately an `Pointer`: the emit loop writes up to 7 slots past
     # the true structural count (covered by `EMIT_SLACK`), so it wants raw
     # offset indexing rather than the bounds-tracked `Pointer` `List` vends.
-    var out_ptr: UnsafePointer[
-        UInt32, origin_of(positions)
-    ] = positions.unsafe_ptr()
+    var out_ptr: Pointer[UInt32, origin_of(positions)] = positions.unsafe_ptr()
     var write_pos = 0
 
     @parameter
@@ -107,21 +105,37 @@ def structural_index[
         var w = write_pos
         var done = 0
         while done < cnt:
-            out_ptr[w + 0] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 0] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 1] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 1] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 2] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 2] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 3] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 3] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 4] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 4] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 5] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 5] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 6] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 6] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
-            out_ptr[w + 7] = base_idx + UInt32(count_trailing_zeros(b))
+            out_ptr[unsafe_offset=w + 7] = base_idx + UInt32(
+                count_trailing_zeros(b)
+            )
             b = b & (b - 1)
             w += 8
             done += 8
@@ -131,17 +145,17 @@ def structural_index[
         var base_idx = UInt32(chunk_idx * 64)
         var input: SimdInput
         comptime if assume_padded:
-            input = SimdInput.load(ptr + Int(base_idx))
+            input = SimdInput.load(ptr.unsafe_offset(Int(base_idx)))
         else:
             if Int(base_idx) + 64 <= input_len:
-                input = SimdInput.load(ptr + Int(base_idx))
+                input = SimdInput.load(ptr.unsafe_offset(Int(base_idx)))
             else:
                 # Final partial chunk: stage through a zeroed stack buffer
                 # so the borrowed input is never read past input_len.
                 var tail = InlineArray[Byte, 64](fill=0)
                 unsafe_memcpy(
                     dest=tail.unsafe_ptr(),
-                    src=ptr + Int(base_idx),
+                    src=ptr.unsafe_offset(Int(base_idx)),
                     count=input_len - Int(base_idx),
                 )
                 input = SimdInput.load(tail.unsafe_ptr())
@@ -185,6 +199,8 @@ def structural_index[
     # Positions are emitted in strictly ascending order, so any position
     # >= input_len — spurious structurals from the final chunk's zero
     # bytes — forms a contiguous tail. Trim it.
-    while write_pos > 0 and Int(out_ptr[write_pos - 1]) >= input_len:
+    while (
+        write_pos > 0 and Int(out_ptr[unsafe_offset=write_pos - 1]) >= input_len
+    ):
         write_pos -= 1
     positions.resize(write_pos, UInt32(0))
