@@ -11,11 +11,11 @@ from emberjson import Value
 
 struct _ReadBuffer(Copyable, Movable, Sized, Writable):
     comptime BUFFER_SIZE = 4096
-    var buf: InlineArray[Byte, Self.BUFFER_SIZE]
+    var buf: Array[Byte, Self.BUFFER_SIZE]
     var length: Int
 
     def __init__(out self):
-        self.buf = InlineArray[Byte, Self.BUFFER_SIZE](fill=0)
+        self.buf = Array[Byte, Self.BUFFER_SIZE](fill=0)
         self.length = 0
 
     @always_inline

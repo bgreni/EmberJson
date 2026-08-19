@@ -13,7 +13,7 @@ from emberjson._deserialize import (
     StrictOptions,
 )
 from emberjson import JsonDeserializable
-from std.collections import Set
+from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
 from emberjson import Value, Object, Array, Null
 
@@ -29,7 +29,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var bs: SIMD[DType.bool, 1]
     var li: List[Int]
     var tup: Tuple[Int, Int, Int]
-    var ina: InlineArray[Float64, 3]
+    var ina: StdArray[Float64, 3]
     var d: Dict[String, Int]
     var il: type_of(Self.I)
     var fl: type_of(Self.F)

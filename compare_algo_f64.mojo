@@ -16,10 +16,10 @@ comptime BenchResults = Dict[String, Float64]
 comptime iters = 1_000_000
 
 
-@parameter
+@__parameter
 def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
-    @parameter
+    @__parameter
     def do():
         for _ in range(iters):
             var bin = fp_to_binary(val)
@@ -29,14 +29,14 @@ def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     var casted = val.cast[
         DType.float64 if dtype == DType.float64 else DType.float32
     ]()
 
     @always_inline
-    @parameter
+    @__parameter
     def do():
         for _ in range(iters):
             var sig = FPUtils.get_mantissa_uint(casted)

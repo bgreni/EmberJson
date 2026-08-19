@@ -14,10 +14,10 @@ comptime BenchResults = Dict[String, Float64]
 comptime iters = 1_000_000
 
 
-@parameter
+@__parameter
 def bench_emberjson(mut b: Bencher, val: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         for _ in range(iters):
             var p = Parser(val)
@@ -27,10 +27,10 @@ def bench_emberjson(mut b: Bencher, val: String) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def bench_stdlib(mut b: Bencher, val: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         for _ in range(iters):
             var f = Float64(val)

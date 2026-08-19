@@ -18,7 +18,6 @@ from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
 from std.memory import unsafe_memset
 from std.sys.intrinsics import unlikely, likely
-from std.collections import InlineArray
 from ._parser_helper import (
     copy_to_string,
     TRUE,
@@ -1348,7 +1347,7 @@ def minify(s: String, out out_str: String) raises:
     var end = ptr.unsafe_offset(s_len)
 
     @always_inline
-    @parameter
+    @__parameter
     def _load_chunk(
         p: type_of(ptr), cond: Bool
     ) -> SIMD[DType.uint8, SIMD8_WIDTH]:

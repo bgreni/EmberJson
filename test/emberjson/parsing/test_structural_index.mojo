@@ -182,7 +182,7 @@ def test_classifier_exhaustive() raises:
     from emberjson._index.classifier import classify
     from emberjson._index.simd_ops import SimdInput
 
-    var bytes = InlineArray[Byte, 256](fill=0)
+    var bytes = Array[Byte, 256](fill=0)
     for i in range(256):
         bytes[i] = Byte(i)
     for chunk in range(4):

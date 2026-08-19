@@ -27,7 +27,7 @@ from emberjson.schema import (
     CrossFieldValidator,
 )
 from emberjson import deserialize, serialize, Value
-from std.collections import Set, InlineArray
+from std.collections import Set, Array
 from std.testing import assert_equal, assert_raises, TestSuite
 
 
@@ -403,12 +403,12 @@ def test_unique() raises:
     var u5 = deserialize[Unique[Set[Int]]]("[1, 2, 1, 2, 3]")
     assert_equal(len(u5[]), 3)
 
-    # InlineArray
-    var u6 = deserialize[Unique[InlineArray[Int, 3]]]("[1, 2, 3]")
+    # Array
+    var u6 = deserialize[Unique[Array[Int, 3]]]("[1, 2, 3]")
     assert_equal(len(u6[]), 3)
 
     with assert_raises(contains="Values are not unique"):
-        _ = deserialize[Unique[InlineArray[Int, 3]]]("[1, 2, 1]")
+        _ = deserialize[Unique[Array[Int, 3]]]("[1, 2, 1]")
 
 
 def test_not_ne() raises:

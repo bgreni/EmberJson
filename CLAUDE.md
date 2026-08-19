@@ -8,7 +8,7 @@ All commands use **Pixi** as the task runner.
 
 ```bash
 pixi run test          # Run all tests
-pixi run build         # Build emberjson.mojopkg
+pixi run build         # Build emberjson.mojoc
 pixi run format        # Format code (mojo format -l 80 .)
 pixi run bench         # Run benchmarks
 pixi run fuzz          # Run fuzzing tests
@@ -85,6 +85,6 @@ try_deserialize[T](json_string)      # → Optional[T]
 
 ## Mojo Version
 
-Requires `mojo >=1.0.0,<2` (MAX stable channel). Platforms: osx-arm64, linux-aarch64, linux-64.
+Requires `mojo >=1.1.0.dev2026081813,<2` (MAX nightly channel). Platforms: osx-arm64, linux-aarch64, linux-64.
 
 A full reference for the Mojo APIs https://docs.modular.com/llms-mojo.txt

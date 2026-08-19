@@ -24,7 +24,7 @@ needed).
 from emberjson._index.simd_ops import lookup16
 from std.memory import unsafe_memcpy
 from std.sys.intrinsics import llvm_intrinsic
-from std.collections import InlineArray
+from std.collections import Array
 
 comptime _C16 = SIMD[DType.uint8, 16]
 
@@ -151,7 +151,7 @@ def _is_valid_utf8_simd(ptr: Pointer[UInt8, _], n: Int) -> Bool:
         # Final partial chunk, staged through a zeroed buffer: the NUL
         # padding is ASCII, so any sequence left dangling at the true end
         # of input fails its continuation checks here.
-        var tail = InlineArray[Byte, 16](fill=0)
+        var tail = Array[Byte, 16](fill=0)
         unsafe_memcpy(
             dest=tail.unsafe_ptr(), src=ptr.unsafe_offset(i), count=n - i
         )

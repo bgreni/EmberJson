@@ -159,15 +159,13 @@ def movemask64(a: _Bool16, b: _Bool16, c: _Bool16, d: _Bool16) -> UInt64:
 struct SimdInput(Copyable, Movable):
     """64 bytes loaded into four 16-byte registers, abstracting SIMD width."""
 
-    var chunks: InlineArray[_Chunk16, 4]
+    var chunks: Array[_Chunk16, 4]
 
     @always_inline("nodebug")
     @staticmethod
     def load(ptr: Pointer[UInt8, _]) -> SimdInput:
         """Loads 64 bytes from ptr (unaligned)."""
-        var result = SimdInput(
-            chunks=InlineArray[_Chunk16, 4](fill=_Chunk16(0))
-        )
+        var result = SimdInput(chunks=Array[_Chunk16, 4](fill=_Chunk16(0)))
         result.chunks[0] = ptr.unsafe_load[width=16]()
         result.chunks[1] = (ptr.unsafe_offset(16)).unsafe_load[width=16]()
         result.chunks[2] = (ptr.unsafe_offset(32)).unsafe_load[width=16]()

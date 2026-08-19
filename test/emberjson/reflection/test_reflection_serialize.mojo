@@ -1,6 +1,6 @@
 from std.testing import TestSuite, assert_equal
 from emberjson._serialize import serialize, JsonSerializable, PrettySerializer
-from std.collections import Set
+from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
 from emberjson import Value, Object, Array, Null
 
@@ -19,7 +19,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral]:
     var i: Int32
     var vec: SIMD[DType.float64, 2]
     var l: List[Int]
-    var arr: InlineArray[Bool, 3]
+    var arr: StdArray[Bool, 3]
     var dic: Dict[String, Int]
     var il: type_of(Self.I)
     var fl: type_of(Self.F)

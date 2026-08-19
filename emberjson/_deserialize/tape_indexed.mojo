@@ -65,7 +65,7 @@ from emberjson.constants import (
     `\\`,
     acceptable_escapes,
 )
-from std.collections import InlineArray
+from std.collections import Array
 from std.bit import count_trailing_zeros
 from std.sys.intrinsics import unlikely, likely
 
@@ -245,16 +245,16 @@ def _walk_tape_from_index[
     var idx = idx_start
     var idx_last = idx_start.unsafe_offset(n_structurals)
 
-    var stack = InlineArray[_Scope, _MAX_DEPTH](uninitialized=True)
+    var stack = Array[_Scope, _MAX_DEPTH](uninitialized=True)
     var depth = 0
 
-    @parameter
+    @__parameter
     @always_inline
     def advance(out off: Int):
         off = Int(idx[])
         idx = idx.unsafe_offset(1)
 
-    @parameter
+    @__parameter
     @always_inline
     def visit_string(off: Int, out arena_off: Int) raises:
         """The string opening at `off`: its closing quote is the next
@@ -273,7 +273,7 @@ def _walk_tape_from_index[
         )
         sink.tape.append(_pack_word(TapeTag.STRING, UInt64(arena_off)))
 
-    @parameter
+    @__parameter
     @always_inline
     def visit_primitive(b: Byte, off: Int) raises:
         if b == `"`:
@@ -303,7 +303,7 @@ def _walk_tape_from_index[
         else:
             raise Error("Invalid json value")
 
-    @parameter
+    @__parameter
     @always_inline
     def emit_empty(open_tag: Byte, close_tag: Byte):
         var open_idx = len(sink.tape)
@@ -311,7 +311,7 @@ def _walk_tape_from_index[
         sink.tape.append(_pack_word(close_tag, UInt64(open_idx)))
         sink.tape[open_idx] = _pack_container_open(open_tag, len(sink.tape), 0)
 
-    @parameter
+    @__parameter
     @always_inline
     def push_scope(is_object: Bool) raises:
         if unlikely(depth >= _MAX_DEPTH):
@@ -325,7 +325,7 @@ def _walk_tape_from_index[
         sink.tape.append(0)  # patched at scope end
         depth += 1
 
-    @parameter
+    @__parameter
     @always_inline
     def visit_key(off: Int) raises:
         var arena_off = visit_string(off)

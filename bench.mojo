@@ -325,7 +325,7 @@ def run[
     func: def[strict: Bool = True](mut Bencher, String) raises capturing,
     name: String,
 ](mut m: Bench, data: String) raises:
-    @parameter
+    @__parameter
     @always_inline
     def wrapper(mut b: Bencher, s: String) raises:
         func(b, s)
@@ -503,10 +503,10 @@ def run_benchchecks(mut m: Bench) raises:
     run_benchmarks(m)
 
 
-@parameter
+@__parameter
 def benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var lines = read_lines(p).collect()
         keep(lines)
@@ -514,10 +514,10 @@ def benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var p = Parser[options=ParseOptions(ignore_unicode=True)](s)
         var v = p.parse()
@@ -526,10 +526,10 @@ def benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_minify(mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var v = minify(s)
         keep(v)
@@ -537,12 +537,12 @@ def benchmark_minify(mut b: Bencher, s: String) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_reflection_serialize[
     T: Movable, //
 ](mut b: Bencher, data: T) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do():
         var a = serialize(data)
         keep(a)
@@ -550,10 +550,10 @@ def benchmark_reflection_serialize[
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do():
         var a = write_pretty(s)
         keep(a)
@@ -561,22 +561,22 @@ def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_utf8_validate(mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         keep(is_valid_utf8(StringSlice(s)))
 
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_parse_pointer[
     path: StringLiteral
 ](mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var v = parse_pointer(s, String(path))
         keep(v)
@@ -584,12 +584,12 @@ def benchmark_parse_pointer[
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_stage1(mut b: Bencher, s: String) raises:
     # End-to-end stage-1 structural indexing: pad-copy + index, fresh
     # buffers per iteration (matching the Parse* rows' methodology).
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var buf = PaddedBuffer(StringSlice(s).as_bytes())
         var span = buf.span()
@@ -600,10 +600,10 @@ def benchmark_stage1(mut b: Bencher, s: String) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_document_parse(mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var d = parse_document(s)
         keep(d)
@@ -611,10 +611,10 @@ def benchmark_document_parse(mut b: Bencher, s: String) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         for doc in docs:
             var v = parse(doc)
@@ -623,10 +623,10 @@ def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         for doc in docs:
             var d = parse_document(doc)
@@ -635,12 +635,12 @@ def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_batch_deserialize[
     T: Movable & Deinitable
 ](mut b: Bencher, docs: List[String]) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         for doc in docs:
             var parser = Parser(doc)
@@ -650,10 +650,10 @@ def benchmark_batch_deserialize[
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var a = parse[
             ParseOptions(
@@ -665,10 +665,10 @@ def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do():
         var a = to_string(v)
         keep(a)
@@ -839,12 +839,12 @@ struct Friend(Copyable, Defaultable):
         self.hobbies = List[String]()
 
 
-@parameter
+@__parameter
 def benchmark_deserialize_with_reflection[
     T: Movable & Deinitable
 ](mut b: Bencher, s: String) raises:
     @always_inline
-    @parameter
+    @__parameter
     def do() raises:
         var parser = Parser(s)
         var a = deserialize[T](parser^)

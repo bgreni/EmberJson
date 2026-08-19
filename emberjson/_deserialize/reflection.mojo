@@ -162,9 +162,9 @@ def _default_deserialize[
     else:
         p.expect(`{`)
 
-        # maybe an optimization since the InlineArray ctor uses a for loop
+        # maybe an optimization since the Array ctor uses a for loop
         # but according to the IR this will just inline the computed values
-        var seen = materialize[InlineArray[Bool, field_count](fill=False)]()
+        var seen = materialize[Array[Bool, field_count](fill=False)]()
 
         while p.peek() != `}`:
             if unlikely(p.peek() != `"`):
@@ -279,7 +279,7 @@ __extension SIMD(JsonDeserializable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = Self()
 
-        @parameter
+        @__parameter
         @always_inline
         def parse_simd_element(
             mut p: Parser[origin, options],
@@ -473,14 +473,12 @@ __extension Tuple(JsonDeserializable):
         # hand. `mark_initialized` above claims the whole tuple, but on a throw
         # only elements `[0, n)` have actually been written — the rest are
         # forgotten rather than destroyed.
-        @parameter
+        @__parameter
         def drop_prefix[n: Int](var partial: Self):
-            @parameter
-            def drop_elt[idx: Int](var elt: Self.element_types[idx]):
+            @__parameter
+            def drop_elt[idx: Int](var elt: Self.Ts[idx]):
                 comptime if idx < n:
-                    _ = rebind_var[downcast[Self.element_types[idx], _Base]](
-                        elt^
-                    )
+                    _ = rebind_var[downcast[Self.Ts[idx], _Base]](elt^)
                 else:
                     forget_deinit(elt^)
 
@@ -489,7 +487,7 @@ __extension Tuple(JsonDeserializable):
         comptime for i in range(Self.__len__()):
             try:
                 Pointer(to=s[i]).unsafe_write(
-                    _deserialize_impl[downcast[Self.element_types[i], _Base]](p)
+                    _deserialize_impl[downcast[Self.Ts[i], _Base]](p)
                 )
             except e:
                 drop_prefix[i](s^)
@@ -523,7 +521,7 @@ __extension Array(JsonDeserializable):
         # Build into an array whose element type is downcast to `_Base` (which
         # is `Deinitable`) so cleanup is possible if a parse call
         # raises, then rebind back to `Self` (same layout).
-        var arr = InlineArray[downcast[Self.T, _Base], Self.length](
+        var arr = Array[downcast[Self.T, _Base], Self.length](
             uninitialized=True
         )
 

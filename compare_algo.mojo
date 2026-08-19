@@ -16,10 +16,10 @@ comptime BenchResults = Dict[String, Float64]
 comptime ITERS = 10000
 
 
-@parameter
+@__parameter
 def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
-    @parameter
+    @__parameter
     def do():
         for _ in range(ITERS):
             var writer = String()
@@ -28,10 +28,10 @@ def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     b.iter[do]()
 
 
-@parameter
+@__parameter
 def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
-    @parameter
+    @__parameter
     def do():
         for _ in range(ITERS):
             var writer = String()

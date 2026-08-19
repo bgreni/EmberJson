@@ -14,6 +14,7 @@ from std.format._utils import _WriteBufferStack
 from .traits import JsonValue, PrettyPrintable
 from .object import Object
 from .array import Array
+from std.collections import Array as StdArray
 from .value import Null
 from std.sys import size_of
 from std.sys.intrinsics import unlikely
@@ -191,7 +192,7 @@ struct PaddedBuffer(Movable):
 
 comptime DefaultPrettyIndent = 4
 
-comptime StackArray[T: Copyable & Deinitable, size: Int] = InlineArray[T, size]
+comptime StackArray[T: Copyable & Deinitable, size: Int] = StdArray[T, size]
 
 
 @always_inline

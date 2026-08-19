@@ -86,7 +86,7 @@ def structural_index[
     var out_ptr: Pointer[UInt32, origin_of(positions)] = positions.unsafe_ptr()
     var write_pos = 0
 
-    @parameter
+    @__parameter
     @always_inline("nodebug")
     def emit(base_idx: UInt32, bits: UInt64):
         """Writes the offset of each set bit into `positions`.
@@ -152,7 +152,7 @@ def structural_index[
             else:
                 # Final partial chunk: stage through a zeroed stack buffer
                 # so the borrowed input is never read past input_len.
-                var tail = InlineArray[Byte, 64](fill=0)
+                var tail = Array[Byte, 64](fill=0)
                 unsafe_memcpy(
                     dest=tail.unsafe_ptr(),
                     src=ptr.unsafe_offset(Int(base_idx)),

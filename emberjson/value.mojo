@@ -10,7 +10,6 @@ from .utils import (
 )
 from std.utils.variant import Variant
 from .traits import JsonValue, PrettyPrintable, JsonSerializable
-from std.collections import InlineArray
 from std.sys.intrinsics import unlikely, likely
 from ._deserialize import Parser, ParseOptions
 from ._serialize import Serializer

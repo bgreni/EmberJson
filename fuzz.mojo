@@ -180,38 +180,38 @@ def _mutate(s: StringSlice, mut rng: Rng) raises -> List[Byte]:
     return out^
 
 
+# Must be a top-level (non-capturing) function: `PropTest.test` takes a thin
+# `def(var StrategyType.Value) raises` parameter.
+def test_parse(var s: String) raises:
+    var rng = Rng(seed=Int(perf_counter_ns()))
+    var j: Value = {}
+    if rng.rand_int(min=0, max=3) == 0:
+        var start = rng.rand_int(min=0, max=s.byte_length())
+        var end = rng.rand_int(min=start, max=s.byte_length())
+        var corrupted = s[byte=start:end]
+        try:
+            j = parse(corrupted)
+        except:
+            # Main thing is we don't want this to crash.
+            # But don't enforce failure on the off chance this slicing happens to
+            # produce valid json.
+            pass
+        # The two tape engines must agree even on garbage.
+        check_engines_agree(corrupted)
+        # Byte-mutated variants reach the escape / control-char /
+        # UTF-8 validators that slicing alone cannot.
+        var mutated = _mutate(s, rng)
+        check_engines_agree(StringSlice(unsafe_from_utf8=Span(mutated)))
+    else:
+        j = parse(s)
+        assert_equal(String(j), s)
+        check_engines_agree(s)
+    keep(j)
+
+
 def _run_fuzz_tests() raises:
-    print("Running fuzzy tests...")
     var iters = 100
-
-    @parameter
-    def test_parse(s: String) raises:
-        var rng = Rng(seed=Int(perf_counter_ns()))
-        var j: Value = {}
-        if iters % 4 == 0:
-            var start = rng.rand_int(min=0, max=s.byte_length())
-            var end = rng.rand_int(min=start, max=s.byte_length())
-            var corrupted = s[byte=start:end]
-            try:
-                j = parse(corrupted)
-            except:
-                # Main thing is we don't want this to crash.
-                # But don't enforce failure on the off chance this slicing happens to
-                # produce valid json.
-                pass
-            # The two tape engines must agree even on garbage.
-            check_engines_agree(corrupted)
-            # Byte-mutated variants reach the escape / control-char /
-            # UTF-8 validators that slicing alone cannot.
-            var mutated = _mutate(s, rng)
-            check_engines_agree(StringSlice(unsafe_from_utf8=Span(mutated)))
-        else:
-            j = parse(s)
-            assert_equal(String(j), s)
-            check_engines_agree(s)
-        iters -= 1
-        keep(j)
-
+    print("Running fuzzy tests...")
     var test = PropTest(config=PropTestConfig(runs=iters))
     test.test[test_parse](JsonStringStrategy())
     print("Test passed!")

@@ -266,7 +266,7 @@ def copy_to_string[
     """
     var length = ptr_dist(start, end)
 
-    @parameter
+    @__parameter
     def decode_escaped() raises -> String:
         # This will usually slightly overallocate if the string contains
         # escaped unicode

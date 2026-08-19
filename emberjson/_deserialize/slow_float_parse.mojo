@@ -292,7 +292,7 @@ def parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
         0, 0, False, p[] == `-`, StackArray[Byte, MAX_DIGITS](fill=0)
     )
 
-    @parameter
+    @__parameter
     @always_inline
     def consume_digits() raises:
         while p.dist() > 0 and isdigit(p[]):
