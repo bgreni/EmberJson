@@ -12,6 +12,7 @@ from emberjson._serde import (
 )
 from emberjson._deserialize import Parser, ParseOptions
 from emberjson._deserialize import JsonDeserializable
+from emberjson._serialize import serialize as old_serialize
 from emberjson.lazy import (
     Lazy,
     LazyString,
@@ -21,6 +22,7 @@ from emberjson.lazy import (
     LazyValue,
 )
 from emberjson.value import Value
+from emberjson.utils import PaddedBuffer
 
 from emberserde.deserialize import (
     BorrowingDeserializer,
@@ -189,6 +191,26 @@ def test_conformance_relationships() raises:
     )
 
 
+def test_raw_bytes_refuses_padded_options() raises:
+    # Borrowing hands back a span into the parser's own input buffer. Under
+    # non-default options (`_padded()`), that buffer is a temporary
+    # `PaddedBuffer` copy that does not outlive the parse call -- a
+    # borrowed span into it would dangle. `raw_bytes` must refuse rather
+    # than silently handing out a soon-to-be-dangling span. This is the
+    # `comptime assert options == ParseOptions()` restriction `Lazy` used
+    # to carry itself (`emberjson/lazy.mojo`'s old `from_json`), now
+    # enforced at the format layer (`EmberJsonDeserializer.raw_bytes` in
+    # `emberjson/_serde/deserializer.mojo`) instead, since it knows the
+    # buffer's provenance and `Lazy.deserialize` -- generic over `Some[
+    # Deserializer]` -- deliberately does not.
+    var wire = String('"hi"')
+    var buf = PaddedBuffer(wire.as_bytes())
+    var p = Parser[options=ParseOptions()._padded()](padded=buf)
+    var d = EmberJsonDeserializer(p=Pointer(to=p))
+    with assert_raises():
+        _ = d.raw_bytes[RawKind.Str]()
+
+
 # ===========================================================================
 # `emberjson.lazy.Lazy` itself, driven through the new
 # `BorrowingDeserializer` path (`EmberJsonDeserializer.raw_bytes`) via
@@ -280,6 +302,25 @@ def test_lazy_serialize_value_via_new_serializer() raises:
     assert_equal(to_json_string(lz), String('{"a":[1,2,3]}'))
 
 
+def test_write_json_and_serialize_diverge() raises:
+    # `write_json` (old path) echoes the captured span verbatim; `serialize`
+    # (new path) re-parses via `get()` and re-encodes. Pin the divergence
+    # on the SAME `Lazy` instance rather than leaving it incidental (see
+    # the `Lazy` struct docstring in `emberjson/lazy.mojo`).
+    var wire = String('{"a": [1, 2, 3]}')
+    var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
+
+    # Old path: byte-identical to the source wire text, spaces and all.
+    assert_equal(old_serialize(lz), wire)
+
+    # New path: re-encoded, compact.
+    var new_out = to_json_string(lz)
+    assert_equal(new_out, String('{"a":[1,2,3]}'))
+
+    # The two genuinely disagree on this input.
+    assert_true(old_serialize(lz) != new_out)
+
+
 # A `JsonDeserializable` struct opting into array-style JSON, mirroring
 # `test/emberjson/reflection/test_reflection_deserialize.mojo`'s `Point`.
 # Exercises `__pick_kind`'s default (`Seq` when `deserialize_as_array()` is
@@ -317,6 +358,25 @@ def test_lazy_default_kind_picks_map_for_plain_struct() raises:
     var r = lz.get()
     assert_equal(r.x, 1)
     assert_equal(r.y, 2)
+
+
+def test_lazy_serialize_surfaces_get_failure() raises:
+    # `kind` (`Map`, from `__pick_kind`) only validates the captured span's
+    # *shape* -- that it is a `{...}` object -- at capture time. Whether it
+    # satisfies `_LazyRecord`'s own required fields is only checked when
+    # `get()` re-parses it. `{"x": 1}` is a well-formed object missing the
+    # required `y` field: capture succeeds, `get()` fails. `serialize`'s
+    # `_checked_get` must convert that failure into a `SerializationError`
+    # that surfaces through `to_json_string`, not crash or produce bad
+    # output silently.
+    var wire = String('{"x": 1}')
+    var lz = from_json_string[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
+
+    with assert_raises():
+        _ = lz.get()  # sanity: get() itself does fail on this input
+
+    with assert_raises():
+        _ = to_json_string(lz)
 
 
 def main() raises:

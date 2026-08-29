@@ -380,9 +380,27 @@ struct EmberJsonDeserializer[
     # both before calling it), so `Str` mirrors `expect_string` above and
     # does that positioning by hand. The other five extractors already
     # handle their own whitespace/shape validation.
+    #
+    # Non-default `options` means `self.p` was built over a `PaddedBuffer`
+    # (`_padded()`, set only by the public entry points that copy inputs at
+    # or above `PAD_INPUT_THRESHOLD` — see `Value.__init__(*,
+    # parse_bytes=...)` in `emberjson/value.mojo`). That buffer does not
+    # outlive the parse call, so a borrowed span into it would dangle.
+    # Refuse here, at the format layer that knows the buffer's provenance,
+    # rather than pushing the check onto every borrowing type built on
+    # `raw_bytes` — this used to be `Lazy`'s own `comptime assert options
+    # == ParseOptions()` in `emberjson/lazy.mojo` before it moved here.
+    # `comptime if` keeps the check free for the (overwhelmingly common)
+    # default-options path: the raise only exists in the padded
+    # specialization's compiled code.
     def raw_bytes[
         kind: RawKind
     ](mut self) raises DeserializationError -> Span[Byte, ImmUntrackedOrigin]:
+        comptime if not (Self.options == ParseOptions()):
+            raise _invalid(
+                "raw_bytes requires default ParseOptions -- borrowing is"
+                " incompatible with the padded-buffer path"
+            )
         try:
             comptime if kind == RawKind.Any:
                 return rebind[Span[Byte, ImmUntrackedOrigin]](

@@ -110,6 +110,28 @@ struct Lazy[
     until `get()`. Both capture paths write the same `_data` field, and
     `get()` always re-parses it through the old `Parser`, regardless of
     which path did the capturing.
+
+    `write_json` (old) and `serialize` (new) provably DIVERGE, and callers
+    choosing between them must know this:
+
+    - `write_json` echoes the captured span verbatim -- byte-identical to
+      the original wire text, whitespace and all.
+    - `serialize` has no such option: emberserde's `Serializer` trait grew
+      no raw-passthrough hook (only `BorrowingDeserializer` did, as
+      `raw_bytes`, which is what this task added), so it materializes
+      through `get()` (the span is already grammar-validated at capture
+      time) and re-serializes that value through the new pipeline. That
+      re-encoding is only semantically equivalent, not byte-identical:
+      whitespace is normalized to compact form, floats lose trailing
+      zeros/exponent spelling, object key order can change, etc. See
+      `test_write_json_and_serialize_diverge` in
+      `test/emberjson/serde/test_borrow_lazy.mojo` for a pinned example.
+
+    `get()` failing (the captured span parses as the right *shape* --
+    `kind` validates only that much -- but not as a valid `T`, e.g. a
+    struct missing a required field) surfaces as a `SerializationError`
+    from `serialize` (via `_checked_get`), not a crash or silent bad
+    output.
     """
 
     var _data: Span[Byte, Self.origin]
@@ -143,13 +165,9 @@ struct Lazy[
             raise SerializationError(String(e), SerErrorKind.Custom)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
-        # No raw-passthrough hook exists on the new `Serializer` trait (only
-        # `BorrowingDeserializer` grew one -- see `raw_bytes` -- as part of
-        # this task), so this materializes through `get()` (the span was
-        # already grammar-validated at capture time) and re-serializes that
-        # value. Byte-for-byte echo of the captured wire text is
-        # `write_json`'s job; this is the semantically-equivalent re-encoding
-        # the new pipeline gets instead.
+        # Re-encodes via `get()`, not a raw echo -- see the struct
+        # docstring's "provably DIVERGE" section for why and what that
+        # means for callers choosing between this and `write_json`.
         _serde_serialize(self._checked_get(), s)
 
     def get(self) raises -> Self.T:
