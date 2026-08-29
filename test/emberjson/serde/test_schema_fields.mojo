@@ -60,6 +60,30 @@ struct OptRec(Movable):
 
 
 @fieldwise_init
+struct Renamed(Movable):
+    var a: Int
+    var b: Field[Int, rename=String("bee"), default=7]
+
+
+@fieldwise_init
+struct Skipped(Movable):
+    var a: Int
+    var b: Field[Int, skip=True, default=3]
+
+
+@fieldwise_init
+struct Aliased(Movable):
+    var a: Field[Int, extra_names=List[String]([String("a_alt")])]
+
+
+# `Field` carries wire metadata, the validators carry value semantics, so
+# they compose by nesting rather than competing for the same slot.
+@fieldwise_init
+struct RenamedBounded(Movable):
+    var n: Field[Range[Int, 0, 10], rename=String("num")]
+
+
+@fieldwise_init
 struct Bounded(Movable):
     var n: Range[Int, 0, 10]
 
@@ -155,6 +179,47 @@ def test_default_serializes_payload() raises:
 def test_default_missing_required_field_still_raises() raises:
     with assert_raises():
         _ = from_json_string[Rec]('{"b":7}')
+
+
+##########################################################
+# The rest of what `Field` brings with it
+##########################################################
+
+
+def test_field_rename_skip_and_aliases() raises:
+    # `Default` sits on `Field`, so the sibling wire-field knobs are
+    # available on the same wrapper and compose with the default. These
+    # have no equivalent among the old EmberJson schema types.
+    var renamed = from_json_string[Renamed]('{"a":1,"bee":2}')
+    assert_equal(renamed.b[], 2)
+    # The default fills against the *wire* name, not the declared one.
+    assert_equal(from_json_string[Renamed]('{"a":1}').b[], 7)
+    assert_equal(to_json_string(Renamed(1, 2)), '{"a":1,"bee":2}')
+
+    # A skipped field never appears on the wire in either direction.
+    var skipped = from_json_string[Skipped]('{"a":1}')
+    assert_equal(skipped.b[], 3)
+    assert_equal(to_json_string(Skipped(1, 3)), '{"a":1}')
+
+    # An alias binds the same field under a second accepted name.
+    assert_equal(from_json_string[Aliased]('{"a":5}').a[], 5)
+    assert_equal(from_json_string[Aliased]('{"a_alt":5}').a[], 5)
+
+
+def test_field_composes_with_a_validator() raises:
+    # Two different axes, so they stack: the rename decides which key the
+    # value is read from, the `Range` decides whether the value is
+    # acceptable once read.
+    var ok = from_json_string[RenamedBounded]('{"num":5}')
+    assert_equal(ok.n[][], 5)
+    assert_equal(to_json_string(ok), '{"num":5}')
+
+    with assert_raises(contains="Value out of range"):
+        _ = from_json_string[RenamedBounded]('{"num":11}')
+
+    # The rename is still in force on the failing path: the old key is
+    # simply an unknown field, so the required one reads as missing.
+    assert_equal(_kind_of[RenamedBounded]('{"n":5}'), String("MissingField"))
 
 
 ##########################################################
