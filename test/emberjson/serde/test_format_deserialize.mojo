@@ -1,4 +1,5 @@
-from std.testing import assert_equal, TestSuite
+from std.testing import assert_equal, assert_true, TestSuite
+from emberjson import Value
 from emberjson._serde import from_json_string
 from emberserde.error import DerErrorKind
 
@@ -118,6 +119,11 @@ def test_ordinary_unescaped_key_still_binds() raises:
 def test_escaped_field_name_binds() raises:
     var v = from_json_string[WithEscapedField]('{"a\\"b":9}')
     assert_equal(v.`a"b`, 9)
+
+
+def test_deserialize_any_returns_object_value() raises:
+    var v = from_json_string[Value]('{"a":[1,2]}')
+    assert_true(v.is_object())
 
 
 def main() raises:

@@ -9,20 +9,45 @@ from .utils import (
     PAD_INPUT_THRESHOLD,
 )
 from std.utils.variant import Variant
-from .traits import JsonValue, PrettyPrintable, JsonSerializable
+from .traits import JsonValue, PrettyPrintable
 from std.sys.intrinsics import unlikely, likely
-from ._deserialize import Parser, ParseOptions
-from ._serialize import Serializer
+from ._deserialize import Parser, ParseOptions, JsonDeserializable
+from ._serialize import Serializer, JsonSerializable
 from ._utf8 import is_valid_utf8
 from std.sys.info import bit_width_of
 from .teju import write_float
 from std.os import abort
 from std.python import PythonObject
 from ._pointer import resolve_pointer, PointerIndex
+from std.builtin.rebind import rebind_var
+
+# emberserde's format-agnostic traits, aliased to avoid colliding with the
+# names of EmberJson's own (pre-existing) `Serializer`/`Deserializer`
+# traits imported above, which `write_json`/`from_json` below still serve —
+# see `traits.mojo`: `JsonValue` now requires emberserde's `Serializable`/
+# `Deserializable`, but `Null`/`Value` also keep direct conformance to the
+# old `JsonSerializable`/`JsonDeserializable` traits so both systems work
+# side by side until Task 8 retires the old one.
+from emberserde.serialize import Serializer as SerdeSerializer, Serializable
+from emberserde.deserialize import (
+    Deserializer as SerdeDeserializer,
+    Deserializable,
+    SelfDescribingDeserializer,
+)
+from emberserde.error import (
+    SerializationError,
+    DeserializationError,
+    DerErrorKind,
+)
 
 
 @fieldwise_init
-struct Null(JsonValue, TrivialRegisterPassable):
+struct Null(
+    JsonDeserializable,
+    JsonSerializable,
+    JsonValue,
+    TrivialRegisterPassable,
+):
     """Represents "null" json value.
     Can be implicitly converted from `None`.
     """
@@ -66,8 +91,30 @@ struct Null(JsonValue, TrivialRegisterPassable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = p.parse_null()
 
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        s.serialize_none()
 
-struct Value(JsonValue, Sized):
+    # `Null` has no wire shape of its own (no `expect_none` exists on
+    # `Deserializer` — only `expect_optional`, which needs a payload type).
+    # Delegating to `deserialize_any` and checking the result mirrors
+    # `Value.deserialize` below; sound under the same assumption (the only
+    # self-describing format in this crate declares `comptime Value = Value`).
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        comptime assert conforms_to(
+            type_of(d), SelfDescribingDeserializer
+        ), "Null requires a self-describing deserializer"
+        var v = rebind_var[Value](d.deserialize_any())
+        if not v.is_null():
+            raise DeserializationError(
+                String("expected null"), DerErrorKind.TypeMismatch
+            )
+        return Null()
+
+
+struct Value(JsonDeserializable, JsonSerializable, JsonValue, Sized):
     """Top level JSON object, representing any valid JSON value."""
 
     comptime Type = Variant[
@@ -463,6 +510,51 @@ struct Value(JsonValue, Sized):
     @always_inline
     def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        if self.is_int():
+            s.serialize_number(self.int())
+        elif self.is_uint():
+            s.serialize_number(self.uint())
+        elif self.is_float():
+            s.serialize_number(self.float())
+        elif self.is_string():
+            s.serialize_string(self.string())
+        elif self.is_bool():
+            s.serialize_bool(self.bool())
+        elif self.is_null():
+            s.serialize_none()
+        elif self.is_object():
+            ref obj = self.object()
+            var st = s.begin_map(len(obj))
+            for entry in obj.items():
+                st.serialize_key(entry.key)
+                st.serialize_value(entry.value)
+            st.end()
+        elif self.is_array():
+            ref arr = self.array()
+            var st = s.begin_seq(len(arr))
+            for i in range(len(arr)):
+                st.serialize_element(arr[i])
+            st.end()
+        else:
+            abort("Unreachable: Value.serialize")
+
+    # A self-describing format (the only kind EmberJson's `_serde` layer
+    # ships) can hand back a `Value` for any wire shape without a type hint,
+    # so a bare `deserialize[Value](d)` just asks for that directly. Mirrors
+    # `emberserde/test/deserialize/test_self_describing.mojo`'s `TinyValue`
+    # and `emberserde/test/_json_format.mojo`'s `JsonValue`.
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        comptime assert conforms_to(
+            type_of(d), SelfDescribingDeserializer
+        ), "Value requires a self-describing deserializer"
+        # Sound because the only self-describing format in scope
+        # (`EmberJsonDeserializer`) declares `comptime Value = Value`.
+        return rebind_var[Self](d.deserialize_any())
 
     def to_python_object(self) raises -> PythonObject:
         if self.is_int():

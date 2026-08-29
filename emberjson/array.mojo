@@ -3,9 +3,17 @@ from .value import Value
 from .traits import JsonValue, PrettyPrintable
 from .utils import PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._utf8 import is_valid_utf8
-from ._deserialize import Parser, ParseOptions
-from ._serialize import Serializer
+from ._deserialize import Parser, ParseOptions, JsonDeserializable
+from ._serialize import Serializer, JsonSerializable
 from std.python import PythonObject, Python
+
+# See `value.mojo` for why these are aliased: EmberJson's own (pre-existing)
+# `Serializer`/`Deserializer` traits, imported above, still back
+# `write_json`/`from_json` so the old reflection-based system keeps working
+# alongside emberserde's.
+from emberserde.serialize import Serializer as SerdeSerializer
+from emberserde.deserialize import Deserializer as SerdeDeserializer
+from emberserde.error import SerializationError, DeserializationError
 
 
 struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
@@ -45,7 +53,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
             return self.index
 
 
-struct Array(JsonValue, Sized):
+struct Array(JsonDeserializable, JsonSerializable, JsonValue, Sized):
     """Represents a heterogeneous array of json types.
 
     This is accomplished by using `Value` for the collection type, which
@@ -152,6 +160,23 @@ struct Array(JsonValue, Sized):
     @always_inline
     def write_json(self, mut writer: Some[Serializer]):
         writer.write(self)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        var st = s.begin_seq(len(self._data))
+        for i in range(len(self._data)):
+            st.serialize_element(self._data[i])
+        st.end()
+
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        var arr = Self()
+        var st = d.begin_seq()
+        while st.has_next():
+            arr.append(st.expect_element[Value]())
+        st.end()
+        return arr^
 
     def pretty_to(
         self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0

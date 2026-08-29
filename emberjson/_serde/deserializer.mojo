@@ -7,11 +7,13 @@ from emberjson._deserialize._parser_helper import (
     _next_backslash,
 )
 from emberjson.constants import `[`, `]`, `{`, `}`, `"`, `:`, `,`, `n`
+from emberjson.value import Value
 
 from emberserde.deserialize import (
     BorrowingDeserializer,
     Deserializer,
     RawKind,
+    SelfDescribingDeserializer,
     SeqDerState,
     MapDerState,
     StructDerState,
@@ -235,7 +237,7 @@ struct EmberJsonEnumDe[
 @fieldwise_init
 struct EmberJsonDeserializer[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
-](BorrowingDeserializer, Deserializer):
+](BorrowingDeserializer, SelfDescribingDeserializer):
     var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
 
     comptime SeqType = EmberJsonSeqDe[
@@ -253,6 +255,7 @@ struct EmberJsonDeserializer[
     comptime EnumType = EmberJsonEnumDe[
         Self.origin, Self.options, Self.ptr_origin
     ]
+    comptime Value = Value
 
     def expect_bool(mut self) raises DeserializationError -> Bool:
         try:
@@ -410,6 +413,18 @@ struct EmberJsonDeserializer[
                 )
         except e:
             raise _mismatch(String(e))
+
+    # `SelfDescribingDeserializer`: `Value` (`emberjson/value.mojo`) already
+    # has a fast, hand-written recursive-descent path for "parse whatever is
+    # here" — `Parser.parse_value`, the same one `Value`'s old `from_json`
+    # called. Reusing it beats re-deriving the shape from `begin_seq`/
+    # `begin_map`/etc. token by token (as the toy `_json_format.mojo` does,
+    # for lack of a real parser to lean on).
+    def deserialize_any(mut self) raises DeserializationError -> Value:
+        try:
+            return self.p[].parse_value()
+        except e:
+            raise _invalid(String(e))
 
 
 def from_json_string[T: AnyType](s: String) raises DeserializationError -> T:
