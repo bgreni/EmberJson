@@ -27,6 +27,7 @@ from emberjson.schema import (
     CrossFieldValidator,
 )
 from emberjson import deserialize, serialize, Defaulted, Field, Value
+from emberserde.error import DerErrorKind
 from std.collections import Set, Array
 from std.testing import (
     assert_equal,
@@ -681,6 +682,133 @@ def test_direct_construction_validates() raises:
         _ = CrossFieldValidator[TestStruct, "a", "b", validate_greater](
             TestStruct(2, 3)
         )
+
+
+# ===========================================================================
+# `Field`'s wire-metadata knobs (rename / skip / aliases) and how they compose
+# with the value-semantics wrappers above. `Default` rides emberserde's
+# `Field`, so these knobs came with it -- none has an equivalent among the
+# older EmberJson schema types, which is why they are pinned here rather than
+# folded into `test_default`.
+# ===========================================================================
+
+
+@fieldwise_init
+struct Renamed(Movable):
+    var a: Int
+    var b: Field[Int, rename=String("bee"), default=7]
+
+
+@fieldwise_init
+struct Skipped(Movable):
+    var a: Int
+    var b: Field[Int, skip=True, default=3]
+
+
+@fieldwise_init
+struct Aliased(Movable):
+    var a: Field[Int, extra_names=List[String]([String("a_alt")])]
+
+
+# `Field` carries wire metadata, the validators carry value semantics, so
+# they compose by nesting rather than competing for the same slot.
+@fieldwise_init
+struct RenamedBounded(Movable):
+    var n: Field[Range[Int, 0, 10], rename=String("num")]
+
+
+@fieldwise_init
+struct Bounded(Movable):
+    var n: Range[Int, 0, 10]
+
+
+# `Defaultable` because the payload has a non-trivial destructor: the
+# framework only claims an unwritten struct in place when every field is
+# trivially destructible, otherwise it wants a real default to fill in.
+@fieldwise_init
+struct Creds(Defaultable, Movable):
+    var user: String
+    var password: Secret[String]
+
+    def __init__(out self):
+        self.user = String()
+        self.password = Secret[String](String())
+
+
+# A wrapper's failure has to surface as a typed `DeserializationError` (not
+# the untyped `Error` the `Validator` implementations raise) so the
+# framework's `kind`/`path` machinery still works. The sentinel idiom is
+# emberserde's: `assert_true(False)` inside the `try` will not compile,
+# because one `try` block cannot mix the typed and untyped raise flavours.
+def _kind_of[T: Movable & Deinitable](s: String) raises -> String:
+    var kind = DerErrorKind.Custom
+    try:
+        _ = deserialize[T](s)
+    except e:
+        kind = e.kind
+    return String(kind)
+
+
+def _path_of[T: Movable & Deinitable](s: String) raises -> String:
+    var path = String("<did not raise>")
+    try:
+        _ = deserialize[T](s)
+    except e:
+        path = e.path
+    return path^
+
+
+def test_field_rename_skip_and_aliases() raises:
+    var renamed = deserialize[Renamed]('{"a":1,"bee":2}')
+    assert_equal(renamed.b[], 2)
+    # The default fills against the *wire* name, not the declared one.
+    assert_equal(deserialize[Renamed]('{"a":1}').b[], 7)
+    assert_equal(serialize(Renamed(1, 2)), '{"a":1,"bee":2}')
+
+    # A skipped field never appears on the wire in either direction.
+    var skipped = deserialize[Skipped]('{"a":1}')
+    assert_equal(skipped.b[], 3)
+    assert_equal(serialize(Skipped(1, 3)), '{"a":1}')
+
+    # An alias binds the same field under a second accepted name.
+    assert_equal(deserialize[Aliased]('{"a":5}').a[], 5)
+    assert_equal(deserialize[Aliased]('{"a_alt":5}').a[], 5)
+
+
+def test_field_composes_with_a_validator() raises:
+    # Two different axes, so they stack: the rename decides which key the
+    # value is read from, the `Range` decides whether the value is
+    # acceptable once read.
+    var ok = deserialize[RenamedBounded]('{"num":5}')
+    assert_equal(ok.n[][], 5)
+    assert_equal(serialize(ok), '{"num":5}')
+
+    with assert_raises(contains="Value out of range"):
+        _ = deserialize[RenamedBounded]('{"num":11}')
+
+    # The rename is still in force on the failing path: the old key is
+    # simply an unknown field, so the required one reads as missing.
+    assert_equal(_kind_of[RenamedBounded]('{"n":5}'), String("MissingField"))
+
+
+def test_validation_failure_reports_kind_and_path() raises:
+    # A validator rejection is a bad *value*, not a bad shape.
+    assert_equal(_kind_of[Range[Int, 0, 10]]("11"), String("InvalidValue"))
+    # ...and it still rides the framework's error-path tracking when the
+    # wrapper sits inside a struct field.
+    assert_equal(_path_of[Bounded]('{"n":11}'), String(".n"))
+
+
+def test_coerce_failure_reports_kind() raises:
+    assert_equal(_kind_of[CoerceInt]("null"), String("InvalidValue"))
+
+
+def test_secret_redaction_survives_nesting() raises:
+    # The mask has to come from `Secret.serialize`, not from the field
+    # walker, so it must survive being one field of a struct.
+    var c = deserialize[Creds]('{"user":"bg","password":"hunter2"}')
+    assert_equal(c.password[], "hunter2")
+    assert_equal(serialize(c), '{"user":"bg","password":"********"}')
 
 
 def main() raises:
