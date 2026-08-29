@@ -183,21 +183,40 @@ var d = ob.to_dict()
 
 ### Reflection
 
-Using Mojo's reflection features, EmberJson can automatically serialize and deserialize JSON to and from Mojo structs without propagating trait implementations for all
-relevant types. Plain structs are treated as JSON objects by default. The logic recursively traverses struct fields until it finds conforming types, so nested structs work out of the box.
+Using Mojo's reflection features, EmberJson can automatically serialize and
+deserialize JSON to and from Mojo structs without propagating trait
+implementations for all relevant types. Plain structs are treated as JSON
+objects; the logic recursively traverses struct fields until it finds
+conforming types, so nested structs work out of the box.
 
-Supported field types include: `Int`, `Float64`, `String`, `Bool`, `Optional[T]`, `List[T]`, `Dict[String, V]`, `Tuple[...]`, `Set[T]`, `InlineArray[T, N]`, `SIMD[dtype, length]`, `ArcPointer[T]`, `OwnedPointer[T]`, and nested structs.
+The framework doing that traversal is **emberserde**, a format-agnostic
+serialization library. EmberJson supplies the JSON *format* for it, which
+means two things: the traits you implement to customize behaviour are
+emberserde's `Serializable` and `Deserializable`, and any type emberserde
+already knows how to encode works here for free.
 
-To customize behavior, implement the `JsonSerializable` and/or `JsonDeserializable` traits.
+Supported field types include `Int`, `Float64`, `String`, `Bool`,
+`Optional[T]`, `List[T]`, `Dict[String, V]`, `Tuple[...]`, `Set[T]`,
+`Array[T, N]`, `SIMD[dtype, length]`, `ArcPointer[T]`, `OwnedPointer[T]`,
+EmberJson's own `Value`/`Object`/`Array`/`Null`, and nested structs.
+emberserde ships impls for more besides (`Deque`, `LinkedList`, `Counter`,
+`Variant`, `Codepoint`, …), and all of them are reachable from here.
+
+> **Coming from EmberJson 0.3.x?** `JsonSerializable`, `JsonDeserializable`,
+> `write_json`, `Serializer` (EmberJson's own), `serialize_as_array` and
+> `deserialize_as_array` no longer exist, and unknown-field and `Default`
+> handling changed. [CHANGELOG.md](CHANGELOG.md) lists every break and its
+> replacement.
 
 #### Deserialization
 
-The target struct must implement the `Movable` trait.
-As well as the `Defaultable` trait if any of its fields
-have non-trivial destructors.
+The target struct must implement `Movable`, and `Defaultable` as well if any
+of its fields have non-trivial destructors (`String`, `List`, a nested
+struct holding either, …).
 
 ```mojo
 from emberjson import deserialize, try_deserialize
+
 
 @fieldwise_init
 struct User(Defaultable, Movable):
@@ -212,21 +231,49 @@ struct User(Defaultable, Movable):
         self.is_active = False
         self.scores = List[Float64]()
 
+
 def main() raises:
     var json_str = '{"id": 1, "name": "Mojo", "is_active": true, "scores": [9.9, 8.5]}'
 
-    # Raises on invalid JSON
+    # Raises `DeserializationError` on invalid JSON
     var user = deserialize[User](json_str)
+    print(user.name)  # prints Mojo
 
-    # Returns Optional[User] instead of raising
+    # Returns `Optional[User]` instead of raising
     var user_opt = try_deserialize[User](json_str)
     if user_opt:
-        print(user_opt.value().name) # prints Mojo
+        print(user_opt.value().name)  # prints Mojo
 ```
 
-Nested structs and `Optional` fields are handled automatically. Missing JSON keys for `Optional` fields default to `None`:
+`deserialize` and `try_deserialize` take the same `ParseOptions` as `parse`:
 
 ```mojo
+from emberjson import deserialize, try_deserialize, ParseOptions
+
+@fieldwise_init
+struct Doc(Defaultable, Movable):
+    var text: String
+
+    def __init__(out self):
+        self.text = ""
+
+
+def main() raises:
+    comptime fast = ParseOptions(ignore_unicode=True, validate_utf8=False)
+    var d = deserialize[Doc, fast]('{"text": "\\u0041"}')
+    print(d.text)  # prints \u0041 -- the escape is left undecoded
+
+    var maybe = try_deserialize[Doc, fast]('{"text": "hi"}')
+    print(maybe.value().text)  # prints hi
+```
+
+Nested structs and `Optional` fields are handled automatically. A missing
+JSON key for an `Optional` field reads as `None`:
+
+```mojo
+from emberjson import deserialize
+
+
 @fieldwise_init
 struct Address(Defaultable, Movable):
     var city: String
@@ -235,6 +282,7 @@ struct Address(Defaultable, Movable):
     def __init__(out self):
         self.city = ""
         self.zip = None
+
 
 @fieldwise_init
 struct Person(Defaultable, Movable):
@@ -245,6 +293,7 @@ struct Person(Defaultable, Movable):
         self.name = ""
         self.address = Address()
 
+
 def main() raises:
     var json_str = '{"name": "Mojo", "address": {"city": "SF"}}'
     var person = deserialize[Person](json_str)
@@ -253,68 +302,205 @@ def main() raises:
     print(person.address.zip)       # prints None (missing field)
 ```
 
-#### Array-Based Deserialization
+#### Unknown fields
 
-Implement `JsonDeserializable` to deserialize from a JSON array instead of an object:
+A wire field matching no declared struct field is **skipped** by default. It
+is still fully validated on the way past — skipping is a real parse, not a
+blind hop — but it no longer fails the deserialization. Conform the struct
+to `DenyUnknownFields` to reject it instead:
 
 ```mojo
-@fieldwise_init
-struct Point(JsonDeserializable):
-    var x: Int
-    var y: Int
+from emberjson import deserialize
+from emberserde import DenyUnknownFields
 
-    @staticmethod
-    def deserialize_as_array() -> Bool:
-        return True
+
+@fieldwise_init
+struct Loose(Defaultable, Movable):
+    var x: Int
+
+    def __init__(out self):
+        self.x = 0
+
+
+@fieldwise_init
+struct Strict(DenyUnknownFields, Defaultable, Movable):
+    var x: Int
+
+    def __init__(out self):
+        self.x = 0
+
 
 def main() raises:
-    var p = deserialize[Point]("[1, 2]")
-    print(p.x)  # prints 1
-    print(p.y)  # prints 2
+    # Unknown wire fields are SKIPPED by default (they are still fully
+    # validated on the way past, not blindly hopped over).
+    print(deserialize[Loose]('{"x": 1, "extra": [1, 2]}').x)  # prints 1
+
+    # Opt back in to rejecting them per type.
+    try:
+        _ = deserialize[Strict]('{"x": 1, "extra": 2}')
+    except e:
+        print(e.kind)  # prints UnknownField
 ```
 
 #### Serialization
 
 ```mojo
-from emberjson import *
+from emberjson import serialize
+
 
 @fieldwise_init
 struct Point:
     var x: Int
     var y: Int
 
-def main():
-    print(serialize(Point(1, 2)))                # prints {"x":1,"y":2}
-    print(serialize[pretty=True](Point(1, 2)))   # pretty printed
+
+def main() raises:
+    print(serialize(Point(1, 2)))               # prints {"x":1,"y":2}
+    print(serialize[pretty=True](Point(1, 2)))  # pretty printed
 ```
 
-#### Custom Serialization
+#### Typed errors
 
-Implement `JsonSerializable` to control how a struct is serialized:
+The public entry points raise typed errors rather than a bare `Error`.
+`DeserializationError` carries `.message`, `.kind` (a `DerErrorKind`) and
+`.path`, the wire path to a nested failure; `SerializationError` carries
+`.message` and `.kind`. Both are re-exported from `emberjson`.
 
 ```mojo
-# Serialize as a JSON array instead of an object
+from emberjson import deserialize, DeserializationError, DerErrorKind
+
+
 @fieldwise_init
-struct Coordinate(JsonSerializable):
-    var lat: Float64
-    var lng: Float64
+struct Inner(Defaultable, Movable):
+    var x: Int
+    var y: Int
+
+    def __init__(out self):
+        self.x = 0
+        self.y = 0
+
+
+@fieldwise_init
+struct Outer(Defaultable, Movable):
+    var label: String
+    var inner: Inner
+
+    def __init__(out self):
+        self.label = ""
+        self.inner = Inner()
+
+
+def main() raises:
+    try:
+        _ = deserialize[Outer]('{"label": "a", "inner": {"x": 1}}')
+    except e:
+        print(e.message)  # missing field: y
+        print(e.kind)     # MissingField
+        print(e.path)     # .inner
+```
+
+`try_parse`, `try_deserialize`, `try_parse_document` and `try_parse_pointer`
+swallow these and hand back an `Optional` instead.
+
+#### Custom serialization and deserialization
+
+Implement emberserde's `Serializable` and/or `Deserializable` to take over
+how a type rides the wire. `serialize` receives the active `Serializer`;
+`deserialize` is a `@staticmethod` receiving the active `Deserializer`.
+
+```mojo
+from emberjson import deserialize, serialize
+from emberserde import (
+    DerErrorKind,
+    Deserializable,
+    DeserializationError,
+    Deserializer,
+    Serializable,
+    SerializationError,
+    Serializer,
+)
+
+
+@fieldwise_init
+struct Celsius(Deserializable, Serializable):
+    var degrees: Float64
+
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
+        # Ride the wire as "21.5C" instead of a bare number.
+        s.serialize_string(String(self.degrees) + "C")
 
     @staticmethod
-    def serialize_as_array() -> Bool:
-        return True
+    def deserialize(
+        mut d: Some[Deserializer],
+    ) raises DeserializationError -> Self:
+        var raw = d.expect_string()
+        try:
+            return Self(atof(raw.removesuffix("C")))
+        except:
+            # `atof` raises an untyped `Error`; the trait's contract is a
+            # typed `DeserializationError`, so convert at the boundary.
+            raise DeserializationError(
+                String("not a temperature: ") + raw,
+                DerErrorKind.InvalidValue,
+            )
 
-# Fully custom serialization via write_json
-@fieldwise_init
-struct MyInt(JsonSerializable):
-    var value: Int
 
-    def write_json(self, mut writer: Some[Serializer]):
-        writer.write(self.value)
-
-def main():
-    print(serialize(Coordinate(1.0, 2.0)))  # prints [1.0,2.0]
-    print(serialize(MyInt(1)))              # prints 1
+def main() raises:
+    print(serialize(Celsius(21.5)))                 # prints "21.5C"
+    print(deserialize[Celsius]('"21.5C"').degrees)  # prints 21.5
 ```
+
+Those surfaces are format-agnostic — `serialize_bool`, `serialize_number`,
+`serialize_string`, `serialize_none`, `begin_seq`/`begin_map`/`begin_struct`
+/`begin_tuple` on the way out, and `expect_bool`, `expect_number`,
+`expect_string`, `expect_optional` and the matching `begin_*` on the way in
+— so an implementation written against them works for any emberserde
+format, not only JSON.
+
+> A struct always rides the wire as a JSON **object**. The old
+> `serialize_as_array`/`deserialize_as_array` opt-in was removed with
+> EmberJson's own trait system and emberserde has no counterpart. Use a
+> `Tuple` field, or a hand-written `Serializable`/`Deserializable` pair
+> driving `begin_seq`, when you need array-shaped output.
+
+#### Wire-level field control
+
+`Field[T, ...]` attaches wire metadata to a single field: a different wire
+name (`rename`), extra accepted names (`extra_names`), a fallback for an
+absent key (`default`), or exclusion from the wire entirely (`skip`).
+`Defaulted`, `Rename` and `Skip` are aliases for the common single-knob
+cases. Read the payload back with `[]`.
+
+```mojo
+from emberjson import deserialize, serialize, Field, Defaulted
+
+
+# `Defaultable` because the payloads have non-trivial destructors: the
+# framework only claims an unwritten struct in place when every field is
+# trivially destructible, otherwise it wants a real default to fill in.
+@fieldwise_init
+struct Config(Defaultable, Movable):
+    var host: Field[String, rename="hostname"]
+    var port: Defaulted[Int, 8080]
+    var cache: Field[String, skip=True]
+
+    def __init__(out self):
+        self.host = {}
+        self.port = {}
+        self.cache = {}
+
+
+def main() raises:
+    var c = deserialize[Config]('{"hostname": "localhost"}')
+    print(c.host[])          # prints localhost
+    print(c.port[])          # prints 8080 -- the key was absent
+    print(serialize(c))      # prints {"hostname":"localhost","port":8080}
+```
+
+> `default` fires on an **absent key** only. An explicit `null` is a present
+> value and is parsed as `T`. Wrap the payload in `Optional` —
+> `Defaulted[Optional[Int], Optional[Int](42)]` — when `null` should be
+> tolerated too.
 
 ### Mixing eager and lazy fields
 
