@@ -1,23 +1,15 @@
-from ._deserialize.reflection import (
-    _Base,
-    JsonDeserializable,
-    _deserialize_impl,
-)
-from ._deserialize.parser import Parser, ParseOptions
+from ._deserialize.parser import Parser
+from ._serde.deserializer import EmberJsonDeserializer
 from .value import Value
 from std.hashlib import Hasher
-from std.builtin.rebind import downcast
 
-# emberserde's `Deserializer` is aliased to avoid colliding with the name
-# of EmberJson's own (pre-existing) `Deserializer` trait, which `from_json`
-# below still serves: `Lazy` keeps direct conformance to the old
-# `JsonDeserializable` trait alongside the new `Deserializable` until the
-# deserialize half of the old layer retires too.
+# See `value.mojo` for why these are aliased.
 from emberserde.deserialize import (
     BorrowingDeserializer,
     Deserializer as SerdeDeserializer,
     Deserializable,
     RawKind,
+    deserialize as _serde_deserialize,
 )
 from emberserde.serialize import (
     Serializer as SerdeSerializer,
@@ -32,76 +24,34 @@ from emberserde.error import (
 from emberserde.utils import Base
 
 
-def _expect_kind_bytes[
-    origin: ImmOrigin, //, kind: RawKind
-](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    """Dispatches to the `Parser` byte-extractor matching `kind`.
-
-    Consolidates what used to be six separate `_get_*_bytes` free functions
-    (one per shape, picked via a stored function pointer) behind a single
-    `RawKind`-keyed `comptime if`. Mirrors `EmberJsonDeserializer.raw_bytes`'s
-    dispatch in `emberjson/_serde/deserializer.mojo`, except `Str` calls
-    `expect_string_bytes` directly with no extra whitespace/quote check --
-    matching this (old, `Parser`-driven) path's original behavior, where the
-    caller is already responsible for positioning `p` at the token.
-    """
-    comptime if kind == RawKind.Any:
-        return p.expect_value_bytes()
-    elif kind == RawKind.Integer:
-        return p.expect_int_bytes()
-    elif kind == RawKind.Float:
-        return p.expect_float_bytes()
-    elif kind == RawKind.Str:
-        return p.expect_string_bytes()
-    elif kind == RawKind.Seq:
-        return p.expect_array_bytes()
-    else:
-        return p.expect_object_bytes()
-
-
 def _deserialize_bytes[
-    T: _Base, origin: Origin
+    T: Base, origin: ImmOrigin
 ](b: Span[Byte, origin]) raises -> T:
     var p = Parser(b)
-    return _deserialize_impl[T](p)
-
-
-def __pick_kind[T: Base]() -> RawKind:
-    """Default `kind` for a bare `Lazy[T, origin]` (no explicit `kind`).
-
-    Picks `Seq` when `T` opts into array-style JSON via
-    `JsonDeserializable.deserialize_as_array`, `Map` otherwise -- the same
-    rule `__pick_byte_expect` used to choose between `_get_array_bytes` and
-    `_get_object_bytes`.
-    """
-    comptime if conforms_to(T, JsonDeserializable) and downcast[
-        T, JsonDeserializable
-    ].deserialize_as_array():
-        return RawKind.Seq
-    else:
-        return RawKind.Map
+    var d = EmberJsonDeserializer(p=Pointer(to=p))
+    return _serde_deserialize[T](d)
 
 
 @fieldwise_init
 struct Lazy[
     T: Base,
     origin: ImmOrigin,
-    kind: RawKind = __pick_kind[T](),
+    # A struct always rides the wire as a JSON object, so `Map` is the
+    # right default for a bare `Lazy[T, origin]`. Anything else (a string,
+    # a number, a bare array, an unconstrained value) names its `kind`
+    # explicitly -- see the `LazyString`/`LazyInt`/... aliases below.
+    kind: RawKind = RawKind.Map,
 ](
     Deserializable,
     Hashable,
-    JsonDeserializable,
     Serializable,
     TrivialRegisterPassable,
 ):
     """Zero-copy capture of one JSON value's raw wire bytes.
 
     Deserializing a `Lazy` only records the `Span` covering its token (via
-    the old `Parser`-driven path's `_expect_kind_bytes`, or the new
     `BorrowingDeserializer.raw_bytes[kind]`); no interpretation happens
-    until `get()`. Both capture paths write the same `_data` field, and
-    `get()` always re-parses it through the old `Parser`, regardless of
-    which path did the capturing.
+    until `get()`, which re-parses that span through a fresh `Parser`.
 
     `serialize` does NOT echo the captured span verbatim. emberserde's
     `Serializer` trait has no raw-passthrough hook (only
@@ -122,16 +72,6 @@ struct Lazy[
     """
 
     var _data: Span[Byte, Self.origin]
-
-    @staticmethod
-    def from_json[
-        o: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[o, options], out s: Self) raises:
-        # TODO: Remove this restriction when compiler allows
-        comptime assert (
-            options == ParseOptions()
-        ), "Lazy deserialization only works with default parse options"
-        s = {_expect_kind_bytes[Self.kind](rebind[Parser[Self.origin]](p))}
 
     @staticmethod
     def deserialize(

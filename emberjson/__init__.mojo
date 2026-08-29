@@ -8,18 +8,10 @@ from .utils import write, write_pretty, PaddedBuffer, PAD_INPUT_THRESHOLD
 # below are thin wrappers over `emberjson._serde`'s `from_json_string`/
 # `to_json_string`, which drive emberserde's format-agnostic framework over
 # the same hand-written `Parser`.
-#
-# The superseded deserialize-side reflection walker
-# (`emberjson/_deserialize/reflection.mojo`) is still imported under a
-# private alias: `emberjson/schema.mojo`'s old-path `JsonDeserializable`
-# conformances call the `Parser`-taking `deserialize` overloads
-# re-exported below, and those conformances go away with the walker itself.
 from ._deserialize import (
     Parser,
     ParseOptions,
     minify,
-    deserialize as _reflect_deserialize,
-    JsonDeserializable,
     StrictOptions,
 )
 from ._serde import from_json_string, to_json_string
@@ -215,11 +207,6 @@ def to_string[
 # raised typed at the source (`DeserializationError` with a real `kind`
 # and, for a nested failure, a real `path`) rather than reconstructed from
 # message text at this boundary.
-#
-# The `Parser`-taking overloads below are re-exported from the superseded
-# reflection walker: `emberjson/schema.mojo`'s old-path
-# `JsonDeserializable.from_json` implementations call them directly under a
-# bare `raises`, and they go away together with those conformances.
 
 
 def deserialize[
@@ -264,24 +251,6 @@ def try_deserialize[T: Deinitable & Movable](s: String) -> Optional[T]:
         return deserialize[T](s)
     except:
         return {}
-
-
-# `Parser`-taking overloads, re-exported unchanged (still a bare `raises`):
-# these back `emberjson/schema.mojo`'s `JsonDeserializable.from_json`
-# implementations (e.g. `s = {deserialize[Self.T](p)}`), which are
-# themselves declared with a bare `raises` and must keep compiling as-is.
-@always_inline
-def deserialize[
-    origin: ImmOrigin, options: ParseOptions, //, T: Deinitable & Movable
-](mut p: Parser[origin, options], out res: T) raises:
-    res = _reflect_deserialize[T](p)
-
-
-@always_inline
-def deserialize[
-    origin: ImmOrigin, options: ParseOptions, //, T: Deinitable & Movable
-](var p: Parser[origin, options], out res: T) raises:
-    res = _reflect_deserialize[T](p)
 
 
 # ===============================================

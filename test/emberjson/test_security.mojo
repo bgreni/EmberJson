@@ -9,12 +9,12 @@ from emberjson import (
     Value,
     serialize,
     deserialize,
-    Parser,
     minify,
     PointerIndex,
     CoerceString,
 )
 from emberjson._pointer import resolve_pointer, parse_int
+from emberjson._serde import from_json_string
 from emberjson.patch._patch import patch
 from emberjson.lazy import LazyString
 from std.testing import (
@@ -53,8 +53,8 @@ def test_m2_array_bool_inverted() raises:
 
 # ===========================================================================
 # [C-4] Serializer does not escape strings (JSON injection)
-# write_key and String.write_json emit raw string bytes without escaping
-# special characters such as '"', '\n', '\t', etc.
+# object keys and string values used to be emitted as raw bytes without
+# escaping special characters such as '"', '\n', '\t', etc.
 # ===========================================================================
 
 
@@ -155,9 +155,11 @@ def test_l3_coerce_string_null() raises:
 
 
 def test_l2_lazy_string_not_decoded() raises:
+    # Ported in Task 8 from `var p = Parser(s); deserialize[...](p)` (the
+    # deleted `Parser`-driven reflection walker) to `from_json_string`,
+    # which captures the same borrowed span. Same input, same assertions.
     var s = r'"hello\nworld"'  # JSON string containing \n escape
-    var p = Parser(s)
-    var lazy = deserialize[LazyString[origin_of(s)]](p)
+    var lazy = from_json_string[LazyString[origin_of(s)]](s)
 
     var raw = lazy.unsafe_as_string_slice()
     # raw contains "hello\nworld" (12 chars — literal backslash-n, not decoded)
@@ -167,8 +169,7 @@ def test_l2_lazy_string_not_decoded() raises:
     )  # documents the undecoded (buggy) length
 
     # Contrast: .get() DOES decode the escape correctly
-    var p2 = Parser(s)
-    var lazy2 = deserialize[LazyString[origin_of(s)]](p2)
+    var lazy2 = from_json_string[LazyString[origin_of(s)]](s)
     assert_equal(lazy2.get(), "hello\nworld")
 
 

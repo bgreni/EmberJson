@@ -11,7 +11,6 @@ from emberjson._serde import (
     to_json_string,
 )
 from emberjson._deserialize import Parser, ParseOptions
-from emberjson._deserialize import JsonDeserializable
 from emberjson.lazy import (
     Lazy,
     LazyString,
@@ -211,14 +210,11 @@ def test_raw_bytes_refuses_padded_options() raises:
 
 
 # ===========================================================================
-# `emberjson.lazy.Lazy` itself, driven through the new
+# `emberjson.lazy.Lazy` itself, driven through the
 # `BorrowingDeserializer` path (`EmberJsonDeserializer.raw_bytes`) via
-# `from_json_string`. `Lazy` keeps dual conformance -- the tests above (and
-# `test/emberjson/test_lazy.mojo`, `test_mixed_lazy.mojo`, `bench.mojo`)
-# exercise the old `JsonDeserializable`/`Parser`-driven path unchanged;
-# these exercise the new `Deserializable`/`Serializable` path this task
-# adds. Both write the same `_data` span, and `get()` always re-parses it
-# through the old `Parser` regardless of which path captured it.
+# `from_json_string` -- which, since Task 8 retired the `Parser`-driven
+# reflection walker, is the only capture path there is. `get()` re-parses
+# the captured span through a fresh `Parser`.
 # ===========================================================================
 
 
@@ -326,38 +322,23 @@ def test_serialize_reencodes_rather_than_echoing() raises:
     assert_equal(String(StringSlice(unsafe_from_utf8=lz._data)), wire)
 
 
-# A `JsonDeserializable` struct opting into array-style JSON, mirroring
-# `test/emberjson/reflection/test_reflection_deserialize.mojo`'s `Point`.
-# Exercises `__pick_kind`'s default (`Seq` when `deserialize_as_array()` is
-# `True`) for a bare `Lazy[T, origin]` with no explicit `kind`, through the
-# new borrowing path.
+# REMOVED IN TASK 8: `test_lazy_default_kind_picks_seq_for_array_struct`.
+# It pinned `__pick_kind`'s `Seq` branch, taken when the payload type
+# opted into array-style JSON via `JsonDeserializable.deserialize_as_array`
+# -- a knob that lived only on the deleted trait and has no emberserde
+# counterpart (a struct always rides the wire as an object). `Lazy`'s
+# default `kind` is now unconditionally `Map`; a caller wanting a bare
+# array names `RawKind.Seq` explicitly. See the task-8 report.
+
+
+# A plain struct, so `Lazy`'s default `kind` (`Map`) is the right one.
 @fieldwise_init
-struct _LazyPoint(JsonDeserializable):
-    var x: Int
-    var y: Int
-
-    @staticmethod
-    def deserialize_as_array() -> Bool:
-        return True
-
-
-def test_lazy_default_kind_picks_seq_for_array_struct() raises:
-    var wire = String("[1, 2]")
-    var lz = from_json_string[Lazy[_LazyPoint, ImmutAnyOrigin]](wire)
-    var p = lz.get()
-    assert_equal(p.x, 1)
-    assert_equal(p.y, 2)
-
-
-# A plain `JsonDeserializable` struct (default `deserialize_as_array() ->
-# False`). Exercises `__pick_kind`'s other branch (`Map`).
-@fieldwise_init
-struct _LazyRecord(JsonDeserializable):
+struct _LazyRecord(Copyable, Movable):
     var x: Int
     var y: Int
 
 
-def test_lazy_default_kind_picks_map_for_plain_struct() raises:
+def test_lazy_default_kind_is_map_for_plain_struct() raises:
     var wire = String('{"x": 1, "y": 2}')
     var lz = from_json_string[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
     var r = lz.get()
@@ -366,7 +347,7 @@ def test_lazy_default_kind_picks_map_for_plain_struct() raises:
 
 
 def test_lazy_serialize_surfaces_get_failure() raises:
-    # `kind` (`Map`, from `__pick_kind`) only validates the captured span's
+    # `kind` (`Map`, the default) only validates the captured span's
     # *shape* -- that it is a `{...}` object -- at capture time. Whether it
     # satisfies `_LazyRecord`'s own required fields is only checked when
     # `get()` re-parses it. `{"x": 1}` is a well-formed object missing the

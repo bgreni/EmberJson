@@ -305,23 +305,23 @@ def test_default() raises:
     var d4 = deserialize[TestDefault]('{"a": 10, "b": 7}')
     assert_equal(d4.b[], 7)
 
-    # `Default` is a foreign type (emberserde's `Field`) that only reaches
-    # the legacy writer through an `__extension` in
-    # `emberjson/_serialize/reflection.mojo`. If that conformance ever goes
-    # unseen the `conforms_to` gate silently falls back to the reflection
-    # walker and emits `{"value":42}` instead of the payload, so pin the
-    # payload spelling in both directions.
+    # `Default` is a foreign type (emberserde's `Field`) whose
+    # `Serializable`/`Deserializable` conformances live upstream. If those
+    # ever go unseen the framework's `conforms_to` gate silently falls back
+    # to walking `Field` as a plain struct and emits `{"value":42}` instead
+    # of the payload, so pin the payload spelling in both directions.
     assert_equal(serialize(d1), "10")
     assert_equal(serialize(d3), '{"a":10,"b":42}')
     assert_equal(serialize(Default[Int, 42]()), "42")
 
 
-def test_bare_field_round_trips_on_legacy_path() raises:
-    # `rename`/`extra_names`/`skip` are rejected at COMPILE time on this
-    # path (the legacy reflection walker matches declared field names only
-    # and would silently emit and accept the wrong keys), so they can't be
-    # exercised here at all. What must keep working is an *unconfigured*
-    # `Field`, which is what `Default` is.
+def test_bare_field_round_trips_through_the_facade() raises:
+    # An *unconfigured* `Field` -- which is what `Default` is -- read and
+    # written through the public facade. The configured spellings
+    # (`rename`/`extra_names`/`skip`) are covered in
+    # `test/emberjson/serde/test_schema_fields.mojo`; before Task 8 they
+    # were a hard compile error on this path, because the reflection walker
+    # behind `deserialize`/`serialize` matched declared field names only.
     var f = deserialize[Field[Int]]("5")
     assert_equal(f[], 5)
     assert_equal(f.value, 5)

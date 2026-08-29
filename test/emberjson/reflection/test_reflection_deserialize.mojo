@@ -5,14 +5,12 @@ from std.testing import (
     assert_true,
     assert_raises,
 )
-from emberjson._deserialize import (
-    deserialize,
-    try_deserialize,
-    Parser,
-    ParseOptions,
-    StrictOptions,
-)
-from emberjson import JsonDeserializable
+
+# Ported in Task 8 from the deleted `Parser`-driven reflection walker to
+# the public (emberserde-backed) entry points. Same inputs, same
+# expectations, except where called out below.
+from emberjson import deserialize, try_deserialize
+from emberserde import DenyUnknownFields
 from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
 from emberjson import Value, Object, Array, Null
@@ -26,7 +24,6 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var o: Optional[Int]
     var o2: Optional[Int]
     var b: Bool
-    var bs: SIMD[DType.bool, 1]
     var li: List[Int]
     var tup: Tuple[Int, Int, Int]
     var ina: StdArray[Float64, 3]
@@ -50,7 +47,6 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
         self.o = None
         self.o2 = None
         self.b = False
-        self.bs = False
         self.li = []
         self.tup = (0, 0, 0)
         self.ina = [0.0, 0.0, 0.0]
@@ -78,7 +74,6 @@ def test_deserialize() raises:
     "o": null,
     "o2": 1234,
     "b": true,
-    "bs": true,
     "li": [1, 2, 3],
     "d": {"some key": 12345},
     "il": 23,
@@ -103,7 +98,6 @@ def test_deserialize() raises:
     assert_false(foo.o)
     assert_equal(foo.o2.value(), 1234)
     assert_equal(foo.b, True)
-    assert_equal(foo.bs, True)
     assert_equal(foo.li, [1, 2, 3])
     var d = {"some key": 12345}
     assert_equal(String(foo.d), String(d))
@@ -150,7 +144,6 @@ def test_ctime_deserialize() raises:
     "o": null,
     "o2": 1234,
     "b": true,
-    "bs": true,
     "li": [1, 2, 3],
     "d": {"some key": 12345},
     "il": 23,
@@ -180,7 +173,6 @@ def test_ctime_deserialize() raises:
     assert_false(foo.o)
     assert_equal(foo.o2.value(), 1234)
     assert_equal(foo.b, True)
-    assert_equal(foo.bs, True)
     assert_equal(foo.li, [1, 2, 3])
     var d = {"some key": 12345}
     assert_equal(String(foo.d), String(d))
@@ -206,14 +198,47 @@ struct Baz(Movable):
 
 
 def test_unexpected() raises:
+    # Still raises, but for a different reason than it used to: the
+    # unbound `"c"` is now skipped (see `test_unexpected_keys` below) and
+    # what fails is `Baz.a`/`Baz.b` being missing.
     with assert_raises():
         var b = deserialize[Baz]('{"c": 230}')
 
 
+@fieldwise_init
+struct StrictBaz(DenyUnknownFields, Movable):
+    var a: Int
+    var b: Int
+
+
+def test_unexpected_key_rejected_under_deny_unknown_fields() raises:
+    # The opt-in that recovers the old always-reject behavior.
+    with assert_raises(contains="Unknown field"):
+        _ = deserialize[StrictBaz]('{"a": 1, "b": 2, "c": 230}')
+
+
 def test_unexpected_keys() raises:
-    with assert_raises():
-        var foo = deserialize[Foo[23, 234.23]](
-            """
+    # BEHAVIOR CHANGE (Task 8). This used to assert that ANY wire key with
+    # no matching field is rejected -- the deleted walker's
+    # `raise Error("Unexpected field: ", ...)`. emberserde's `expect_struct`
+    # skips an unbound key unless the target type conforms to
+    # `DenyUnknownFields` (see the test above), so the same input now
+    # deserializes cleanly and every declared field still binds correctly.
+    # The three `extra_*` keys below (scalar, array-with-nested-object, and
+    # deeply nested object) are kept because skipping them exercises
+    # `skip_value` over exactly the shapes that are hardest to skip.
+    var foo = _deserialize_with_extras()
+    assert_equal(foo.a, "hello")
+    assert_equal(foo.i, 42)
+    assert_equal(foo.o2.value(), 1234)
+    assert_equal(foo.li, [1, 2, 3])
+    assert_equal(foo.set, {1, 2, 3})
+    assert_equal(foo.arr[2].string(), "three")
+
+
+def _deserialize_with_extras() raises -> Foo[23, 234.23]:
+    return deserialize[Foo[23, 234.23]](
+        """
 {
     "a": "hello",
     "extra_int": 42000,
@@ -223,7 +248,6 @@ def test_unexpected_keys() raises:
     "o": null,
     "o2": 1234,
     "b": true,
-    "bs": true,
     "li": [1, 2, 3],
     "extra_array": [1, 2, 3, {"nested": "keys"}],
     "d": {"some key": 12345},
@@ -247,46 +271,15 @@ def test_unexpected_keys() raises:
     "extra_bool": false
 }
 """
-        )
+    )
 
 
-@fieldwise_init
-struct Point(JsonDeserializable):
-    var x: Int
-    var y: Int
-
-    @staticmethod
-    def deserialize_as_array() -> Bool:
-        return True
-
-
-def test_point_array_reflection() raises:
-    var json_str = "[1, 2]"
-    var p = deserialize[Point](json_str)
-    assert_equal(p.x, 1)
-    assert_equal(p.y, 2)
-
-
-@fieldwise_init
-struct NestedArray(Defaultable, JsonDeserializable):
-    var p: Point
-    var name: String
-
-    def __init__(out self):
-        self.p = Point(0, 0)
-        self.name = ""
-
-    @staticmethod
-    def deserialize_as_array() -> Bool:
-        return True
-
-
-def test_nested_array_reflection() raises:
-    var json_str = '[[10, 20], "test"]'
-    var n = deserialize[NestedArray](json_str)
-    assert_equal(n.p.x, 10)
-    assert_equal(n.p.y, 20)
-    assert_equal(n.name, "test")
+# REMOVED IN TASK 8: `test_point_array_reflection` and
+# `test_nested_array_reflection`, plus their `Point`/`NestedArray`
+# fixtures. Both pinned `JsonDeserializable.deserialize_as_array` -- an
+# opt-in that made a struct read from `[1, 2]` instead of `{"x":1,"y":2}`.
+# It lived only on the deleted trait and has no emberserde counterpart: a
+# struct always rides the wire as a JSON object. See the task-8 report.
 
 
 @fieldwise_init
@@ -322,6 +315,32 @@ def test_long_ints() raises:
     assert_equal(vals.i256, Scalar[DType.int256].MAX)
     assert_equal(vals.u128, Scalar[DType.uint128].MAX)
     assert_equal(vals.u256, Scalar[DType.uint256].MAX)
+
+
+# ===========================================================================
+# REGRESSION PIN (Task 8). `Foo` used to carry a `bs: SIMD[DType.bool, 1]`
+# field read from the wire token `true`: the deleted walker's
+# `__extension SIMD(JsonDeserializable)` had a non-numeric-dtype branch
+# (`Scalar[dtype](Int(p.expect_bool()))`) for exactly that. emberserde's
+# `SIMD.deserialize`
+# (`emberserde/emberserde/deserialize/impls.mojo:32-45`) has no such
+# branch -- it always goes through `expect_number` -- so a boolean-dtype
+# SIMD now reads a JSON *number* and rejects a JSON *boolean*.
+#
+# The field is gone from `Foo` because there is no way to keep it passing;
+# this pins the actual behavior instead, so the day emberserde grows the
+# branch this test fails loudly rather than the gap staying invisible.
+# `Bool` itself is unaffected -- only `SIMD[DType.bool, N]`.
+# ===========================================================================
+
+
+def test_simd_bool_reads_a_number_not_a_json_boolean() raises:
+    assert_false(Bool(try_deserialize[SIMD[DType.bool, 1]]("true")))
+    var from_number = deserialize[SIMD[DType.bool, 1]]("1")
+    assert_true(Bool(from_number))
+
+    # The plain `Bool` path still reads `true`, as it always did.
+    assert_true(deserialize[Bool]("true"))
 
 
 def main() raises:

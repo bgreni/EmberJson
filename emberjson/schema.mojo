@@ -1,17 +1,10 @@
-from emberjson import (
-    JsonDeserializable,
-    Parser,
-    ParseOptions,
-    deserialize,
-    Value,
-)
-from emberjson._deserialize.reflection import _Base
+# `deserialize` is the public (emberserde-backed) entry point, used by the
+# `Coerce*` helpers below to read a number out of a JSON string payload.
+from emberjson import Value, deserialize
 from emberserde import Defaulted, Field
+from emberserde.utils import Base as _Base
 
-# Aliased for the same reason as in `value.mojo`/`object.mojo`: EmberJson's
-# own `Deserializer` trait (imported above) still backs `from_json`, so
-# every wrapper here still carries the legacy deserialize conformance
-# alongside emberserde's.
+# Aliased for the same reason as in `value.mojo`/`object.mojo`.
 from emberserde.serialize import (
     Serializable,
     Serializer as SerdeSerializer,
@@ -38,7 +31,6 @@ from std.reflection import reflect
 
 struct AllOf[T: _Base, *validators: Validator](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -55,14 +47,6 @@ struct AllOf[T: _Base, *validators: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(
@@ -118,7 +102,6 @@ struct Validated[
     err_msg: String = "Value is not valid",
 ](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -136,14 +119,6 @@ struct Validated[
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(
@@ -375,7 +350,6 @@ Parameters:
 
 struct OneOf[T: _Base & Equatable, *accepted: Validator](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -393,14 +367,6 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(
@@ -444,7 +410,6 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
 
 struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -462,14 +427,6 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(
@@ -507,7 +464,6 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
 
 struct NoneOf[T: _Base & Equatable, *rejected: Validator](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -525,14 +481,6 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(
@@ -590,7 +538,6 @@ Parameters:
 
 struct Enum[T: _Base & Equatable, //, *accepted: T](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -611,14 +558,6 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(
@@ -652,7 +591,7 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
 
 
 @fieldwise_init
-struct Secret[T: _Base](Deserializable, JsonDeserializable, Serializable):
+struct Secret[T: _Base](Deserializable, Serializable):
     var value: Self.T
     """
     A secret value that will be hidden as an opaque string if serialized back to JSON.
@@ -660,12 +599,6 @@ struct Secret[T: _Base](Deserializable, JsonDeserializable, Serializable):
     Parameters:
         T: The type of the value to hide.
     """
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
 
     @staticmethod
     def deserialize(
@@ -690,7 +623,7 @@ struct Secret[T: _Base](Deserializable, JsonDeserializable, Serializable):
 
 @fieldwise_init
 struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
-    Deserializable, JsonDeserializable, Serializable
+    Deserializable, Serializable
 ):
     """
     A value that will be clamped to a given range.
@@ -702,20 +635,6 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
     """
 
     var value: Self.T
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.T](p)}
-
-        var min_val = materialize[Self.minimum]()
-        var max_val = materialize[Self.maximum]()
-
-        if s.value < min_val:
-            s.value = min_val^
-        elif s.value > max_val:
-            s.value = max_val^
 
     @staticmethod
     def deserialize(
@@ -746,7 +665,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
 
 @fieldwise_init
 struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
-    Deserializable, JsonDeserializable, Serializable
+    Deserializable, Serializable
 ):
     """
     A value that will be coerced to a different type.
@@ -757,12 +676,6 @@ struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
     """
 
     var value: Self.Target
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {Self.func(deserialize[Value](p))}
 
     @staticmethod
     def deserialize(
@@ -909,7 +822,7 @@ Parameters:
 
 @fieldwise_init
 struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
-    Deserializable, JsonDeserializable, Serializable
+    Deserializable, Serializable
 ):
     """
     Transforms the value to a different type.
@@ -921,12 +834,6 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
     """
 
     var value: Self.OutT
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {Self.func(deserialize[Self.InT](p))}
 
     @staticmethod
     def deserialize(
@@ -971,7 +878,6 @@ struct CrossFieldValidator[
     ) thin raises,
 ](
     Deserializable,
-    JsonDeserializable,
     Serializable,
     Validator,
 ):
@@ -993,13 +899,6 @@ struct CrossFieldValidator[
         comptime assert __field_in_parent[Self.Parent, Self.F2]()
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = {deserialize[Self.Type](p)}
-        s.validate(s.value)
 
     @staticmethod
     def deserialize(

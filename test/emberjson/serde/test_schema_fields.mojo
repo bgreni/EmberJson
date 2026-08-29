@@ -1,9 +1,10 @@
-"""Schema wrappers driven through the emberserde path.
+"""Schema wrappers driven through `from_json_string`/`to_json_string`.
 
-`test/emberjson/test_schema.mojo` keeps the same coverage on EmberJson's
-legacy `deserialize`/`serialize` entry points; this file exercises the
-emberserde `Deserializable`/`Serializable` conformances the wrappers
-gained in the port, via `from_json_string`/`to_json_string`.
+`test/emberjson/test_schema.mojo` keeps the same coverage through the
+public `deserialize`/`serialize` facade, which since Task 8 rides exactly
+this machinery; this file goes at the `emberjson._serde` entry points
+directly and covers the `Field` wire metadata (`rename`/`extra_names`/
+`skip`) that only reaches the wrappers this way.
 """
 
 from emberjson import Value
@@ -108,8 +109,9 @@ struct Creds(Defaultable, Movable):
 
 
 # A failure raised by a wrapper has to surface as a typed
-# `DeserializationError` (not the untyped `Error` the legacy validators
-# raise) so the framework's `kind`/`path` machinery still works. The
+# `DeserializationError` (not the untyped `Error` the `Validator`
+# implementations raise) so the framework's `kind`/`path` machinery still
+# works. The
 # sentinel idiom is emberserde's: `assert_true(False)` inside the `try`
 # won't compile, because one `try` block can't mix the typed and untyped
 # raise flavours.

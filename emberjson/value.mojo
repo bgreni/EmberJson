@@ -11,7 +11,7 @@ from .utils import (
 from std.utils.variant import Variant
 from .traits import JsonValue, PrettyPrintable
 from std.sys.intrinsics import unlikely, likely
-from ._deserialize import Parser, ParseOptions, JsonDeserializable
+from ._deserialize import Parser, ParseOptions
 from ._utf8 import is_valid_utf8
 from std.sys.info import bit_width_of
 from .teju import write_float
@@ -20,10 +20,11 @@ from std.python import PythonObject
 from ._pointer import resolve_pointer, PointerIndex
 from std.builtin.rebind import rebind_var
 
-# emberserde's `Serializer` is still aliased `SerdeSerializer` for symmetry
-# with `SerdeDeserializer` below, which has to be aliased: EmberJson's own
-# (pre-existing) `Deserializer` trait, imported above, still backs
-# `from_json` until the deserialize half of the old layer retires too.
+# emberserde's format-agnostic traits. The `SerdeSerializer`/
+# `SerdeDeserializer` aliases are a leftover of the period when EmberJson
+# had `Serializer`/`Deserializer` traits of its own to disambiguate from;
+# they are kept because `serialize`/`deserialize` are also method names on
+# every type here.
 from emberserde.serialize import Serializer as SerdeSerializer, Serializable
 from emberserde.deserialize import (
     Deserializer as SerdeDeserializer,
@@ -38,11 +39,7 @@ from emberserde.error import (
 
 
 @fieldwise_init
-struct Null(
-    JsonDeserializable,
-    JsonValue,
-    TrivialRegisterPassable,
-):
+struct Null(JsonValue, TrivialRegisterPassable):
     """Represents "null" json value.
     Can be implicitly converted from `None`.
     """
@@ -76,12 +73,6 @@ struct Null(
     def to_python_object(self) raises -> PythonObject:
         return {}
 
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = p.parse_null()
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         s.serialize_none()
 
@@ -105,7 +96,7 @@ struct Null(
         return Null()
 
 
-struct Value(JsonDeserializable, JsonValue, Sized):
+struct Value(JsonValue, Sized):
     """Top level JSON object, representing any valid JSON value."""
 
     comptime Type = Variant[
@@ -223,12 +214,6 @@ struct Value(JsonDeserializable, JsonValue, Sized):
             var buf = PaddedBuffer(parse_bytes)
             var parser = Parser[options=ParseOptions()._padded()](padded=buf)
             self = parser.parse()
-
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        s = p.parse_value()
 
     @implicit
     @always_inline

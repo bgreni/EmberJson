@@ -27,7 +27,7 @@ def test_subscript_resolves_from_the_facade_alone() raises:
     assert_equal(s[], "hi")
 
 
-def test_legacy_entry_points_resolve_from_the_facade_alone() raises:
+def test_public_entry_points_resolve_from_the_facade_alone() raises:
     assert_equal(deserialize[Defaulted[Int, 42]]("10")[], 10)
     assert_equal(serialize(Defaulted[Int, 42](10)), "10")
 
