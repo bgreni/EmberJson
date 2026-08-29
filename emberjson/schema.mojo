@@ -940,14 +940,6 @@ Parameters:
 """
 
 
-# EmberJson's schema wrappers are all read through `w[]`; `Field` keeps
-# that spelling so `Default` stays a drop-in for the struct it replaced.
-# `w.value` (emberserde's own spelling) works as well.
-__extension Field:
-    def __getitem__(self) -> ref[self.value] Self.T:
-        return self.value
-
-
 ##########################################################
 # Transform
 ##########################################################

@@ -80,6 +80,21 @@ from .schema import (
 from emberserde import Defaulted, Field
 
 
+# EmberJson's schema wrappers are all read through `w[]`, and `Field` keeps
+# that spelling so `Default` stays a drop-in for the struct it replaced
+# (`w.value`, emberserde's own spelling, works as well).
+#
+# This lives HERE, not in `schema.mojo`, because an `__extension` that adds
+# a *method* to a foreign type is only visible where the module declaring
+# it is itself in scope. Next to the re-export above, `from emberjson
+# import Field` alone is enough; in `schema.mojo` it would have silently
+# required the caller to also import `emberjson.schema`, which is exactly
+# the trap `from emberjson import Defaulted` + `f[]` fell into.
+__extension Field:
+    def __getitem__(self) -> ref[self.value] Self.T:
+        return self.value
+
+
 @always_inline
 def parse[
     options: ParseOptions = ParseOptions()

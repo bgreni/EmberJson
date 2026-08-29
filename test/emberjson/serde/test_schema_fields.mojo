@@ -350,6 +350,8 @@ def test_one_of() raises:
             OneOf[Int64, Eq[Int64(1)], Eq[Int64(4)], MultipleOf[Int64(2)]]
         ]("4")
 
+    assert_equal(to_json_string(V(String("red"))), '"red"')
+
 
 def test_any_of() raises:
     comptime V = AnyOf[Int64, Eq[Int64(1)], Eq[Int64(4)], MultipleOf[Int64(2)]]
@@ -357,11 +359,16 @@ def test_any_of() raises:
     with assert_raises(contains="Value not in options"):
         _ = from_json_string[AnyOf[Int, Eq[1], Eq[2]]]("5")
 
+    assert_equal(to_json_string(V(Int64(4))), "4")
+
 
 def test_none_of() raises:
-    assert_equal(from_json_string[NoneOf[Int, Eq[1], Eq[2]]]("5")[], 5)
+    comptime V = NoneOf[Int, Eq[1], Eq[2]]
+    assert_equal(from_json_string[V]("5")[], 5)
     with assert_raises(contains="Value matched a rejected validator"):
         _ = from_json_string[NoneOf[Int, Eq[1], Range[Int, 0, 10]]]("5")
+
+    assert_equal(to_json_string(V(5)), "5")
 
 
 def test_enum() raises:
