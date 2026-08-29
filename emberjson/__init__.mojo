@@ -4,25 +4,26 @@ from .array import Array
 from .object import Object
 from .utils import write, write_pretty, PaddedBuffer, PAD_INPUT_THRESHOLD
 
-# `deserialize`/`serialize` are imported under private aliases rather than
-# re-exported directly: the public `deserialize`/`serialize`/`to_string`
-# names below are thin wrappers around these same (still bare-`Error`-
-# raising) implementations that translate what they raise into emberserde's
-# typed `DeserializationError`/`SerializationError`. The `Parser`-taking
-# `deserialize` overloads and the `Serializer`-taking `serialize` overload
-# are re-exported unchanged (see the forwarding overloads below `parse`) —
-# `emberjson/schema.mojo`'s old-path `JsonDeserializable`/`JsonSerializable`
-# conformances call exactly those, under a bare `raises`, and must keep
-# compiling untouched (Task 7 does not modify `schema.mojo`).
+# The public `deserialize`/`try_deserialize`/`serialize`/`to_string` names
+# below are thin wrappers over `emberjson._serde`'s `from_json_string`/
+# `to_json_string`, which drive emberserde's format-agnostic framework over
+# the same hand-written `Parser`.
+#
+# The superseded reflection walker (`emberjson/_deserialize/reflection.
+# mojo`, `_serialize/reflection.mojo`) is still imported under private
+# aliases: `emberjson/schema.mojo`'s old-path `JsonDeserializable`/
+# `JsonSerializable` conformances call the `Parser`-taking `deserialize`
+# and the `Serializer`-taking `serialize` overloads re-exported below, and
+# those conformances go away with the walker itself.
 from ._deserialize import (
     Parser,
     ParseOptions,
     minify,
     deserialize as _reflect_deserialize,
-    try_deserialize,
     JsonDeserializable,
     StrictOptions,
 )
+from ._serde import from_json_string, to_json_string
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
 from ._serialize import (
@@ -215,32 +216,17 @@ def to_string[
 # `deserialize` / `try_deserialize`
 # ===============================================
 #
-# `_reflect_deserialize` (aliased above) is EmberJson's pre-existing
-# hand-written reflection walker (`emberjson/_deserialize/reflection.mojo`,
-# not modified by this task -- `schema.mojo`'s old-path conformances and
-# `Lazy` depend on it staying exactly as it is). It still raises a bare
-# `Error` internally. The `String`-taking overload below is the one public
-# entry point the brief asks to carry a typed error; the `Parser`-taking
-# overloads are re-exported unchanged immediately after it, because
-# `emberjson/schema.mojo`'s `from_json` methods call them directly under a
-# bare `raises` and must keep compiling untouched.
-
-
-def _classify_deserialize_error(var msg: String) -> DeserializationError:
-    # `_reflect_deserialize`'s own struct-walking loop
-    # (`_default_deserialize` in `_deserialize/reflection.mojo`) raises
-    # exactly these three literal messages for the shape errors it detects
-    # itself; everything else reaching here is a `Parser`-level "expected
-    # token X, found Y" failure, i.e. the value was present but the wrong
-    # shape for the field it is bound to.
-    if msg.startswith("Missing key: "):
-        return DeserializationError(msg^, DerErrorKind.MissingField)
-    elif msg.startswith("Duplicate key: "):
-        return DeserializationError(msg^, DerErrorKind.DuplicateField)
-    elif msg.startswith("Unexpected field: "):
-        return DeserializationError(msg^, DerErrorKind.UnknownField)
-    else:
-        return DeserializationError(msg^, DerErrorKind.TypeMismatch)
+# Both ride `emberjson._serde`'s `from_json_string`, i.e. emberserde's
+# format-agnostic `deserialize` framework driven by
+# `EmberJsonDeserializer` over the same hand-written `Parser`. Errors are
+# raised typed at the source (`DeserializationError` with a real `kind`
+# and, for a nested failure, a real `path`) rather than reconstructed from
+# message text at this boundary.
+#
+# The `Parser`-taking overloads below are re-exported from the superseded
+# reflection walker: `emberjson/schema.mojo`'s old-path
+# `JsonDeserializable.from_json` implementations call them directly under a
+# bare `raises`, and they go away together with those conformances.
 
 
 def deserialize[
@@ -265,11 +251,26 @@ def deserialize[
         raise DeserializationError(
             "Invalid UTF-8 in input", DerErrorKind.InvalidValue
         )
-    var p = Parser(s)
+    res = from_json_string[T](s)
+
+
+def try_deserialize[T: Deinitable & Movable](s: String) -> Optional[T]:
+    """Deserializes a JSON string into `T`, or `None` on any failure.
+
+    Parameters:
+        T: The type to deserialize into.
+
+    Args:
+        s: The input JSON string.
+
+    Returns:
+        The deserialized value, or `None` if `s` could not be
+        deserialized into `T`.
+    """
     try:
-        res = _reflect_deserialize[T](p)
-    except e:
-        raise _classify_deserialize_error(String(e))
+        return deserialize[T](s)
+    except:
+        return {}
 
 
 # `Parser`-taking overloads, re-exported unchanged (still a bare `raises`):
@@ -294,14 +295,11 @@ def deserialize[
 # `serialize`
 # ===============================================
 #
-# `_reflect_serialize` (aliased above) is the pre-existing reflection-based
-# writer (`emberjson/_serialize/reflection.mojo`, not modified by this
-# task). Neither of its overloads can currently raise (JSON serialization
-# of an in-memory value never fails), so `raises SerializationError` below
-# is a signature-level contract for callers -- consistent with `to_string`
-# above and forward-compatible with a future implementation that can fail
-# (e.g. a custom `Serializable` type) -- rather than a path this old
-# implementation can presently take.
+# Rides `emberjson._serde`'s `to_json_string`, i.e. emberserde's
+# format-agnostic `serialize` framework driven by `EmberJsonSerializer`.
+# Unlike the superseded reflection writer, this one really can raise:
+# a `Serializable` implementation is free to fail (see `Lazy.serialize`,
+# which surfaces a failing `get()` as a `SerializationError`).
 
 
 def serialize[
@@ -323,7 +321,7 @@ def serialize[
     Raises:
         `SerializationError` if `value` cannot be serialized.
     """
-    output = _reflect_serialize[pretty=pretty](value)
+    output = to_json_string[pretty=pretty](value)
 
 
 # `Serializer`-taking overload, re-exported unchanged (no `raises`):
