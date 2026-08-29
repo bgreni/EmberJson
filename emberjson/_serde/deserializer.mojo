@@ -9,7 +9,9 @@ from emberjson._deserialize._parser_helper import (
 from emberjson.constants import `[`, `]`, `{`, `}`, `"`, `:`, `,`, `n`
 
 from emberserde.deserialize import (
+    BorrowingDeserializer,
     Deserializer,
+    RawKind,
     SeqDerState,
     MapDerState,
     StructDerState,
@@ -233,7 +235,7 @@ struct EmberJsonEnumDe[
 @fieldwise_init
 struct EmberJsonDeserializer[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
-](Deserializer):
+](BorrowingDeserializer, Deserializer):
     var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
 
     comptime SeqType = EmberJsonSeqDe[
@@ -360,6 +362,54 @@ struct EmberJsonDeserializer[
             if idx == -1 and name == an:
                 idx = i
         return EmberJsonEnumDe(p=self.p, idx=idx)
+
+    # `BorrowingDeserializer`: a `comptime if` dispatch over `Parser`'s six
+    # existing byte-extractor entry points — one validated skip per kind, so
+    # a kind mismatch (e.g. `Integer` against `1.5`) fails fast here instead
+    # of deferring to whatever later tries to interpret the bytes. Each
+    # `Parser` method returns `Span[Byte, Self.origin]`; the trait erases
+    # that to `ImmUntrackedOrigin` (see `BorrowingDeserializer`'s doc
+    # comment in emberserde) and the caller re-ties it.
+    #
+    # `expect_string_bytes` is the one extractor that does not skip leading
+    # whitespace or validate the opening quote itself (its other call sites
+    # — `_expect_key_and_colon`, `_expect_validated_bytes` — already do
+    # both before calling it), so `Str` mirrors `expect_string` above and
+    # does that positioning by hand. The other five extractors already
+    # handle their own whitespace/shape validation.
+    def raw_bytes[
+        kind: RawKind
+    ](mut self) raises DeserializationError -> Span[Byte, ImmUntrackedOrigin]:
+        try:
+            comptime if kind == RawKind.Any:
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    self.p[].expect_value_bytes()
+                )
+            elif kind == RawKind.Integer:
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    self.p[].expect_int_bytes()
+                )
+            elif kind == RawKind.Float:
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    self.p[].expect_float_bytes()
+                )
+            elif kind == RawKind.Str:
+                self.p[].skip_whitespace()
+                if self.p[].peek() != `"`:
+                    raise Error("expected a string")
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    self.p[].expect_string_bytes()
+                )
+            elif kind == RawKind.Seq:
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    self.p[].expect_array_bytes()
+                )
+            else:
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    self.p[].expect_object_bytes()
+                )
+        except e:
+            raise _mismatch(String(e))
 
 
 def from_json_string[T: AnyType](s: String) raises DeserializationError -> T:
