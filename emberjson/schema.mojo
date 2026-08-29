@@ -10,6 +10,27 @@ from emberjson import (
 )
 from emberjson._deserialize.reflection import _Base
 from emberserde import Defaulted, Field
+
+# Aliased for the same reason as in `value.mojo`/`object.mojo`: EmberJson's
+# own `Serializer`/`Deserializer` traits (imported above) still back
+# `write_json`/`from_json`, so every wrapper here carries both the legacy
+# conformances and emberserde's until Task 8 retires the old layer.
+from emberserde.serialize import (
+    Serializable,
+    Serializer as SerdeSerializer,
+    serialize as serde_serialize,
+)
+from emberserde.deserialize import (
+    Deserializable,
+    Deserializer as SerdeDeserializer,
+    SelfDescribingDeserializer,
+    deserialize as serde_deserialize,
+)
+from emberserde.error import (
+    DerErrorKind,
+    DeserializationError,
+    SerializationError,
+)
 from std.builtin.rebind import downcast
 from std.reflection import reflect
 
@@ -19,7 +40,11 @@ from std.reflection import reflect
 
 
 struct AllOf[T: _Base, *validators: Validator](
-    JsonDeserializable, JsonSerializable, Validator
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
 ):
     """A validator that requires a value to pass all of the given validators.
 
@@ -44,6 +69,18 @@ struct AllOf[T: _Base, *validators: Validator](
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.T](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         comptime for i in range(len(Self.validators)):
             comptime VType = Self.validators[i]
@@ -53,8 +90,25 @@ struct AllOf[T: _Base, *validators: Validator](
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
+
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
+
+
+# Every wrapper here runs its check in the *constructor*, so a value built
+# by hand (`Range[Int, 0, 10](15)`) is validated exactly like one read off
+# the wire, and `deserialize` has one code path to guard. The check itself
+# is defined in terms of the untyped `Error` the `Validator` trait raises,
+# so the emberserde entry points funnel it through here into the typed
+# `DeserializationError` that carries the framework's `kind`/`path`. The
+# kind is `InvalidValue` rather than `TypeMismatch` on purpose: the wire
+# shape was perfectly good JSON of the right type, the *value* was not
+# acceptable.
+@always_inline
+def _validation_failed(e: Error) -> DeserializationError:
+    return DeserializationError(String(e), DerErrorKind.InvalidValue)
 
 
 trait Validator:
@@ -69,7 +123,13 @@ struct Validated[
     T: _Base,
     validator: def(T) thin -> Bool,
     err_msg: String = "Value is not valid",
-](JsonDeserializable, JsonSerializable, Validator):
+](
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
+):
     """Validates a value by applying the given function.
 
     Parameters:
@@ -94,12 +154,27 @@ struct Validated[
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.T](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         if not Self.validator(value):
             raise Error(Self.err_msg)
 
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
@@ -310,7 +385,11 @@ Parameters:
 
 
 struct OneOf[T: _Base & Equatable, *accepted: Validator](
-    JsonDeserializable, JsonSerializable, Validator
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
 ):
     """
     Validates a value to pass one and only one of the given validators.
@@ -336,6 +415,18 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.T](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         var matched = False
         comptime for i in range(len(Self.accepted)):
@@ -359,12 +450,19 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
+
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
 struct AnyOf[T: _Base & Equatable, *accepted: Validator](
-    JsonDeserializable, JsonSerializable, Validator
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
 ):
     """
     Validates a value to pass at least one of the given validators.
@@ -390,6 +488,18 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.T](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         var matched = False
         comptime for i in range(len(Self.accepted)):
@@ -407,12 +517,19 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
 
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
+
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 
 
 struct NoneOf[T: _Base & Equatable, *rejected: Validator](
-    JsonDeserializable, JsonSerializable, Validator
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
 ):
     """
     Validates a value to not pass any of the given validators.
@@ -438,6 +555,18 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.T](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         comptime for i in range(len(Self.rejected)):
             var matched = False
@@ -454,6 +583,9 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
 
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
@@ -480,7 +612,11 @@ Parameters:
 
 
 struct Enum[T: _Base & Equatable, //, *accepted: T](
-    JsonDeserializable, JsonSerializable, Validator
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
 ):
     """Validates a value against an enumerated set of allowed values.
     A semantic alias for OneOf — use with Eq validators for enum-style validation.
@@ -509,6 +645,18 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.T](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         comptime for i in range(len(Self.accepted)):
             if value == materialize[Self.accepted[i]]():
@@ -517,6 +665,9 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
 
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
@@ -528,7 +679,9 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
 
 
 @fieldwise_init
-struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
+struct Secret[T: _Base](
+    Deserializable, JsonDeserializable, JsonSerializable, Serializable
+):
     var value: Self.T
     """
     A secret value that will be hidden as an opaque string if serialized back to JSON.
@@ -543,8 +696,20 @@ struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {deserialize[Self.T](p)}
 
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        return {serde_deserialize[Self.T](d)}
+
     def write_json(self, mut writer: Some[Serializer]):
         writer.write('"********"')
+
+    # Asymmetric on purpose: the payload is read from the wire as itself
+    # and written back redacted. `serialize_string` (not a raw write) so
+    # the mask goes through the format's own string encoding.
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        s.serialize_string("********")
 
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
@@ -557,7 +722,7 @@ struct Secret[T: _Base](JsonDeserializable, JsonSerializable):
 
 @fieldwise_init
 struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
-    JsonDeserializable, JsonSerializable
+    Deserializable, JsonDeserializable, JsonSerializable, Serializable
 ):
     """
     A value that will be clamped to a given range.
@@ -584,8 +749,26 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
         elif s.value > max_val:
             s.value = max_val^
 
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        var value = serde_deserialize[Self.T](d)
+
+        var min_val = materialize[Self.minimum]()
+        var max_val = materialize[Self.maximum]()
+
+        if value < min_val:
+            value = min_val^
+        elif value > max_val:
+            value = max_val^
+        return {value^}
+
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
@@ -598,7 +781,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
 
 @fieldwise_init
 struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
-    JsonDeserializable, JsonSerializable
+    Deserializable, JsonDeserializable, JsonSerializable, Serializable
 ):
     """
     A value that will be coerced to a different type.
@@ -616,8 +799,28 @@ struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {Self.func(deserialize[Value](p))}
 
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # `func` is typed on EmberJson's `Value`, so this only works over a
+        # format that can hand back a whole dynamic value with no type
+        # hint. `Value.deserialize` asserts that too, but assert it here
+        # for a message that names `Coerce`.
+        comptime assert conforms_to(
+            type_of(d), SelfDescribingDeserializer
+        ), "Coerce requires a self-describing deserializer"
+        var v = serde_deserialize[Value](d)
+        try:
+            return {Self.func(v)}
+        except e:
+            raise _validation_failed(e)
+
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.Target:
         return self.value
@@ -752,7 +955,7 @@ __extension Field:
 
 @fieldwise_init
 struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
-    JsonDeserializable, JsonSerializable
+    Deserializable, JsonDeserializable, JsonSerializable, Serializable
 ):
     """
     Transforms the value to a different type.
@@ -771,8 +974,17 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
     ](mut p: Parser[origin, options], out s: Self) raises:
         s = {Self.func(deserialize[Self.InT](p))}
 
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        return {Self.func(serde_deserialize[Self.InT](d))}
+
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.OutT:
         return self.value
@@ -806,7 +1018,13 @@ struct CrossFieldValidator[
         reflect[Parent].field[F1].T,
         reflect[Parent].field[F2].T,
     ) thin raises,
-](JsonDeserializable, JsonSerializable, Validator):
+](
+    Deserializable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    Validator,
+):
     """
     Validates a value to depend on another field.
 
@@ -834,6 +1052,18 @@ struct CrossFieldValidator[
         s.validate(s.value)
 
     @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        # Same shape as the value validators, but the thing being checked
+        # is the whole parent struct rather than one field's payload.
+        var value = serde_deserialize[Self.Type](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+    @staticmethod
     def validate(value: Self.Type) raises:
         comptime r = reflect[Self.Type]
         comptime f1 = r.field_index[Self.F1]()
@@ -845,6 +1075,9 @@ struct CrossFieldValidator[
 
     def write_json(self, mut writer: Some[Serializer]):
         serialize(self.value, writer)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.Type:
         return self.value
