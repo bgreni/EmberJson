@@ -26,9 +26,15 @@ from emberjson.schema import (
     MultipleOf,
     CrossFieldValidator,
 )
-from emberjson import deserialize, serialize, Defaulted, Value
+from emberjson import deserialize, serialize, Defaulted, Field, Value
 from std.collections import Set, Array
-from std.testing import assert_equal, assert_false, assert_raises, TestSuite
+from std.testing import (
+    assert_equal,
+    assert_false,
+    assert_raises,
+    assert_true,
+    TestSuite,
+)
 
 
 def test_range_int() raises:
@@ -124,6 +130,8 @@ def test_one_of() raises:
         _ = deserialize[OneOf[String, Eq["red"], Eq["green"], Eq["blue"]]](
             '"yellow"'
         )
+
+    assert_equal(serialize(o1), '"red"')
 
     # Int options
     var o2 = deserialize[OneOf[Int, Eq[1], Eq[2], Eq[3]]]("2")
@@ -257,6 +265,11 @@ struct TestDefault(Movable):
     var b: Default[Int, 42]
 
 
+struct TestOptDefault(Movable):
+    var a: Int
+    var b: Defaulted[Optional[Int], Optional[Int](42)]
+
+
 def test_default() raises:
     var d1 = deserialize[Default[Int, 42]]("10")
     assert_equal(d1[], 10)
@@ -275,6 +288,15 @@ def test_default() raises:
     var d2 = deserialize[Defaulted[Optional[Int], Optional[Int](42)]]("null")
     assert_false(d2[])
 
+    # ...and the other half of that escape hatch: an absent key on an
+    # `Optional` payload still takes the default rather than binding None.
+    var d2b = deserialize[TestOptDefault]('{"a": 10}')
+    assert_true(d2b.b[])
+    assert_equal(d2b.b[].value(), 42)
+
+    var d2c = deserialize[TestOptDefault]('{"a": 10, "b": null}')
+    assert_false(d2c.b[])
+
     var d3 = deserialize[TestDefault]('{"a": 10}')
     assert_equal(d3.a, 10)
     assert_equal(d3.b[], 42)
@@ -282,6 +304,32 @@ def test_default() raises:
     # A present key still wins over the default.
     var d4 = deserialize[TestDefault]('{"a": 10, "b": 7}')
     assert_equal(d4.b[], 7)
+
+    # `Default` is a foreign type (emberserde's `Field`) that only reaches
+    # the legacy writer through an `__extension` in
+    # `emberjson/_serialize/reflection.mojo`. If that conformance ever goes
+    # unseen the `conforms_to` gate silently falls back to the reflection
+    # walker and emits `{"value":42}` instead of the payload, so pin the
+    # payload spelling in both directions.
+    assert_equal(serialize(d1), "10")
+    assert_equal(serialize(d3), '{"a":10,"b":42}')
+    assert_equal(serialize(Default[Int, 42]()), "42")
+
+
+def test_bare_field_round_trips_on_legacy_path() raises:
+    # `rename`/`extra_names`/`skip` are rejected at COMPILE time on this
+    # path (the legacy reflection walker matches declared field names only
+    # and would silently emit and accept the wrong keys), so they can't be
+    # exercised here at all. What must keep working is an *unconfigured*
+    # `Field`, which is what `Default` is.
+    var f = deserialize[Field[Int]]("5")
+    assert_equal(f[], 5)
+    assert_equal(f.value, 5)
+    assert_equal(serialize(f), "5")
+
+    var s = deserialize[Field[String]]('"hi"')
+    assert_equal(s[], "hi")
+    assert_equal(serialize(s), '"hi"')
 
 
 def date_to_int(s: String) -> Int:
@@ -464,6 +512,9 @@ def test_any_of() raises:
     with assert_raises(contains="Value not in options"):
         _ = deserialize[AnyOf[Int, Eq[1], Eq[2], Eq[3]]]("5")
 
+    assert_equal(serialize(a1), "4")
+    assert_equal(serialize(a2), "2")
+
 
 def test_none_of() raises:
     # Value doesn't match any rejected
@@ -473,6 +524,8 @@ def test_none_of() raises:
     # Value matches one of rejected
     with assert_raises():
         _ = deserialize[NoneOf[Int, Eq[1], Eq[2], Range[Int, 0, 10]]]("5")
+
+    assert_equal(serialize(n1), "5")
 
 
 def test_exclusive_range() raises:

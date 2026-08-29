@@ -179,6 +179,26 @@ trait JsonSerializable:
 # sit above the `conforms_to(T, JsonSerializable)` gate below.
 __extension Field(JsonSerializable):
     def write_json(self, mut writer: Some[Serializer]):
+        # A `Field` that carries wire metadata is NOT supported here: the
+        # legacy reflection walker matches object keys against declared
+        # field names only and has no idea `rename`/`extra_names`/`skip`
+        # exist, so it would silently read and write the wrong JSON (a
+        # skipped field emitted and accepted, a renamed field written
+        # under its declared name). Fail at compile time instead —
+        # `emberjson._serde`'s `from_json_string`/`to_json_string` honour
+        # all of it.
+        comptime assert (
+            not Bool(Self.rename)
+            and not Bool(Self.extra_names)
+            and not Self.skip
+        ), (
+            "rename/extra_names/skip on a `Field` are only honoured by the"
+            " emberserde path (`emberjson._serde`); the legacy"
+            " `deserialize`/`serialize` entry points would silently"
+            " produce the wrong JSON. Use `from_json_string`/"
+            "`to_json_string`, or drop the wire metadata."
+        )
+
         serialize(self.value, writer)
 
     @staticmethod
