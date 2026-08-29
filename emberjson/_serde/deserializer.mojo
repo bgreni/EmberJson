@@ -1,6 +1,11 @@
 from std.collections.string.string_span import get_static_string
+from std.sys.intrinsics import unlikely
 
 from emberjson._deserialize import Parser, ParseOptions
+from emberjson._deserialize._parser_helper import (
+    copy_to_string,
+    _next_backslash,
+)
 from emberjson.constants import `[`, `]`, `{`, `}`, `"`, `:`, `,`, `n`
 
 from emberserde.deserialize import (
@@ -137,18 +142,24 @@ struct EmberJsonStructDe[
                 raise Error("expected an object key string")
             var raw = self.p[].expect_string_bytes()
             # `raw` keeps its surrounding quotes (see `expect_string_bytes`'s
-            # contract); strip them to build the plain field name. Field
-            # names are not unescaped here — a known, accepted cost (see
-            # the module docstring); this materializes one `String` per
-            # field regardless.
-            var name = String(
-                StringSlice(
-                    unsafe_from_utf8=Span(
-                        unsafe_ptr=raw.unsafe_ptr().unsafe_offset(1),
-                        length=len(raw) - 2,
-                    )
-                )
+            # contract); strip them to get the key body. Field-name matching
+            # must agree with the old `emberjson/_deserialize/reflection.
+            # mojo`'s `_field_key_eq`: an escaped key (`\"`, `\uXXXX`, ...)
+            # has to decode before comparison or it silently fails to match
+            # any declared field (reported, misleadingly, as "missing
+            # field"). `_next_backslash` keeps the common unescaped case a
+            # cheap SIMD scan + direct `String` build; `copy_to_string` only
+            # runs on the rare escaped path.
+            var kb = Span(
+                unsafe_ptr=raw.unsafe_ptr().unsafe_offset(1),
+                length=len(raw) - 2,
             )
+            var kb_end = kb.unsafe_ptr().unsafe_offset(len(kb))
+            var name: String
+            if unlikely(_next_backslash(kb.unsafe_ptr(), kb_end) < kb_end):
+                name = copy_to_string[False](kb.unsafe_ptr(), kb_end)
+            else:
+                name = String(StringSlice(unsafe_from_utf8=kb))
             self.p[].expect(`:`)
             return name^
         except e:
@@ -326,14 +337,19 @@ struct EmberJsonDeserializer[
             if self.p[].peek() != `"`:
                 raise Error("expected an enum tag string")
             var raw = self.p[].expect_string_bytes()
-            name = String(
-                StringSlice(
-                    unsafe_from_utf8=Span(
-                        unsafe_ptr=raw.unsafe_ptr().unsafe_offset(1),
-                        length=len(raw) - 2,
-                    )
-                )
+            # Same escaped-key handling as `EmberJsonStructDe.
+            # expect_field_name` — arm tags are ordinary type names in
+            # practice, but keep the two extraction sites consistent rather
+            # than leaving a second silent-mismatch trap here.
+            var kb = Span(
+                unsafe_ptr=raw.unsafe_ptr().unsafe_offset(1),
+                length=len(raw) - 2,
             )
+            var kb_end = kb.unsafe_ptr().unsafe_offset(len(kb))
+            if unlikely(_next_backslash(kb.unsafe_ptr(), kb_end) < kb_end):
+                name = copy_to_string[False](kb.unsafe_ptr(), kb_end)
+            else:
+                name = String(StringSlice(unsafe_from_utf8=kb))
             self.p[].expect(`:`)
         except e:
             raise _mismatch(String(e))
