@@ -9,6 +9,7 @@ from emberjson import (
     Value,
 )
 from emberjson._deserialize.reflection import _Base
+from emberserde import Defaulted, Field
 from std.builtin.rebind import downcast
 from std.reflection import reflect
 
@@ -714,36 +715,32 @@ Parameters:
 ##########################################################
 
 
-@fieldwise_init
-struct Default[T: _Base, default: T](
-    Defaultable, JsonDeserializable, JsonSerializable
-):
-    """
-    Defaults the value to a given value if not present.
+comptime Default[T: _Base, default: T] = Defaulted[T, default]
+"""
+Defaults the value to a given value if the key is absent from the wire.
 
-    Parameters:
-        T: The type of the value to default.
-        default: The value to default to.
-    """
+`Default` is a spelling of `emberserde`'s `Field[T, default=...]`: it is
+wire-field metadata (the same axis as `Rename`/`Skip`), which is exactly
+what a default is, so it lives in the shared cross-format layer rather
+than being reimplemented per format.
 
-    var value: Self.T
+Note the presence rule that comes with it: the default fills a **missing
+key** only. An explicit `null` on the wire is a present value, and is
+parsed as `T` — so `{"b": null}` for a `Default[Int, 42]` is an error,
+not a fall back to `42`. Wrap the payload in `Optional` when `null`
+should be tolerated: `Defaulted[Optional[Int], Optional[Int](42)]` takes
+the default when the key is missing and binds `None` when it is `null`.
 
-    def __init__(out self):
-        self.value = materialize[Self.default]()
+Parameters:
+    T: The type of the value to default.
+    default: The value to default to.
+"""
 
-    @staticmethod
-    def from_json[
-        origin: ImmOrigin, options: ParseOptions, //
-    ](mut p: Parser[origin, options], out s: Self) raises:
-        var op = deserialize[Optional[Self.T]](p)
-        if op:
-            s = {op.take()}
-        else:
-            s = {materialize[Self.default]()}
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
+# EmberJson's schema wrappers are all read through `w[]`; `Field` keeps
+# that spelling so `Default` stays a drop-in for the struct it replaced.
+# `w.value` (emberserde's own spelling) works as well.
+__extension Field:
     def __getitem__(self) -> ref[self.value] Self.T:
         return self.value
 

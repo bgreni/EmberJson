@@ -26,9 +26,9 @@ from emberjson.schema import (
     MultipleOf,
     CrossFieldValidator,
 )
-from emberjson import deserialize, serialize, Value
+from emberjson import deserialize, serialize, Defaulted, Value
 from std.collections import Set, Array
-from std.testing import assert_equal, assert_raises, TestSuite
+from std.testing import assert_equal, assert_false, assert_raises, TestSuite
 
 
 def test_range_int() raises:
@@ -261,12 +261,27 @@ def test_default() raises:
     var d1 = deserialize[Default[Int, 42]]("10")
     assert_equal(d1[], 10)
 
-    var d2 = deserialize[Default[Int, 42]]("null")
-    assert_equal(d2[], 42)
+    # DELIBERATE BEHAVIOUR CHANGE (emberserde port): `Default[T, d]` is now
+    # a spelling of emberserde's `Field[T, default=d]`, whose default fills
+    # a *missing key* only. An explicit `null` is a present value on the
+    # wire and is parsed as `T`, so this raises where it previously
+    # produced 42.
+    with assert_raises():
+        _ = deserialize[Default[Int, 42]]("null")
+
+    # The escape hatch for the old null-tolerance: make the payload itself
+    # `Optional`, so `null` binds `None` instead of raising while a missing
+    # key still takes the default.
+    var d2 = deserialize[Defaulted[Optional[Int], Optional[Int](42)]]("null")
+    assert_false(d2[])
 
     var d3 = deserialize[TestDefault]('{"a": 10}')
     assert_equal(d3.a, 10)
     assert_equal(d3.b[], 42)
+
+    # A present key still wins over the default.
+    var d4 = deserialize[TestDefault]('{"a": 10, "b": 7}')
+    assert_equal(d4.b[], 7)
 
 
 def date_to_int(s: String) -> Int:

@@ -14,6 +14,8 @@ from emberjson._utf8 import is_valid_utf8
 from std.hashlib.hasher import Hasher
 from std.memory import forget_deinit, unsafe_memcmp
 from std.sys import bit_width_of
+from emberserde.field import Field
+from emberserde.field_meta import FieldMeta
 
 
 comptime non_struct_error = "Cannot deserialize non-struct type"
@@ -98,7 +100,34 @@ def __is_optional[T: AnyType]() -> Bool:
 
 @always_inline
 def __is_default[T: AnyType]() -> Bool:
-    return reflect[T].base_name() == "Default"
+    # `Default[T, d]` is now a spelling of emberserde's `Field[T,
+    # default=d]` (see `emberjson/schema.mojo`), so "may this field be
+    # absent from the wire?" is answered by the field's own metadata
+    # rather than by a base-name check. That keeps a bare
+    # `Field`/`Rename` (no default, non-`Optional` payload) required, the
+    # way it is on the emberserde path.
+    comptime if conforms_to(T, FieldMeta):
+        return downcast[T, FieldMeta].serde_fill_if_missing
+    else:
+        return False
+
+
+# Old-path conformance for emberserde's `Field`, so `Default` keeps
+# working through `deserialize`/`serialize` (`emberjson/schema.mojo`
+# re-spells `Default[T, d]` as `Field[T, default=d]`). Declared *above*
+# `_deserialize_impl` on purpose: an `__extension` that adds a
+# conformance to a type from another package is only visible to
+# `conforms_to` gates that appear after it in the module.
+__extension Field(JsonDeserializable):
+    @staticmethod
+    def from_json[
+        origin: ImmOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: Self) raises:
+        s = {_deserialize_impl[downcast[Self.T, _Base]](p)}
+
+    @staticmethod
+    def deserialize_as_array() -> Bool:
+        return False
 
 
 def __all_dtors_are_trivial[T: AnyType]() -> Bool:

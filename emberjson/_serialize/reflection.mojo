@@ -7,6 +7,7 @@ from std.format._utils import _WriteBufferStack
 from emberjson.teju import write_float
 from emberjson.traits import PrettyPrintable
 from emberjson.utils import write_escaped_string, write_pretty
+from emberserde.field import Field
 
 
 # TODO: When we have parametric traits, we can make this generic over some Writer type
@@ -167,6 +168,18 @@ struct PrettySerializer[
 trait JsonSerializable:
     def write_json(self, mut writer: Some[Serializer]):
         _default_serialize[Self.serialize_as_array()](self, writer)
+
+    @staticmethod
+    def serialize_as_array() -> Bool:
+        return False
+
+
+# Old-path conformance for emberserde's `Field`; see the matching
+# extension in `emberjson/_deserialize/reflection.mojo` for why it has to
+# sit above the `conforms_to(T, JsonSerializable)` gate below.
+__extension Field(JsonSerializable):
+    def write_json(self, mut writer: Some[Serializer]):
+        serialize(self.value, writer)
 
     @staticmethod
     def serialize_as_array() -> Bool:

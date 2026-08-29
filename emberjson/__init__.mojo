@@ -75,6 +75,10 @@ from .schema import (
     MultipleOf,
 )
 
+# `Default` is now emberserde's `Field[T, default=...]`; re-export the
+# upstream names so the wrapper can be spelled either way.
+from emberserde import Defaulted, Field
+
 
 @always_inline
 def parse[
