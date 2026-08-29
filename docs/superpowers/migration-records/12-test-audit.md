@@ -264,3 +264,55 @@ Delete by *behaviour*, not by name. For every proposed deletion:
 The 299 pre-existing tests are the load-bearing evidence that this migration
 preserved behaviour — they were written before the new implementation existed.
 Nothing in this audit touches them.
+
+
+---
+
+# EXECUTION RESULT + CORRECTION TO THIS AUDIT
+
+**Executed:** 444 → 404 tests, 2 files deleted, 1 file merged away.
+
+| step | change |
+|---|---|
+| `test_schema_fields.mojo` deleted, 5 folded into `test_schema.mojo` | −26 |
+| 5 duplicate `Lazy` alias tests dropped from `test_borrow_lazy.mojo` | −5 |
+| 5 confirmed duplicates dropped from `test_format_deserialize.mojo` | −5 |
+| the two facade files merged, 4 dropped, 1 relocated to `test_object.mojo` | −4 |
+
+## This audit over-claimed. Two corrections found while executing:
+
+**1. The `Default` cluster was already folded.** The audit proposed keeping 10
+tests from `test_schema_fields.mojo`; reading `test_default`'s body showed the
+final fix wave had *already* folded present-key-wins, null-raises, both
+`Optional` halves **and** in-struct fill into it (`d1`–`d4`). Only 5 survived.
+
+**2. The audit's core premise does not hold for `Value`/`Object`/`Array`.**
+The premise was: *the pre-existing suite covers this, because the public API now
+routes to `_serde`.* That is true for structs and schema wrappers —
+`test_schema.mojo` and `test_reflection_*.mojo` genuinely call
+`deserialize`/`serialize`. It is **false** for the core JSON types:
+
+- `test_value.mojo` calls `serialize`/`to_string` **zero times**. Its
+  `test_pretty` uses `write_pretty` (the `PrettyPrintable` path).
+- `test_roundtrip.mojo` asserts `String(json) == src` — that is `write_to`
+  (the `Writable` path).
+- On the read side it builds via `Value(parse_string=...)` — the parser
+  directly, not `deserialize[Value]`.
+
+`Writable`, `PrettyPrintable` and `Serializable` are three separate code paths
+on the same types. So the ~16 byte-exact serde-path pins in
+`test_format_serialize.mojo` and the `Value`/`Array`/`Object` cases in
+`test_format_deserialize.mojo` cover something the pre-existing suite never
+touched. **They were kept.** Deleting them on the audit's original reasoning
+would have removed the only coverage of `Value`-through-serde.
+
+Revised verdict: of 143 new tests, **~103 earn their place**, not ~68. The
+excess was real but roughly half the size the audit first claimed.
+
+## Still open (not executed)
+
+- `test_format_serialize.mojo` (24) and `test_format_deserialize.mojo` (15)
+  remain as separate files. Their names say "format", but post-deletion they
+  are really "`Value`/`Object`/`Array` through the serde path" — worth renaming
+  rather than merging, since no existing file owns that topic.
+- `test_borrow_lazy.mojo` (24) stays; `raw_bytes` is genuinely new surface.

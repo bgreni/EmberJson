@@ -218,38 +218,6 @@ def test_raw_bytes_refuses_padded_options() raises:
 # ===========================================================================
 
 
-def test_lazy_string_via_borrowing_deserializer() raises:
-    var wire = String('"hello"')
-    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
-    assert_equal(lz.get(), String("hello"))
-
-
-def test_lazy_int_via_borrowing_deserializer() raises:
-    var wire = String("-42")
-    var lz = from_json_string[LazyInt[ImmutAnyOrigin]](wire)
-    assert_equal(lz.get(), Int64(-42))
-
-
-def test_lazy_uint_via_borrowing_deserializer() raises:
-    var wire = String("18446744073709551615")
-    var lz = from_json_string[LazyUInt[ImmutAnyOrigin]](wire)
-    assert_equal(lz.get(), UInt64(18446744073709551615))
-
-
-def test_lazy_float_via_borrowing_deserializer() raises:
-    var wire = String("3.5e2")
-    var lz = from_json_string[LazyFloat[ImmutAnyOrigin]](wire)
-    assert_equal(lz.get(), Float64(3.5e2))
-
-
-def test_lazy_value_via_borrowing_deserializer() raises:
-    var wire = String('{"a": [1, 2, 3]}')
-    var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
-    var v = lz.get()
-    assert_true(v.is_object())
-    assert_equal(v.object()["a"].array()[1].int(), 2)
-
-
 def test_lazy_string_unsafe_slice_strips_quotes() raises:
     # `unsafe_as_string_slice` returns the RAW (unescaped) bytes between the
     # quotes -- `RawKind.Str` spans include their quotes, so this must strip

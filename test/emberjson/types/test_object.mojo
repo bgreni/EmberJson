@@ -1,7 +1,7 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
-from emberjson import parse, JSON, ParseOptions, StrictOptions
+from emberjson import serialize, parse, JSON, ParseOptions, StrictOptions
 from std.testing import (
     assert_true,
     assert_equal,
@@ -285,6 +285,16 @@ def test_index_duplicate_detection_across_threshold() raises:
         first_key = key
         break
     assert_equal(first_key, "key0")
+
+
+def test_object_serialize_preserves_insertion_order() raises:
+    # `Object.serialize` indexes its backing list rather than iterating it;
+    # this pins that the rewrite kept the order (and the escaping) intact.
+    var o = Object()
+    o["z"] = 1
+    o["a"] = Value('two"quoted')
+    o["m"] = Array(1, Null())
+    assert_equal(serialize(o), '{"z":1,"a":"two\\"quoted","m":[1,null]}')
 
 
 def main() raises:

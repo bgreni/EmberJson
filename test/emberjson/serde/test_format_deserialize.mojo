@@ -55,56 +55,6 @@ struct WithEscapedField(Copyable, Defaultable, Movable):
         self.`a"b` = 0
 
 
-def test_struct_from_wire() raises:
-    var p = from_json_string[Point]('{"x":1,"y":2}')
-    assert_equal(p.x, 1)
-    assert_equal(p.y, 2)
-
-
-def test_missing_field_reports_kind_and_path() raises:
-    # `assert_true(False)` inside the `try` won't compile here: it raises
-    # the untyped `Error`, while `from_json_string` raises the typed
-    # `DeserializationError`, and a single `try` block can't mix raise
-    # types under Mojo's typed-raises inference. Use a sentinel instead
-    # (same idiom as emberserde's own `test_missing_field_raises`): if the
-    # call doesn't raise, `kind` keeps its wrong default and the assertion
-    # below fails.
-    var kind = DerErrorKind.Custom
-    try:
-        _ = from_json_string[Point]('{"x":1}')
-    except e:
-        kind = e.kind
-    assert_equal(String(kind), String("MissingField"))
-
-
-def test_list_from_wire() raises:
-    var xs = from_json_string[List[Int]]("[1,2,3]")
-    assert_equal(len(xs), 3)
-    assert_equal(xs[2], 3)
-
-
-def test_error_path_points_at_nested_field() raises:
-    var path = String("unset")
-    try:
-        _ = from_json_string[Outer]('{"label":"a","inner":{"x":1}}')
-    except e:
-        path = e.path
-    assert_equal(path, String(".inner"))
-
-
-# Reviewer's literal repro (Fix round 1): a plain, unescaped two-character
-# field name binds correctly. Passes both before and after the escaped-key
-# fix below — `expect_field_name`'s unescaped fast path was never the
-# broken part — but the repro is reproduced verbatim so it stands as a
-# permanent regression guard.
-def test_two_char_field_name_binds() raises:
-    var v = from_json_string[AB]('{"ab":1}')
-    assert_equal(v.ab, 1)
-
-
-# Same struct, same field, an ordinary key: guards the unescaped fast path
-# in `expect_field_name` (the `_next_backslash` scan finding no backslash)
-# stays correct as the escaped path (below) is added alongside it.
 def test_ordinary_unescaped_key_still_binds() raises:
     var v = from_json_string[AB]('{"ab":42}')
     assert_equal(v.ab, 42)
