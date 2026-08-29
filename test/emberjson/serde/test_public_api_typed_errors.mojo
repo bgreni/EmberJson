@@ -178,9 +178,9 @@ def test_deserialize_duplicate_field_reports_duplicate_field_kind() raises:
 
 
 def test_deserialize_ignores_unknown_field_by_default() raises:
-    # BEHAVIOR CHANGE (Task 8). The superseded reflection walker
-    # (`emberjson/_deserialize/reflection.mojo`) raised
-    # `"Unexpected field: z"` for *any* wire key it could not bind. The
+    # BEHAVIOR CHANGE (see CHANGELOG.md). EmberJson's superseded
+    # hand-written reflection walker raised `"Unexpected field: z"` for
+    # *any* wire key it could not bind. The
     # emberserde framework `deserialize` now rides
     # (`expect_struct` in `emberserde/deserialize/__init__.mojo`) skips an
     # unbound key instead, and only rejects it when the target type opts in

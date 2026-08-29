@@ -3,16 +3,17 @@ from ._serde.deserializer import EmberJsonDeserializer
 from .value import Value
 from std.hashlib import Hasher
 
-# See `value.mojo` for why these are aliased.
+# The free functions `serialize`/`deserialize` are aliased below because
+# `Lazy` declares methods of the same name.
 from emberserde.deserialize import (
     BorrowingDeserializer,
-    Deserializer as SerdeDeserializer,
+    Deserializer,
     Deserializable,
     RawKind,
     deserialize as _serde_deserialize,
 )
 from emberserde.serialize import (
-    Serializer as SerdeSerializer,
+    Serializer,
     Serializable,
     serialize as _serde_serialize,
 )
@@ -75,7 +76,7 @@ struct Lazy[
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         comptime assert conforms_to(
             type_of(d), BorrowingDeserializer
@@ -88,7 +89,7 @@ struct Lazy[
         except e:
             raise SerializationError(String(e), SerErrorKind.Custom)
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         # Re-encodes via `get()`, not a raw echo -- see the struct
         # docstring for why, and for what that costs a caller who wanted
         # the original bytes back.

@@ -14,7 +14,17 @@ from ._deserialize import (
     minify,
     StrictOptions,
 )
-from ._serde import from_json_string, to_json_string
+
+# Imported under private names ON PURPOSE. `emberjson._serde` is the format
+# layer, not part of the public surface: re-exporting `from_json_string` /
+# `to_json_string` here gave callers a second way to deserialize with
+# DIFFERENT semantics from `deserialize` below (which validates UTF-8 first,
+# where the format layer does not). Reach for `emberjson._serde` explicitly
+# if you really want the unvalidated entry point.
+from ._serde import (
+    from_json_string as _from_json_string,
+    to_json_string as _to_json_string,
+)
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
 from ._pointer import PointerIndex
@@ -210,12 +220,14 @@ def to_string[
 
 
 def deserialize[
-    T: Deinitable & Movable
+    T: Deinitable & Movable, options: ParseOptions = ParseOptions()
 ](s: String, out res: T) raises DeserializationError:
     """Deserializes a JSON string into `T` via reflection.
 
     Parameters:
         T: The type to deserialize into.
+        options: The parsing options to be applied, exactly as on `parse`
+            (`ignore_unicode`, `strict_mode`, `validate_utf8`).
 
     Args:
         s: The input JSON string.
@@ -227,18 +239,22 @@ def deserialize[
         `DeserializationError` if `s` is not valid UTF-8, is not valid
         JSON, or does not match the shape of `T`.
     """
-    if not is_valid_utf8(StringSlice(s)):
-        raise DeserializationError(
-            "Invalid UTF-8 in input", DerErrorKind.InvalidValue
-        )
-    res = from_json_string[T](s)
+    comptime if options.validate_utf8:
+        if not is_valid_utf8(StringSlice(s)):
+            raise DeserializationError(
+                "Invalid UTF-8 in input", DerErrorKind.InvalidValue
+            )
+    res = _from_json_string[T, options](s)
 
 
-def try_deserialize[T: Deinitable & Movable](s: String) -> Optional[T]:
+def try_deserialize[
+    T: Deinitable & Movable, options: ParseOptions = ParseOptions()
+](s: String) -> Optional[T]:
     """Deserializes a JSON string into `T`, or `None` on any failure.
 
     Parameters:
         T: The type to deserialize into.
+        options: The parsing options to be applied, exactly as on `parse`.
 
     Args:
         s: The input JSON string.
@@ -248,7 +264,7 @@ def try_deserialize[T: Deinitable & Movable](s: String) -> Optional[T]:
         deserialized into `T`.
     """
     try:
-        return deserialize[T](s)
+        return deserialize[T, options](s)
     except:
         return {}
 
@@ -283,4 +299,4 @@ def serialize[
     Raises:
         `SerializationError` if `value` cannot be serialized.
     """
-    output = to_json_string[pretty=pretty](value)
+    output = _to_json_string[pretty=pretty](value)

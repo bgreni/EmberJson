@@ -20,9 +20,11 @@ from std.format._utils import _WriteBufferStack
 #     future caller can hand it EmberJson's `_WriteBufferStack` and keep that
 #     writer's speed;
 #   - comptime-branching on `pretty` to match the indentation behavior of
-#     `emberjson/_serialize/reflection.mojo`'s `PrettySerializer` (4-space
-#     indent, newline after every opening bracket/brace, indented closing
-#     bracket/brace).
+#     `emberjson.utils.write_pretty`, the hand-written pretty printer
+#     `Value`/`Object`/`Array` still use (4-space indent, newline after
+#     every opening bracket/brace, indented closing bracket/brace). The two
+#     are pinned byte-for-byte against each other by
+#     `test/emberjson/serde/test_format_serialize.mojo`.
 #
 # `serialize_seq` and `serialize_struct` are intentionally NOT overridden —
 # per the trait's comments they are framework drivers (size hints, skip/
@@ -67,10 +69,9 @@ struct EmberJsonSeqSer[
             # separating newline. Skipping it here (but still indenting to
             # `depth - 1`, matching this container's own opening-bracket
             # column) turns `"[\n\n]"` into `"[\n]"` — matching
-            # `emberjson/_serialize/reflection.mojo`'s `PrettySerializer`,
-            # whose `write_item` (not `end_*`) owns the inter-element/
-            # trailing newline and so never emits one when there were no
-            # items.
+            # `emberjson.utils.write_pretty`, whose per-item writer (not
+            # its closing brace) owns the inter-element/trailing newline
+            # and so never emits one when there were no items.
             if not self.first:
                 self.out[].write("\n")
             _write_indent(self.out[], self.depth - 1)
@@ -266,12 +267,14 @@ struct EmberJsonSerializer[
     # about presence, which is exactly the trait's default.
 
     def serialize_bytes(mut self, v: Span[Byte, _]) raises SerializationError:
-        self.out[].write("[")
+        # A byte span rides the wire as a JSON array of numbers, so drive
+        # the ordinary sequence machinery instead of hand-writing brackets:
+        # every other container here honors `pretty`, and hand-writing made
+        # this the one that silently did not.
+        var st = self.begin_seq(len(v))
         for i in range(len(v)):
-            if i != 0:
-                self.out[].write(",")
-            self.out[].write(v[i])
-        self.out[].write("]")
+            st.serialize_element(v[i])
+        st.end()
 
     def begin_seq(
         mut self, size_hint: Optional[Int] = None
@@ -349,10 +352,9 @@ def to_json_string[
     var buf = String()
     # Route writes through a stack-buffered writer instead of hitting the
     # destination `String` on every single token (`{`, `"`, `:`, `,`, ...).
-    # Matches the pattern used by `emberjson.utils.write`/`write_pretty` and
-    # the pre-migration `_serialize/reflection.mojo`'s `serialize` free
-    # function. Must `flush()` before returning `buf` or the trailing
-    # buffered bytes are silently dropped.
+    # Matches the pattern used by `emberjson.utils.write`/`write_pretty`.
+    # Must `flush()` before returning `buf` or the trailing buffered bytes
+    # are silently dropped.
     var w = _WriteBufferStack(buf)
     var s = EmberJsonSerializer[type_of(w), origin_of(w), pretty](
         out=Pointer(to=w), depth=0

@@ -20,14 +20,13 @@ from std.python import PythonObject
 from ._pointer import resolve_pointer, PointerIndex
 from std.builtin.rebind import rebind_var
 
-# emberserde's format-agnostic traits. The `SerdeSerializer`/
-# `SerdeDeserializer` aliases are a leftover of the period when EmberJson
-# had `Serializer`/`Deserializer` traits of its own to disambiguate from;
-# they are kept because `serialize`/`deserialize` are also method names on
-# every type here.
-from emberserde.serialize import Serializer as SerdeSerializer, Serializable
+# emberserde's format-agnostic traits. EmberJson no longer owns a trait
+# system of its own -- `Value`/`Object`/`Array`/`Null` are ordinary
+# `Serializable`/`Deserializable` implementations, and the JSON *format*
+# that drives them lives in `emberjson/_serde/`.
+from emberserde.serialize import Serializer, Serializable
 from emberserde.deserialize import (
-    Deserializer as SerdeDeserializer,
+    Deserializer,
     Deserializable,
     SelfDescribingDeserializer,
 )
@@ -73,7 +72,7 @@ struct Null(JsonValue, TrivialRegisterPassable):
     def to_python_object(self) raises -> PythonObject:
         return {}
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         s.serialize_none()
 
     # `Null` has no wire shape of its own (no `expect_none` exists on
@@ -83,7 +82,7 @@ struct Null(JsonValue, TrivialRegisterPassable):
     # self-describing format in this crate declares `comptime Value = Value`).
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         comptime assert conforms_to(
             type_of(d), SelfDescribingDeserializer
@@ -483,7 +482,7 @@ struct Value(JsonValue, Sized):
         else:
             self.write_to(writer)
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         if self.is_int():
             s.serialize_number(self.int())
         elif self.is_uint():
@@ -513,7 +512,7 @@ struct Value(JsonValue, Sized):
     # and `emberserde/test/_json_format.mojo`'s `JsonValue`.
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         comptime assert conforms_to(
             type_of(d), SelfDescribingDeserializer

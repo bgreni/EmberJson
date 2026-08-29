@@ -4,15 +4,16 @@ from emberjson import Value, deserialize
 from emberserde import Defaulted, Field
 from emberserde.utils import Base as _Base
 
-# Aliased for the same reason as in `value.mojo`/`object.mojo`.
+# The free functions `serialize`/`deserialize` are aliased below because
+# every wrapper in this module declares methods of the same name.
 from emberserde.serialize import (
     Serializable,
-    Serializer as SerdeSerializer,
+    Serializer,
     serialize as serde_serialize,
 )
 from emberserde.deserialize import (
     Deserializable,
-    Deserializer as SerdeDeserializer,
+    Deserializer,
     SelfDescribingDeserializer,
     deserialize as serde_deserialize,
 )
@@ -50,7 +51,7 @@ struct AllOf[T: _Base, *validators: Validator](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # See `_validation_failed` for why the constructor does the
         # validating and why a rejection is `InvalidValue`.
@@ -67,7 +68,7 @@ struct AllOf[T: _Base, *validators: Validator](
             comptime assert VType.Type == Self.T
             VType.validate(rebind[VType.Type](value))
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -122,7 +123,7 @@ struct Validated[
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # See `_validation_failed` for why the constructor does the
         # validating and why a rejection is `InvalidValue`.
@@ -137,7 +138,7 @@ struct Validated[
         if not Self.validator(value):
             raise Error(Self.err_msg)
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -370,7 +371,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # See `_validation_failed` for why the constructor does the
         # validating and why a rejection is `InvalidValue`.
@@ -401,7 +402,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
         if not matched:
             raise Error("Value didn't match any validators")
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -430,7 +431,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # See `_validation_failed` for why the constructor does the
         # validating and why a rejection is `InvalidValue`.
@@ -455,7 +456,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
         if not matched:
             raise Error("Value not in options")
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -484,7 +485,7 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # See `_validation_failed` for why the constructor does the
         # validating and why a rejection is `InvalidValue`.
@@ -509,7 +510,7 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
             if matched:
                 raise Error("Value matched a rejected validator")
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -561,7 +562,7 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # See `_validation_failed` for why the constructor does the
         # validating and why a rejection is `InvalidValue`.
@@ -578,7 +579,7 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
                 return
         raise Error("Value not in options")
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -602,14 +603,14 @@ struct Secret[T: _Base](Deserializable, Serializable):
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         return {serde_deserialize[Self.T](d)}
 
     # Asymmetric on purpose: the payload is read from the wire as itself
     # and written back redacted. `serialize_string` (not a raw write) so
     # the mask goes through the format's own string encoding.
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         s.serialize_string("********")
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -638,7 +639,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         var value = serde_deserialize[Self.T](d)
 
@@ -651,7 +652,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
             value = max_val^
         return {value^}
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.T:
@@ -679,7 +680,7 @@ struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # `func` is typed on EmberJson's `Value`, so this only works over a
         # format that can hand back a whole dynamic value with no type
@@ -694,7 +695,7 @@ struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
         except e:
             raise _validation_failed(e)
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.Target:
@@ -837,11 +838,11 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         return {Self.func(serde_deserialize[Self.InT](d))}
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.OutT:
@@ -902,7 +903,7 @@ struct CrossFieldValidator[
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         # Same shape as the value validators, but the thing being checked
         # is the whole parent struct rather than one field's payload.
@@ -922,7 +923,7 @@ struct CrossFieldValidator[
             rebind[r.field[Self.F2].T](r.field_ref[f2](value)),
         )
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
     def __getitem__(self) -> ref[self.value] Self.Type:

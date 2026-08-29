@@ -10,9 +10,8 @@ from std.os import abort
 from std.hashlib.hasher import Hasher
 from std.hashlib import hash
 
-# See `value.mojo` for why these are aliased.
-from emberserde.serialize import Serializer as SerdeSerializer
-from emberserde.deserialize import Deserializer as SerdeDeserializer
+from emberserde.serialize import Serializer
+from emberserde.deserialize import Deserializer
 from emberserde.error import SerializationError, DeserializationError
 
 
@@ -392,16 +391,21 @@ struct Object(JsonValue, Sized):
     def items(ref self) -> _ObjectIter[origin_of(self)]:
         return _ObjectIter(Pointer(to=self))
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         var st = s.begin_map(len(self._data))
-        for item in self._data:
+        # Index rather than `for item in self._data`. A generic `for`
+        # binding carries an owned per-element temporary that blocks
+        # inlining -- measured at ~1.6x on exactly this pattern -- and
+        # `Array.serialize` already indexes for the same reason.
+        for i in range(len(self._data)):
+            ref item = self._data[i]
             st.serialize_key(item.key)
             st.serialize_value(item.value)
         st.end()
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         var obj = Self()
         var st = d.begin_map()

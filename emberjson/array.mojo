@@ -6,9 +6,8 @@ from ._utf8 import is_valid_utf8
 from ._deserialize import Parser, ParseOptions
 from std.python import PythonObject, Python
 
-# See `value.mojo` for why these are aliased.
-from emberserde.serialize import Serializer as SerdeSerializer
-from emberserde.deserialize import Deserializer as SerdeDeserializer
+from emberserde.serialize import Serializer
+from emberserde.deserialize import Deserializer
 from emberserde.error import SerializationError, DeserializationError
 
 
@@ -153,7 +152,7 @@ struct Array(JsonValue, Sized):
                 writer.write(", ")
         writer.write(")")
 
-    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+    def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         var st = s.begin_seq(len(self._data))
         for i in range(len(self._data)):
             st.serialize_element(self._data[i])
@@ -161,7 +160,7 @@ struct Array(JsonValue, Sized):
 
     @staticmethod
     def deserialize(
-        mut d: Some[SerdeDeserializer],
+        mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
         var arr = Self()
         var st = d.begin_seq()

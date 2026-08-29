@@ -146,14 +146,15 @@ struct EmberJsonStructDe[
                 raise Error("expected an object key string")
             var raw = self.p[].expect_string_bytes()
             # `raw` keeps its surrounding quotes (see `expect_string_bytes`'s
-            # contract); strip them to get the key body. Field-name matching
-            # must agree with the old `emberjson/_deserialize/reflection.
-            # mojo`'s `_field_key_eq`: an escaped key (`\"`, `\uXXXX`, ...)
-            # has to decode before comparison or it silently fails to match
-            # any declared field (reported, misleadingly, as "missing
-            # field"). `_next_backslash` keeps the common unescaped case a
-            # cheap SIMD scan + direct `String` build; `copy_to_string` only
-            # runs on the rare escaped path.
+            # contract); strip them to get the key body. An escaped key
+            # (`\"`, `\uXXXX`, ...) has to decode before comparison or it
+            # silently fails to match any declared field (reported,
+            # misleadingly, as "missing field") -- pinned by
+            # `test_escaped_field_name_binds` in
+            # `test/emberjson/serde/test_format_deserialize.mojo`.
+            # `_next_backslash` keeps the common unescaped case a cheap
+            # SIMD scan + direct `String` build; `copy_to_string` only runs
+            # on the rare escaped path.
             var kb = Span(
                 unsafe_ptr=raw.unsafe_ptr().unsafe_offset(1),
                 length=len(raw) - 2,
@@ -445,7 +446,33 @@ struct EmberJsonDeserializer[
             raise _invalid(String(e))
 
 
-def from_json_string[T: AnyType](s: String) raises DeserializationError -> T:
-    var p = Parser(s)
+def from_json_string[
+    T: AnyType, options: ParseOptions = ParseOptions()
+](s: String) raises DeserializationError -> T:
+    """Deserializes `s` into `T` through emberserde's framework, driven by
+    `EmberJsonDeserializer` over EmberJson's hand-written `Parser`.
+
+    Parameters:
+        T: The type to deserialize into.
+        options: The parsing options handed to the underlying `Parser`.
+            This is reflection's `ParseOptions` channel -- the deserializer
+            is already parameterized on them, so `ignore_unicode`,
+            `strict_mode` and friends reach the parser from here.
+
+    Args:
+        s: The input JSON string.
+
+    Returns:
+        The deserialized value.
+
+    Raises:
+        `DeserializationError` if `s` is not valid JSON or does not match
+        the shape of `T`.
+    """
+    # `_assume_padded` options are unconstructible from a plain `String`
+    # (`Parser.__init__` asserts on it), and `validate_utf8` is the caller's
+    # to apply -- `emberjson.deserialize` does, this private entry point
+    # does not.
+    var p = Parser[options=options](s)
     var d = EmberJsonDeserializer(p=Pointer(to=p))
     return deserialize[T](d)
