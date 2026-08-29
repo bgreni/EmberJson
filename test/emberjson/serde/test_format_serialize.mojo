@@ -65,6 +65,26 @@ def test_empty_object_serializes_compact() raises:
     assert_equal(to_json_string(Object()), String("{}"))
 
 
+def test_non_string_dict_key_is_quoted() raises:
+    # Non-`String` map keys still go through `EmberJsonMapSer.serialize_key`'s
+    # generic scratch-buffer branch (Task 10 only fast-pathed `String`),
+    # exercising the `else` side of that comptime split.
+    var d = Dict[Int, Int]()
+    d[1] = 2
+    assert_equal(to_json_string(d), String('{"1":2}'))
+
+
+def test_object_key_needing_escape_is_escaped() raises:
+    # `EmberJsonMapSer.serialize_key` (Task 10) fast-paths `String` keys
+    # straight into `write_escaped_string`, bypassing the generic
+    # scratch-buffer path used for non-string keys — this pins that the
+    # fast path still escapes, since every real `Object` key hits it.
+    var o = Object()
+    o['a"b'] = Value(1)
+    o["c\\d"] = Value(2)
+    assert_equal(to_json_string(o), String('{"a\\"b":1,"c\\\\d":2}'))
+
+
 def test_value_serializes_every_scalar_arm() raises:
     assert_equal(to_json_string(Value(Int64(-7))), String("-7"))
     assert_equal(to_json_string(Value(UInt64(7))), String("7"))
@@ -192,6 +212,58 @@ def test_pretty_nested_empty_array() raises:
     assert_equal(
         to_json_string[pretty=True](outer), String("[\n    [\n    ]\n]")
     )
+
+
+# ===========================================================================
+# Output-buffering regression (Task 10): `to_json_string` used to write
+# every token straight into the destination `String` with no batching,
+# which was correct but ~3-5x slower than routing through
+# `std.format._utils._WriteBufferStack` (see `emberjson.utils.write`'s
+# equivalent pattern). Restoring the buffering risks silent truncation if
+# the final `flush()` is dropped or misplaced, so this exercises an output
+# large enough (> the buffer's default 4096-byte capacity) to force several
+# internal overflow-triggered flushes plus the terminal one, and checks the
+# result byte-for-byte against an independently constructed reference
+# string built with plain `String` concatenation (no `_WriteBufferStack`
+# involved).
+# ===========================================================================
+
+
+def test_large_array_survives_buffer_overflow() raises:
+    comptime N = 2000
+    var xs = List[Int]()
+    for i in range(N):
+        xs.append(i)
+
+    var expected = String("[")
+    for i in range(N):
+        if i != 0:
+            expected += ","
+        expected += String(i)
+    expected += "]"
+
+    var got = to_json_string(xs)
+    assert_equal(got.byte_length(), expected.byte_length())
+    assert_equal(got, expected)
+
+
+def test_large_pretty_array_survives_buffer_overflow() raises:
+    comptime N = 500
+    var xs = List[Int]()
+    for i in range(N):
+        xs.append(i)
+
+    var expected = String("[\n")
+    for i in range(N):
+        expected += "    " + String(i)
+        if i != N - 1:
+            expected += ","
+        expected += "\n"
+    expected += "]"
+
+    var got = to_json_string[pretty=True](xs)
+    assert_equal(got.byte_length(), expected.byte_length())
+    assert_equal(got, expected)
 
 
 def main() raises:

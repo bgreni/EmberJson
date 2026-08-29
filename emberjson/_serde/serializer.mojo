@@ -10,6 +10,7 @@ from emberserde.serialize import (
 from emberserde.error import SerializationError
 from emberjson.teju import write_float
 from emberjson.utils import write_escaped_string
+from std.format._utils import _WriteBufferStack
 
 # JSON `Serializer` format over an arbitrary `Writer`, ported to sit on top
 # of emberserde's format-agnostic traits (`emberserde/emberserde/serialize/
@@ -95,20 +96,29 @@ struct EmberJsonMapSer[
         comptime if Self.pretty:
             _write_indent(self.out[], self.depth)
 
-        # Stringify non-string keys (serde_json behavior, mirroring the toy
-        # format): render the key into a scratch buffer, then wrap in quotes
-        # unless it already produced a quoted JSON string.
-        var keybuf = String()
-        var sub = EmberJsonSerializer[String, origin_of(keybuf), Self.pretty](
-            out=Pointer(to=keybuf), depth=self.depth
-        )
-        serialize(k, sub)
-        if keybuf.byte_length() > 0 and Int(keybuf.as_bytes()[0]) == ord('"'):
-            self.out[].write(keybuf)
+        # Fast path: `String` keys are by far the common case (every
+        # `Object`/`Dict[String, V]` key is one) — write straight into the
+        # buffered writer via `write_escaped_string`, skipping the
+        # scratch-`String` round trip the generic path below needs.
+        comptime if type_of(k) == String:
+            write_escaped_string(rebind[String](k), self.out[])
         else:
-            self.out[].write('"')
-            self.out[].write(keybuf)
-            self.out[].write('"')
+            # Stringify non-string keys (serde_json behavior, mirroring the
+            # toy format): render the key into a scratch buffer, then wrap
+            # in quotes unless it already produced a quoted JSON string.
+            var keybuf = String()
+            var sub = EmberJsonSerializer[
+                String, origin_of(keybuf), Self.pretty
+            ](out=Pointer(to=keybuf), depth=self.depth)
+            serialize(k, sub)
+            if keybuf.byte_length() > 0 and Int(keybuf.as_bytes()[0]) == ord(
+                '"'
+            ):
+                self.out[].write(keybuf)
+            else:
+                self.out[].write('"')
+                self.out[].write(keybuf)
+                self.out[].write('"')
 
     def serialize_value(mut self, v: Some[AnyType]) raises SerializationError:
         self.out[].write(":")
@@ -337,8 +347,16 @@ def to_json_string[
     T: AnyType, //, pretty: Bool = False
 ](value: T) raises SerializationError -> String:
     var buf = String()
-    var s = EmberJsonSerializer[String, origin_of(buf), pretty](
-        out=Pointer(to=buf), depth=0
+    # Route writes through a stack-buffered writer instead of hitting the
+    # destination `String` on every single token (`{`, `"`, `:`, `,`, ...).
+    # Matches the pattern used by `emberjson.utils.write`/`write_pretty` and
+    # the pre-migration `_serialize/reflection.mojo`'s `serialize` free
+    # function. Must `flush()` before returning `buf` or the trailing
+    # buffered bytes are silently dropped.
+    var w = _WriteBufferStack(buf)
+    var s = EmberJsonSerializer[type_of(w), origin_of(w), pretty](
+        out=Pointer(to=w), depth=0
     )
     serialize(value, s)
+    w.flush()
     return buf^
