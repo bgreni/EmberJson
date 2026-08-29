@@ -201,29 +201,35 @@ They are the format layer (`emberjson._serde`) and, unlike `deserialize`,
 re-exported from `emberjson`; import them from `emberjson._serde`
 explicitly if you want the unvalidated entry point.
 
-### Known regression
+### Fixed during the migration
 
-**`SIMD[DType.bool, N]` no longer deserializes from a JSON boolean.** The
-behaviour is cleanly inverted:
+**`SIMD[DType.bool, N]` briefly stopped round-tripping as a JSON boolean.**
+The deleted reflection walker had a non-numeric-dtype branch calling
+`expect_bool`; emberserde's `SIMD` impl had no such branch and always went
+through `expect_number`, so `true` was rejected and `1` silently accepted —
+and on the serialize side a boolean-dtype scalar rendered as `True`, which is
+not valid JSON.
 
-| input | before | now |
-|---|---|---|
-| `deserialize[SIMD[DType.bool, 1]]("true")` | `True` | raises |
-| `deserialize[SIMD[DType.bool, 1]]("1")` | raises | `True` |
-| `deserialize[SIMD[DType.bool, 2]]("[true,false]")` | `[True, False]` | raises |
-| `deserialize[SIMD[DType.bool, 2]]("[1,0]")` | raises | `[True, False]` |
+Fixed upstream in emberserde by mirroring the deleted branch on both sides
+(`emberserde/deserialize/impls.mojo`, `emberserde/serialize/impls.mojo`):
 
-Plain `Bool` is unaffected — `deserialize[Bool]("true")` still works.
+```mojo
+comptime if Self.dtype == DType.bool:
+    ...expect_bool() / serialize_bool()...
+else:
+    ...expect_number() / serialize_number()...
+```
 
-The deleted reflection walker had a non-numeric-dtype branch that called
-`expect_bool`; emberserde's `SIMD` impl always calls `expect_number`. **The
-fix belongs upstream**, at `emberserde/deserialize/impls.mojo:32` — one
-`comptime if Self.dtype is DType.bool: return d.expect_bool()` mirrors the
-deleted branch.
+`SIMD[DType.bool, N]` now behaves as it did before the migration, and the
+serialize side is corrected too — it previously emitted `True` rather than
+`true`, which no format with a lowercase boolean literal could parse back.
+Plain `Bool` was never affected.
 
-Pinned by `test_simd_bool_reads_a_number_not_a_json_boolean`
-(`test/emberjson/reflection/test_reflection_deserialize.mojo:337`), which
-fails loudly in either direction so the gap cannot close silently.
+Covered by `test_simd_bool_reads_a_json_boolean` and
+`test_simd_bool_round_trips_through_json`
+(`test/emberjson/reflection/test_reflection_deserialize.mojo`), plus
+`test_simd_bool_reads_a_boolean` / `test_simd_bool_rejects_a_number` /
+`test_simd_bool_writes_a_boolean` in emberserde's own suite.
 
 ### Performance
 

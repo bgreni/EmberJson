@@ -9,7 +9,7 @@ from std.testing import (
 # Ported in Task 8 from the deleted `Parser`-driven reflection walker to
 # the public (emberserde-backed) entry points. Same inputs, same
 # expectations, except where called out below.
-from emberjson import deserialize, try_deserialize
+from emberjson import deserialize, try_deserialize, serialize
 from emberserde import DenyUnknownFields
 from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
@@ -24,6 +24,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
     var o: Optional[Int]
     var o2: Optional[Int]
     var b: Bool
+    var bs: SIMD[DType.bool, 1]
     var li: List[Int]
     var tup: Tuple[Int, Int, Int]
     var ina: StdArray[Float64, 3]
@@ -47,6 +48,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
         self.o = None
         self.o2 = None
         self.b = False
+        self.bs = SIMD[DType.bool, 1](False)
         self.li = []
         self.tup = (0, 0, 0)
         self.ina = [0.0, 0.0, 0.0]
@@ -74,6 +76,7 @@ def test_deserialize() raises:
     "o": null,
     "o2": 1234,
     "b": true,
+    "bs": true,
     "li": [1, 2, 3],
     "d": {"some key": 12345},
     "il": 23,
@@ -98,6 +101,7 @@ def test_deserialize() raises:
     assert_false(foo.o)
     assert_equal(foo.o2.value(), 1234)
     assert_equal(foo.b, True)
+    assert_equal(foo.bs, SIMD[DType.bool, 1](True))
     assert_equal(foo.li, [1, 2, 3])
     var d = {"some key": 12345}
     assert_equal(String(foo.d), String(d))
@@ -144,6 +148,7 @@ def test_ctime_deserialize() raises:
     "o": null,
     "o2": 1234,
     "b": true,
+    "bs": true,
     "li": [1, 2, 3],
     "d": {"some key": 12345},
     "il": 23,
@@ -248,6 +253,7 @@ def _deserialize_with_extras() raises -> Foo[23, 234.23]:
     "o": null,
     "o2": 1234,
     "b": true,
+    "bs": true,
     "li": [1, 2, 3],
     "extra_array": [1, 2, 3, {"nested": "keys"}],
     "d": {"some key": 12345},
@@ -317,30 +323,28 @@ def test_long_ints() raises:
     assert_equal(vals.u256, Scalar[DType.uint256].MAX)
 
 
-# ===========================================================================
-# REGRESSION PIN (Task 8). `Foo` used to carry a `bs: SIMD[DType.bool, 1]`
-# field read from the wire token `true`: the deleted walker's
-# `__extension SIMD(JsonDeserializable)` had a non-numeric-dtype branch
-# (`Scalar[dtype](Int(p.expect_bool()))`) for exactly that. emberserde's
-# `SIMD.deserialize`
-# (`emberserde/emberserde/deserialize/impls.mojo:32-45`) has no such
-# branch -- it always goes through `expect_number` -- so a boolean-dtype
-# SIMD now reads a JSON *number* and rejects a JSON *boolean*.
-#
-# The field is gone from `Foo` because there is no way to keep it passing;
-# this pins the actual behavior instead, so the day emberserde grows the
-# branch this test fails loudly rather than the gap staying invisible.
-# `Bool` itself is unaffected -- only `SIMD[DType.bool, N]`.
-# ===========================================================================
+# `DType.bool` is the one dtype that is not a number on the wire. The legacy
+# walker had a non-numeric-dtype branch for it; the emberserde port initially
+# lost that branch, so a boolean-dtype SIMD rejected `true` and silently
+# accepted `1`. Restored in `emberserde/deserialize/impls.mojo` (and its
+# serialize counterpart) -- these pin both halves.
 
 
-def test_simd_bool_reads_a_number_not_a_json_boolean() raises:
-    assert_false(Bool(try_deserialize[SIMD[DType.bool, 1]]("true")))
-    var from_number = deserialize[SIMD[DType.bool, 1]]("1")
-    assert_true(Bool(from_number))
+def test_simd_bool_reads_a_json_boolean() raises:
+    assert_true(Bool(deserialize[SIMD[DType.bool, 1]]("true")))
+    assert_false(Bool(deserialize[SIMD[DType.bool, 1]]("false")))
 
-    # The plain `Bool` path still reads `true`, as it always did.
+    # ...and a JSON *number* is no longer silently accepted for it.
+    assert_false(Bool(try_deserialize[SIMD[DType.bool, 1]]("1")))
+
+    # The plain `Bool` path is unchanged.
     assert_true(deserialize[Bool]("true"))
+
+
+def test_simd_bool_round_trips_through_json() raises:
+    var v = SIMD[DType.bool, 1](True)
+    assert_equal(serialize(v), String("true"))
+    assert_equal(deserialize[SIMD[DType.bool, 1]](serialize(v)), v)
 
 
 def main() raises:
