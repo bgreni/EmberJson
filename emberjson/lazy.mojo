@@ -4,22 +4,15 @@ from ._deserialize.reflection import (
     _deserialize_impl,
 )
 from ._deserialize.parser import Parser, ParseOptions
-from ._serialize import JsonSerializable, Serializer
 from .value import Value
 from std.hashlib import Hasher
 from std.builtin.rebind import downcast
 
-# emberserde's format-agnostic traits, aliased to avoid colliding with the
-# names of EmberJson's own (pre-existing) `Serializer`/`Deserializer` traits
-# imported above, which `write_json`/`from_json` below still serve -- see
-# `value.mojo`: `Lazy` keeps direct conformance to the old
-# `JsonSerializable`/`JsonDeserializable` traits (EmberJson's old reflection
-# path in `emberjson/_deserialize/reflection.mojo`, plus existing callers --
-# `test/emberjson/test_lazy.mojo`, `test_mixed_lazy.mojo`, `bench.mojo` --
-# still route through `emberjson.deserialize`/`emberjson.serialize`, which
-# are that old path) alongside the new `Deserializable`/`Serializable` this
-# task adds, so both systems work side by side until Task 8 retires the old
-# one.
+# emberserde's `Deserializer` is aliased to avoid colliding with the name
+# of EmberJson's own (pre-existing) `Deserializer` trait, which `from_json`
+# below still serves: `Lazy` keeps direct conformance to the old
+# `JsonDeserializable` trait alongside the new `Deserializable` until the
+# deserialize half of the old layer retires too.
 from emberserde.deserialize import (
     BorrowingDeserializer,
     Deserializer as SerdeDeserializer,
@@ -98,7 +91,6 @@ struct Lazy[
     Deserializable,
     Hashable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     TrivialRegisterPassable,
 ):
@@ -111,21 +103,16 @@ struct Lazy[
     `get()` always re-parses it through the old `Parser`, regardless of
     which path did the capturing.
 
-    `write_json` (old) and `serialize` (new) provably DIVERGE, and callers
-    choosing between them must know this:
-
-    - `write_json` echoes the captured span verbatim -- byte-identical to
-      the original wire text, whitespace and all.
-    - `serialize` has no such option: emberserde's `Serializer` trait grew
-      no raw-passthrough hook (only `BorrowingDeserializer` did, as
-      `raw_bytes`, which is what this task added), so it materializes
-      through `get()` (the span is already grammar-validated at capture
-      time) and re-serializes that value through the new pipeline. That
-      re-encoding is only semantically equivalent, not byte-identical:
-      whitespace is normalized to compact form, floats lose trailing
-      zeros/exponent spelling, object key order can change, etc. See
-      `test_write_json_and_serialize_diverge` in
-      `test/emberjson/serde/test_borrow_lazy.mojo` for a pinned example.
+    `serialize` does NOT echo the captured span verbatim. emberserde's
+    `Serializer` trait has no raw-passthrough hook (only
+    `BorrowingDeserializer` does, as `raw_bytes`), so it materializes
+    through `get()` (the span is already grammar-validated at capture
+    time) and re-serializes that value through the pipeline. That
+    re-encoding is only semantically equivalent to the source wire text,
+    not byte-identical: whitespace is normalized to compact form, floats
+    lose trailing zeros/exponent spelling, object key order can change,
+    etc. See `test_serialize_reencodes_rather_than_echoing` in
+    `test/emberjson/serde/test_borrow_lazy.mojo` for a pinned example.
 
     `get()` failing (the captured span parses as the right *shape* --
     `kind` validates only that much -- but not as a valid `T`, e.g. a
@@ -155,9 +142,6 @@ struct Lazy[
         ), "Lazy requires a borrowing deserializer"
         return Self(rebind[Span[Byte, Self.origin]](d.raw_bytes[Self.kind]()))
 
-    def write_json(self, mut writer: Some[Serializer]):
-        writer.write(StringSlice(unsafe_from_utf8=self._data))
-
     def _checked_get(self) raises SerializationError -> Self.T:
         try:
             return self.get()
@@ -166,8 +150,8 @@ struct Lazy[
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         # Re-encodes via `get()`, not a raw echo -- see the struct
-        # docstring's "provably DIVERGE" section for why and what that
-        # means for callers choosing between this and `write_json`.
+        # docstring for why, and for what that costs a caller who wanted
+        # the original bytes back.
         _serde_serialize(self._checked_get(), s)
 
     def get(self) raises -> Self.T:

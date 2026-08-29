@@ -4,13 +4,11 @@ from .traits import JsonValue, PrettyPrintable
 from .utils import PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._utf8 import is_valid_utf8
 from ._deserialize import Parser, ParseOptions, JsonDeserializable
-from ._serialize import Serializer, JsonSerializable
 from std.python import PythonObject, Python
 
 # See `value.mojo` for why these are aliased: EmberJson's own (pre-existing)
-# `Serializer`/`Deserializer` traits, imported above, still back
-# `write_json`/`from_json` so the old reflection-based system keeps working
-# alongside emberserde's.
+# `Deserializer` trait, imported above, still backs `from_json` so the old
+# reflection-based system keeps working alongside emberserde's.
 from emberserde.serialize import Serializer as SerdeSerializer
 from emberserde.deserialize import Deserializer as SerdeDeserializer
 from emberserde.error import SerializationError, DeserializationError
@@ -53,7 +51,7 @@ struct _ArrayIter[mut: Bool, //, origin: Origin[mut=mut], forward: Bool = True](
             return self.index
 
 
-struct Array(JsonDeserializable, JsonSerializable, JsonValue, Sized):
+struct Array(JsonDeserializable, JsonValue, Sized):
     """Represents a heterogeneous array of json types.
 
     This is accomplished by using `Value` for the collection type, which
@@ -156,10 +154,6 @@ struct Array(JsonDeserializable, JsonSerializable, JsonValue, Sized):
             if i != len(self._data) - 1:
                 writer.write(", ")
         writer.write(")")
-
-    @always_inline
-    def write_json(self, mut writer: Some[Serializer]):
-        writer.write(self)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         var st = s.begin_seq(len(self._data))

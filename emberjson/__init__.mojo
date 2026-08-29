@@ -9,12 +9,11 @@ from .utils import write, write_pretty, PaddedBuffer, PAD_INPUT_THRESHOLD
 # `to_json_string`, which drive emberserde's format-agnostic framework over
 # the same hand-written `Parser`.
 #
-# The superseded reflection walker (`emberjson/_deserialize/reflection.
-# mojo`, `_serialize/reflection.mojo`) is still imported under private
-# aliases: `emberjson/schema.mojo`'s old-path `JsonDeserializable`/
-# `JsonSerializable` conformances call the `Parser`-taking `deserialize`
-# and the `Serializer`-taking `serialize` overloads re-exported below, and
-# those conformances go away with the walker itself.
+# The superseded deserialize-side reflection walker
+# (`emberjson/_deserialize/reflection.mojo`) is still imported under a
+# private alias: `emberjson/schema.mojo`'s old-path `JsonDeserializable`
+# conformances call the `Parser`-taking `deserialize` overloads
+# re-exported below, and those conformances go away with the walker itself.
 from ._deserialize import (
     Parser,
     ParseOptions,
@@ -26,12 +25,6 @@ from ._deserialize import (
 from ._serde import from_json_string, to_json_string
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
-from ._serialize import (
-    JsonSerializable,
-    serialize as _reflect_serialize,
-    PrettySerializer,
-    Serializer,
-)
 from ._pointer import PointerIndex
 
 from .lazy import (
@@ -322,12 +315,3 @@ def serialize[
         `SerializationError` if `value` cannot be serialized.
     """
     output = to_json_string[pretty=pretty](value)
-
-
-# `Serializer`-taking overload, re-exported unchanged (no `raises`):
-# `emberjson/schema.mojo`'s `JsonSerializable.write_json` implementations
-# (e.g. `serialize(self.value, writer)`) call this directly from a
-# non-raising method and must keep compiling as-is.
-@always_inline
-def serialize[T: AnyType, //](value: T, mut writer: Some[Serializer]):
-    _reflect_serialize(value, writer)

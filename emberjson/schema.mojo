@@ -1,10 +1,7 @@
 from emberjson import (
     JsonDeserializable,
-    JsonSerializable,
     Parser,
     ParseOptions,
-    Serializer,
-    serialize,
     deserialize,
     Value,
 )
@@ -12,9 +9,9 @@ from emberjson._deserialize.reflection import _Base
 from emberserde import Defaulted, Field
 
 # Aliased for the same reason as in `value.mojo`/`object.mojo`: EmberJson's
-# own `Serializer`/`Deserializer` traits (imported above) still back
-# `write_json`/`from_json`, so every wrapper here carries both the legacy
-# conformances and emberserde's until Task 8 retires the old layer.
+# own `Deserializer` trait (imported above) still backs `from_json`, so
+# every wrapper here still carries the legacy deserialize conformance
+# alongside emberserde's.
 from emberserde.serialize import (
     Serializable,
     Serializer as SerdeSerializer,
@@ -42,7 +39,6 @@ from std.reflection import reflect
 struct AllOf[T: _Base, *validators: Validator](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -87,9 +83,6 @@ struct AllOf[T: _Base, *validators: Validator](
             comptime assert VType.Type == Self.T
             VType.validate(rebind[VType.Type](value))
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
@@ -126,7 +119,6 @@ struct Validated[
 ](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -169,9 +161,6 @@ struct Validated[
     def validate(value: Self.Type) raises:
         if not Self.validator(value):
             raise Error(Self.err_msg)
-
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
@@ -387,7 +376,6 @@ Parameters:
 struct OneOf[T: _Base & Equatable, *accepted: Validator](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -447,9 +435,6 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
         if not matched:
             raise Error("Value didn't match any validators")
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
@@ -460,7 +445,6 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
 struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -514,9 +498,6 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
         if not matched:
             raise Error("Value not in options")
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
@@ -527,7 +508,6 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
 struct NoneOf[T: _Base & Equatable, *rejected: Validator](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -581,9 +561,6 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
             if matched:
                 raise Error("Value matched a rejected validator")
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
@@ -614,7 +591,6 @@ Parameters:
 struct Enum[T: _Base & Equatable, //, *accepted: T](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -663,9 +639,6 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
                 return
         raise Error("Value not in options")
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
@@ -679,9 +652,7 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
 
 
 @fieldwise_init
-struct Secret[T: _Base](
-    Deserializable, JsonDeserializable, JsonSerializable, Serializable
-):
+struct Secret[T: _Base](Deserializable, JsonDeserializable, Serializable):
     var value: Self.T
     """
     A secret value that will be hidden as an opaque string if serialized back to JSON.
@@ -702,9 +673,6 @@ struct Secret[T: _Base](
     ) raises DeserializationError -> Self:
         return {serde_deserialize[Self.T](d)}
 
-    def write_json(self, mut writer: Some[Serializer]):
-        writer.write('"********"')
-
     # Asymmetric on purpose: the payload is read from the wire as itself
     # and written back redacted. `serialize_string` (not a raw write) so
     # the mask goes through the format's own string encoding.
@@ -722,7 +690,7 @@ struct Secret[T: _Base](
 
 @fieldwise_init
 struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
-    Deserializable, JsonDeserializable, JsonSerializable, Serializable
+    Deserializable, JsonDeserializable, Serializable
 ):
     """
     A value that will be clamped to a given range.
@@ -764,9 +732,6 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
             value = max_val^
         return {value^}
 
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
-
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
 
@@ -781,7 +746,7 @@ struct Clamp[T: _Base & Comparable, minimum: T, maximum: T](
 
 @fieldwise_init
 struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
-    Deserializable, JsonDeserializable, JsonSerializable, Serializable
+    Deserializable, JsonDeserializable, Serializable
 ):
     """
     A value that will be coerced to a different type.
@@ -815,9 +780,6 @@ struct Coerce[Target: _Base, func: def(Value) thin raises -> Target](
             return {Self.func(v)}
         except e:
             raise _validation_failed(e)
-
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
@@ -947,7 +909,7 @@ Parameters:
 
 @fieldwise_init
 struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
-    Deserializable, JsonDeserializable, JsonSerializable, Serializable
+    Deserializable, JsonDeserializable, Serializable
 ):
     """
     Transforms the value to a different type.
@@ -971,9 +933,6 @@ struct Transform[InT: _Base, OutT: _Base, func: def(InT) thin -> OutT](
         mut d: Some[SerdeDeserializer],
     ) raises DeserializationError -> Self:
         return {Self.func(serde_deserialize[Self.InT](d))}
-
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)
@@ -1013,7 +972,6 @@ struct CrossFieldValidator[
 ](
     Deserializable,
     JsonDeserializable,
-    JsonSerializable,
     Serializable,
     Validator,
 ):
@@ -1064,9 +1022,6 @@ struct CrossFieldValidator[
             rebind[r.field[Self.F1].T](r.field_ref[f1](value)),
             rebind[r.field[Self.F2].T](r.field_ref[f2](value)),
         )
-
-    def write_json(self, mut writer: Some[Serializer]):
-        serialize(self.value, writer)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         serde_serialize(self.value, s)

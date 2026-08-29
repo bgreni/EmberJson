@@ -1,6 +1,6 @@
 from std.testing import assert_equal, TestSuite
 from emberjson._serde import to_json_string
-from emberjson import Value, Object, Array, Null, serialize as old_serialize
+from emberjson import Value, Object, Array, Null
 
 
 @fieldwise_init
@@ -35,9 +35,9 @@ def test_pretty_nests_with_indent() raises:
 
 # ===========================================================================
 # Direct coverage of Null/Array/Object/Value's own `serialize` (fix round 1,
-# finding 3): the type-level tests above only ever exercised the old
-# `write_json`/`JsonSerializable` path (via `String(v)`/old `serialize()`),
-# never the new emberserde-conforming `serialize` added by this task.
+# finding 3): the type-level tests above only ever exercised the (now
+# deleted) `write_json`/`JsonSerializable` path via `String(v)`, never the
+# emberserde-conforming `serialize`.
 # ===========================================================================
 
 
@@ -87,15 +87,17 @@ def test_value_serializes_object_and_array_arms_by_delegation() raises:
 
 
 # ===========================================================================
-# Parity: the old (reflection-based `write_json`) and new (emberserde
-# `serialize`) paths are two independent hand-written implementations for
-# these four types (see task-4-report.md's "dual trait conformance" design).
-# Nothing enforced they agree until now (fix round 1, finding 2) — this is
-# the guard against silent divergence while both paths coexist.
+# Byte-exact output pins. These started life (fix round 1, finding 2) as
+# parity assertions against the old reflection-based `write_json` path,
+# guarding the two hand-written implementations against silent divergence
+# while both coexisted. Task 8 deleted that path, so the reference it
+# compared against is gone — the expected strings below are the OLD path's
+# real recorded output, inlined verbatim, so these keep pinning exactly the
+# bytes they always pinned rather than degrading into a tautology.
 # ===========================================================================
 
 
-def test_new_and_old_serialize_agree_on_every_arm() raises:
+def test_serializes_every_arm() raises:
     # object -> array -> object nesting (the brief's required shape), plus
     # one instance of every `Value` arm: object, array, string, int, uint,
     # float, bool, null.
@@ -126,71 +128,70 @@ def test_new_and_old_serialize_agree_on_every_arm() raises:
     top["null"] = Value(None)
 
     var value = Value(top^)
-    assert_equal(to_json_string(value), old_serialize(value))
+    assert_equal(
+        to_json_string(value),
+        String(
+            '{"obj":{"nested":[1,{"deep":true}]},"arr":[1,"two",3.5,false,'
+            'null],"str":"hello","int":-42,"uint":9223372036854775817,'
+            '"float":3.25,"bool":true,"null":null}'
+        ),
+    )
 
 
-def test_new_and_old_serialize_agree_on_bare_array() raises:
+def test_serializes_bare_array() raises:
     var a = Array(1, "two", Array(3, 4))
-    assert_equal(to_json_string(a), old_serialize(a))
+    assert_equal(to_json_string(a), String('[1,"two",[3,4]]'))
 
 
-def test_new_and_old_serialize_agree_on_bare_object() raises:
+def test_serializes_bare_object() raises:
     var o = Object()
     o["k"] = Value(Array(1, 2))
-    assert_equal(to_json_string(o), old_serialize(o))
+    assert_equal(to_json_string(o), String('{"k":[1,2]}'))
 
 
-def test_new_and_old_serialize_agree_on_null() raises:
-    assert_equal(to_json_string(Null()), old_serialize(Null()))
+def test_serializes_null() raises:
+    assert_equal(to_json_string(Null()), String("null"))
 
 
 # ===========================================================================
 # Pretty-print empty-container fix (fix round 1, finding 4 — binding
 # ruling): `begin_*`/`end()` in `_serde/serializer.mojo` used to write the
 # pretty newline unconditionally on both sides, producing `"{\n\n}"` for an
-# empty container where `emberjson/_serialize/reflection.mojo`'s
-# `PrettySerializer` produces `"{\n}"`. Per the ruling, compare directly
-# against `PrettySerializer`'s own real output rather than a hand-written
-# expected string. `Value`/`Object`/`Array`/`Null` themselves can't drive
-# `PrettySerializer` (their old `write_json` shortcuts straight to the
-# compact `Writable.write_to`, bypassing `begin_object`/`end_object`
-# entirely — see `test_reflection_serialize.mojo::test_pretty_serialize`'s
-# `"v": {"variant":"test"}`, printed compact even under `pretty=True`), so
-# `Dict`/`List` — which *do* drive `PrettySerializer` for real via their own
-# `JsonSerializable.write_json` — stand in as the reference generator for
-# the equivalent map/seq shape.
+# empty container where the deleted `PrettySerializer` produced `"{\n}"`.
+#
+# These were written to compare against `PrettySerializer`'s own real
+# output (via `Dict`/`List`, the only types whose old `write_json` actually
+# drove it) rather than a hand-written string. That generator is gone with
+# Task 8, so its recorded output is inlined verbatim below — same bytes,
+# same guarantee.
 # ===========================================================================
 
 
-def test_pretty_empty_object_matches_pretty_serializer() raises:
-    var reference = old_serialize[pretty=True](Dict[String, Int]())
-    assert_equal(to_json_string[pretty=True](Object()), reference)
+def test_pretty_empty_object() raises:
+    assert_equal(to_json_string[pretty=True](Object()), String("{\n}"))
 
 
-def test_pretty_empty_array_matches_pretty_serializer() raises:
-    var reference = old_serialize[pretty=True](List[Int]())
-    assert_equal(to_json_string[pretty=True](Array()), reference)
+def test_pretty_empty_array() raises:
+    assert_equal(to_json_string[pretty=True](Array()), String("[\n]"))
 
 
-def test_pretty_nested_empty_object_matches_pretty_serializer() raises:
+def test_pretty_nested_empty_object() raises:
     # An empty object nested inside a non-empty pretty-printed object.
-    var d = Dict[String, Dict[String, Int]]()
-    d["a"] = Dict[String, Int]()
-    var reference = old_serialize[pretty=True](d)
-
     var outer = Object()
     outer["a"] = Value(Object())
-    assert_equal(to_json_string[pretty=True](outer), reference)
+    assert_equal(
+        to_json_string[pretty=True](outer),
+        String('{\n    "a": {\n    }\n}'),
+    )
 
 
-def test_pretty_nested_empty_array_matches_pretty_serializer() raises:
+def test_pretty_nested_empty_array() raises:
     # An empty array nested inside a non-empty pretty-printed array.
-    var l: List[List[Int]] = [List[Int]()]
-    var reference = old_serialize[pretty=True](l)
-
     var outer = Array()
     outer.append(Value(Array()))
-    assert_equal(to_json_string[pretty=True](outer), reference)
+    assert_equal(
+        to_json_string[pretty=True](outer), String("[\n    [\n    ]\n]")
+    )
 
 
 def main() raises:

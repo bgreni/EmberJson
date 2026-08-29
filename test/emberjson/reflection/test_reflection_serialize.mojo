@@ -1,5 +1,5 @@
 from std.testing import TestSuite, assert_equal
-from emberjson._serialize import serialize, JsonSerializable, PrettySerializer
+from emberjson import serialize
 from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
 from emberjson import Value, Object, Array, Null
@@ -31,17 +31,6 @@ struct Foo[I: IntLiteral, F: FloatLiteral]:
     var v_obj: Object
     var v_arr: Array
     var n: Null
-
-
-@fieldwise_init
-struct Baz(JsonSerializable):
-    var a: Bool
-    var b: Int
-    var c: String
-
-    @staticmethod
-    def serialize_as_array() -> Bool:
-        return True
 
 
 def test_serialize() raises:
@@ -76,6 +65,20 @@ def test_serialize() raises:
     )
 
 
+# `serialize` gained `raises SerializationError` in Task 7 and Task 8
+# removed the last non-raising entry point (`emberjson._serialize`'s
+# writer), and Mojo refuses to call a raising function from a comptime
+# initializer. This non-raising shim restores comptime evaluability
+# without weakening the assertion below: a failure surfaces as an empty
+# string against the expected output rather than as a caught-and-ignored
+# error.
+def _ctime_serialize[T: AnyType, //](value: T) -> String:
+    try:
+        return serialize(value)
+    except:
+        return String()
+
+
 def test_ctime_serialize() raises:
     comptime f = Foo[45, 7.43](
         1,
@@ -99,7 +102,7 @@ def test_ctime_serialize() raises:
         Null(),
     )
 
-    comptime serialized = serialize(f)
+    comptime serialized = _ctime_serialize(f)
 
     assert_equal(
         serialized,
@@ -134,35 +137,23 @@ struct Department(Copyable):
 
 
 @fieldwise_init
-struct Company(JsonSerializable):
+struct Company(Copyable):
     var name: String
     var hq: Address
     var departments: Dict[String, Department]
     var founded_year: Int
 
-    @staticmethod
-    def serialize_as_array() -> Bool:
-        return False
-
 
 @fieldwise_init
-struct IntWrapper(JsonSerializable):
+struct IntWrapper(Copyable):
     var value: Int
     var description: String
 
-    @staticmethod
-    def serialize_as_array() -> Bool:
-        return False
-
 
 @fieldwise_init
-struct AddressWrapper(JsonSerializable):
+struct AddressWrapper(Copyable):
     var value: Address
     var description: String
-
-    @staticmethod
-    def serialize_as_array() -> Bool:
-        return False
 
 
 @fieldwise_init
@@ -305,6 +296,14 @@ def test_pretty_serialize() raises:
 
     var serialized = serialize[pretty=True](f)
 
+    # BEHAVIOR CHANGE (Task 8). The `Value`/`Object`/`Array` fields used to
+    # print COMPACT under `pretty=True` -- `"v": {"variant":"test"}` on one
+    # line -- because their deleted `JsonSerializable.write_json` wrote
+    # straight through `Writable.write_to`, bypassing the pretty writer's
+    # `begin_object`/`end_object` entirely. Their emberserde `serialize`
+    # drives the real `begin_map`/`serialize_key`/`end` hooks, so they now
+    # indent like every other nested value. Every other field is
+    # byte-identical to the old output.
     var expected = (
         '{\n    "f": 1,\n    "s": "something",\n    "o": 10,\n    "bar": {\n   '
         '     "b": 20\n    },\n    "i": 23,\n    "vec": [\n        2.32,\n     '
@@ -313,9 +312,10 @@ def test_pretty_serialize() raises:
         ' ],\n    "dic": {\n        "a key": 1234\n    },\n    "il": 45,\n   '
         ' "fl": 7.43,\n    "tup": [\n        1,\n        2,\n        3\n   '
         ' ],\n    "set": [\n        1,\n        2,\n        3\n    ],\n   '
-        ' "arc_ptr": 1234,\n    "owned_ptr": 4321,\n    "v":'
-        ' {"variant":"test"},\n    "v_obj": {"key":123},\n    "v_arr":'
-        ' [1,2,"three"],\n    "n": null\n}'
+        ' "arc_ptr": 1234,\n    "owned_ptr": 4321,\n    "v": {\n        '
+        '"variant": "test"\n    },\n    "v_obj": {\n        "key": 123\n   '
+        ' },\n    "v_arr": [\n        1,\n        2,\n        "three"\n   '
+        ' ],\n    "n": null\n}'
     )
 
     assert_equal(serialized, expected)

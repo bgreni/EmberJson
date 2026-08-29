@@ -12,7 +12,6 @@ from emberjson._serde import (
 )
 from emberjson._deserialize import Parser, ParseOptions
 from emberjson._deserialize import JsonDeserializable
-from emberjson._serialize import serialize as old_serialize
 from emberjson.lazy import (
     Lazy,
     LazyString,
@@ -302,23 +301,29 @@ def test_lazy_serialize_value_via_new_serializer() raises:
     assert_equal(to_json_string(lz), String('{"a":[1,2,3]}'))
 
 
-def test_write_json_and_serialize_diverge() raises:
-    # `write_json` (old path) echoes the captured span verbatim; `serialize`
-    # (new path) re-parses via `get()` and re-encodes. Pin the divergence
-    # on the SAME `Lazy` instance rather than leaving it incidental (see
-    # the `Lazy` struct docstring in `emberjson/lazy.mojo`).
+def test_serialize_reencodes_rather_than_echoing() raises:
+    # `Lazy.serialize` re-parses via `get()` and re-encodes rather than
+    # echoing the captured span, so the output is only *semantically*
+    # equal to the source wire text -- here the inter-element whitespace is
+    # gone. Pin that, since a caller who wanted the original bytes back has
+    # to reach for the span itself (see the `Lazy` struct docstring in
+    # `emberjson/lazy.mojo`).
+    #
+    # Until Task 8 this was a comparison against the deleted
+    # `JsonSerializable.write_json`, which DID echo verbatim; that
+    # passthrough has no emberserde counterpart (the `Serializer` trait
+    # grew no raw hook), so what is left to assert is the re-encoding
+    # itself.
     var wire = String('{"a": [1, 2, 3]}')
     var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
 
-    # Old path: byte-identical to the source wire text, spaces and all.
-    assert_equal(old_serialize(lz), wire)
+    var out = to_json_string(lz)
+    assert_equal(out, String('{"a":[1,2,3]}'))
+    assert_true(out != wire)
 
-    # New path: re-encoded, compact.
-    var new_out = to_json_string(lz)
-    assert_equal(new_out, String('{"a":[1,2,3]}'))
-
-    # The two genuinely disagree on this input.
-    assert_true(old_serialize(lz) != new_out)
+    # The captured span is still the original bytes -- only `serialize`
+    # normalizes.
+    assert_equal(String(StringSlice(unsafe_from_utf8=lz._data)), wire)
 
 
 # A `JsonDeserializable` struct opting into array-style JSON, mirroring

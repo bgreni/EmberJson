@@ -3,7 +3,6 @@ from std.collections import Dict, List
 from std.sys.intrinsics import unlikely, likely
 from .traits import JsonValue, PrettyPrintable
 from ._deserialize import Parser, ParseOptions, JsonDeserializable
-from ._serialize import Serializer, JsonSerializable
 from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._utf8 import is_valid_utf8
 from std.python import PythonObject, Python
@@ -12,9 +11,8 @@ from std.hashlib.hasher import Hasher
 from std.hashlib import hash
 
 # See `value.mojo` for why these are aliased: EmberJson's own (pre-existing)
-# `Serializer`/`Deserializer` traits, imported above, still back
-# `write_json`/`from_json` so the old reflection-based system keeps working
-# alongside emberserde's.
+# `Deserializer` trait, imported above, still backs `from_json` so the old
+# reflection-based system keeps working alongside emberserde's.
 from emberserde.serialize import Serializer as SerdeSerializer
 from emberserde.deserialize import Deserializer as SerdeDeserializer
 from emberserde.error import SerializationError, DeserializationError
@@ -196,7 +194,7 @@ struct _ObjectParseIndex(Movable):
             self.insert_slot(h, UInt32(len(data) - 1))
 
 
-struct Object(JsonDeserializable, JsonSerializable, JsonValue, Sized):
+struct Object(JsonDeserializable, JsonValue, Sized):
     """Represents a key-value pair object.
     All keys are String and all values are of type `Value` which is
     a variant type of any valid JSON type.
@@ -395,10 +393,6 @@ struct Object(JsonDeserializable, JsonSerializable, JsonValue, Sized):
     @always_inline
     def items(ref self) -> _ObjectIter[origin_of(self)]:
         return _ObjectIter(Pointer(to=self))
-
-    @always_inline
-    def write_json(self, mut writer: Some[Serializer]):
-        writer.write(self)
 
     def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
         var st = s.begin_map(len(self._data))

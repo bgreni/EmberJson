@@ -8,7 +8,6 @@ from emberjson import (
     Null,
     JSON,
 )
-from emberjson._serialize import PrettySerializer
 
 
 @fieldwise_init
