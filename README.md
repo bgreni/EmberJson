@@ -424,9 +424,14 @@ Transformers modify values during deserialization or serialization:
 ```mojo
 from emberjson import *
 
-# Default: use a fallback value when the field is missing or null
-var d = deserialize[Default[Int, 42]]("null")
-print(d[])  # prints 42
+# Default: use a fallback value when the field is missing from the object.
+# `Default[T, d]` is emberserde's `Field[T, default=d]`, so the fallback
+# fires on an ABSENT KEY only -- an explicit `null` is a present value and
+# is parsed as `T` (see the struct example below). Wrap the payload in
+# `Optional` when `null` should be tolerated too:
+#   Defaulted[Optional[Int], Optional[Int](42)]
+var d = deserialize[Default[Int, 42]]("7")
+print(d[])  # prints 7
 
 # Secret: deserializes normally, serializes as "********"
 var pw = deserialize[Secret[String]]('"my_password"')
