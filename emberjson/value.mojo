@@ -525,18 +525,12 @@ struct Value(JsonDeserializable, JsonSerializable, JsonValue, Sized):
         elif self.is_null():
             s.serialize_none()
         elif self.is_object():
-            ref obj = self.object()
-            var st = s.begin_map(len(obj))
-            for entry in obj.items():
-                st.serialize_key(entry.key)
-                st.serialize_value(entry.value)
-            st.end()
+            # One source of truth: `Object.serialize` already knows how to
+            # drive `begin_map`/`serialize_key`/`serialize_value`/`end` —
+            # don't duplicate that loop here.
+            self.object().serialize(s)
         elif self.is_array():
-            ref arr = self.array()
-            var st = s.begin_seq(len(arr))
-            for i in range(len(arr)):
-                st.serialize_element(arr[i])
-            st.end()
+            self.array().serialize(s)
         else:
             abort("Unreachable: Value.serialize")
 

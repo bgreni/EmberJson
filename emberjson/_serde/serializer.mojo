@@ -59,7 +59,19 @@ struct EmberJsonSeqSer[
 
     def end(mut self) raises SerializationError:
         comptime if Self.pretty:
-            self.out[].write("\n")
+            # An empty container never ran `serialize_element`/`_key`/
+            # `_field`, so `first` is still True: `begin_*` already wrote
+            # the one newline right after the opening bracket, and there is
+            # no trailing element that owes the closing bracket a
+            # separating newline. Skipping it here (but still indenting to
+            # `depth - 1`, matching this container's own opening-bracket
+            # column) turns `"[\n\n]"` into `"[\n]"` — matching
+            # `emberjson/_serialize/reflection.mojo`'s `PrettySerializer`,
+            # whose `write_item` (not `end_*`) owns the inter-element/
+            # trailing newline and so never emits one when there were no
+            # items.
+            if not self.first:
+                self.out[].write("\n")
             _write_indent(self.out[], self.depth - 1)
         self.out[].write("]")
 
@@ -109,7 +121,9 @@ struct EmberJsonMapSer[
 
     def end(mut self) raises SerializationError:
         comptime if Self.pretty:
-            self.out[].write("\n")
+            # See EmberJsonSeqSer.end for why this is guarded on `first`.
+            if not self.first:
+                self.out[].write("\n")
             _write_indent(self.out[], self.depth - 1)
         self.out[].write("}")
 
@@ -145,7 +159,9 @@ struct EmberJsonStructSer[
 
     def end(mut self) raises SerializationError:
         comptime if Self.pretty:
-            self.out[].write("\n")
+            # See EmberJsonSeqSer.end for why this is guarded on `first`.
+            if not self.first:
+                self.out[].write("\n")
             _write_indent(self.out[], self.depth - 1)
         self.out[].write("}")
 
@@ -175,7 +191,9 @@ struct EmberJsonTupleSer[
 
     def end(mut self) raises SerializationError:
         comptime if Self.pretty:
-            self.out[].write("\n")
+            # See EmberJsonSeqSer.end for why this is guarded on `first`.
+            if not self.first:
+                self.out[].write("\n")
             _write_indent(self.out[], self.depth - 1)
         self.out[].write("]")
 
