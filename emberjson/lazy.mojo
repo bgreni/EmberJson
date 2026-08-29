@@ -1,50 +1,69 @@
 from ._deserialize.reflection import (
     _Base,
-    deserialize,
     JsonDeserializable,
     _deserialize_impl,
 )
 from ._deserialize.parser import Parser, ParseOptions
-from ._serialize import JsonSerializable, serialize, Serializer
+from ._serialize import JsonSerializable, Serializer
 from .value import Value
 from std.hashlib import Hasher
 from std.builtin.rebind import downcast
 
+# emberserde's format-agnostic traits, aliased to avoid colliding with the
+# names of EmberJson's own (pre-existing) `Serializer`/`Deserializer` traits
+# imported above, which `write_json`/`from_json` below still serve -- see
+# `value.mojo`: `Lazy` keeps direct conformance to the old
+# `JsonSerializable`/`JsonDeserializable` traits (EmberJson's old reflection
+# path in `emberjson/_deserialize/reflection.mojo`, plus existing callers --
+# `test/emberjson/test_lazy.mojo`, `test_mixed_lazy.mojo`, `bench.mojo` --
+# still route through `emberjson.deserialize`/`emberjson.serialize`, which
+# are that old path) alongside the new `Deserializable`/`Serializable` this
+# task adds, so both systems work side by side until Task 8 retires the old
+# one.
+from emberserde.deserialize import (
+    BorrowingDeserializer,
+    Deserializer as SerdeDeserializer,
+    Deserializable,
+    RawKind,
+)
+from emberserde.serialize import (
+    Serializer as SerdeSerializer,
+    Serializable,
+    serialize as _serde_serialize,
+)
+from emberserde.error import (
+    DeserializationError,
+    SerializationError,
+    SerErrorKind,
+)
+from emberserde.utils import Base
 
-def _get_object_bytes[
-    origin: ImmOrigin
+
+def _expect_kind_bytes[
+    origin: ImmOrigin, //, kind: RawKind
 ](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_object_bytes()
+    """Dispatches to the `Parser` byte-extractor matching `kind`.
 
-
-def _get_array_bytes[
-    origin: ImmOrigin
-](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_array_bytes()
-
-
-def _get_int_bytes[
-    origin: ImmOrigin
-](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_int_bytes()
-
-
-def _get_float_bytes[
-    origin: ImmOrigin
-](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_float_bytes()
-
-
-def _get_string_bytes[
-    origin: ImmOrigin
-](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_string_bytes()
-
-
-def _get_value_bytes[
-    origin: ImmOrigin
-](mut p: Parser[origin]) raises -> Span[Byte, origin]:
-    return p.expect_value_bytes()
+    Consolidates what used to be six separate `_get_*_bytes` free functions
+    (one per shape, picked via a stored function pointer) behind a single
+    `RawKind`-keyed `comptime if`. Mirrors `EmberJsonDeserializer.raw_bytes`'s
+    dispatch in `emberjson/_serde/deserializer.mojo`, except `Str` calls
+    `expect_string_bytes` directly with no extra whitespace/quote check --
+    matching this (old, `Parser`-driven) path's original behavior, where the
+    caller is already responsible for positioning `p` at the token.
+    """
+    comptime if kind == RawKind.Any:
+        return p.expect_value_bytes()
+    elif kind == RawKind.Integer:
+        return p.expect_int_bytes()
+    elif kind == RawKind.Float:
+        return p.expect_float_bytes()
+    elif kind == RawKind.Str:
+        return p.expect_string_bytes()
+    elif kind == RawKind.Seq:
+        return p.expect_array_bytes()
+    else:
+        return p.expect_object_bytes()
 
 
 def _deserialize_bytes[
@@ -54,30 +73,45 @@ def _deserialize_bytes[
     return _deserialize_impl[T](p)
 
 
-comptime ReadBytesFn[origin: ImmOrigin] = def(
-    mut Parser[origin]
-) thin raises -> Span[Byte, origin]
-comptime ParseFn[T: _Base, origin: ImmOrigin] = def(
-    Span[Byte, origin]
-) thin raises -> T
+def __pick_kind[T: Base]() -> RawKind:
+    """Default `kind` for a bare `Lazy[T, origin]` (no explicit `kind`).
 
-
-def __pick_byte_expect[T: _Base, origin: ImmOrigin]() -> ReadBytesFn[origin]:
+    Picks `Seq` when `T` opts into array-style JSON via
+    `JsonDeserializable.deserialize_as_array`, `Map` otherwise -- the same
+    rule `__pick_byte_expect` used to choose between `_get_array_bytes` and
+    `_get_object_bytes`.
+    """
     comptime if conforms_to(T, JsonDeserializable) and downcast[
         T, JsonDeserializable
     ].deserialize_as_array():
-        return _get_array_bytes[origin]
+        return RawKind.Seq
     else:
-        return _get_object_bytes[origin]
+        return RawKind.Map
 
 
 @fieldwise_init
 struct Lazy[
-    T: _Base,
+    T: Base,
     origin: ImmOrigin,
-    parse_value: ReadBytesFn[origin] = __pick_byte_expect[T, origin](),
-    extract_value: ParseFn[T, origin] = _deserialize_bytes[T, origin],
-](Hashable, JsonDeserializable, JsonSerializable, TrivialRegisterPassable):
+    kind: RawKind = __pick_kind[T](),
+](
+    Deserializable,
+    Hashable,
+    JsonDeserializable,
+    JsonSerializable,
+    Serializable,
+    TrivialRegisterPassable,
+):
+    """Zero-copy capture of one JSON value's raw wire bytes.
+
+    Deserializing a `Lazy` only records the `Span` covering its token (via
+    the old `Parser`-driven path's `_expect_kind_bytes`, or the new
+    `BorrowingDeserializer.raw_bytes[kind]`); no interpretation happens
+    until `get()`. Both capture paths write the same `_data` field, and
+    `get()` always re-parses it through the old `Parser`, regardless of
+    which path did the capturing.
+    """
+
     var _data: Span[Byte, Self.origin]
 
     @staticmethod
@@ -88,13 +122,38 @@ struct Lazy[
         comptime assert (
             options == ParseOptions()
         ), "Lazy deserialization only works with default parse options"
-        s = {Self.parse_value(rebind[Parser[Self.origin]](p))}
+        s = {_expect_kind_bytes[Self.kind](rebind[Parser[Self.origin]](p))}
+
+    @staticmethod
+    def deserialize(
+        mut d: Some[SerdeDeserializer],
+    ) raises DeserializationError -> Self:
+        comptime assert conforms_to(
+            type_of(d), BorrowingDeserializer
+        ), "Lazy requires a borrowing deserializer"
+        return Self(rebind[Span[Byte, Self.origin]](d.raw_bytes[Self.kind]()))
 
     def write_json(self, mut writer: Some[Serializer]):
         writer.write(StringSlice(unsafe_from_utf8=self._data))
 
+    def _checked_get(self) raises SerializationError -> Self.T:
+        try:
+            return self.get()
+        except e:
+            raise SerializationError(String(e), SerErrorKind.Custom)
+
+    def serialize(self, mut s: Some[SerdeSerializer]) raises SerializationError:
+        # No raw-passthrough hook exists on the new `Serializer` trait (only
+        # `BorrowingDeserializer` grew one -- see `raw_bytes` -- as part of
+        # this task), so this materializes through `get()` (the span was
+        # already grammar-validated at capture time) and re-serializes that
+        # value. Byte-for-byte echo of the captured wire text is
+        # `write_json`'s job; this is the semantically-equivalent re-encoding
+        # the new pipeline gets instead.
+        _serde_serialize(self._checked_get(), s)
+
     def get(self) raises -> Self.T:
-        return Self.extract_value(self._data)
+        return _deserialize_bytes[Self.T](self._data)
 
     def __getitem__(self) raises -> Self.T:
         return self.get()
@@ -114,22 +173,12 @@ struct Lazy[
         return StringSlice(unsafe_from_utf8=self._data[1 : len(self._data) - 1])
 
 
-comptime LazyString[origin: ImmOrigin] = Lazy[
-    String, origin, _get_string_bytes[origin]
-]
+comptime LazyString[origin: ImmOrigin] = Lazy[String, origin, RawKind.Str]
 
-comptime LazyInt[origin: ImmOrigin] = Lazy[
-    Int64, origin, _get_int_bytes[origin]
-]
+comptime LazyInt[origin: ImmOrigin] = Lazy[Int64, origin, RawKind.Integer]
 
-comptime LazyUInt[origin: ImmOrigin] = Lazy[
-    UInt64, origin, _get_int_bytes[origin]
-]
+comptime LazyUInt[origin: ImmOrigin] = Lazy[UInt64, origin, RawKind.Integer]
 
-comptime LazyFloat[origin: ImmOrigin] = Lazy[
-    Float64, origin, _get_float_bytes[origin]
-]
+comptime LazyFloat[origin: ImmOrigin] = Lazy[Float64, origin, RawKind.Float]
 
-comptime LazyValue[origin: ImmOrigin] = Lazy[
-    Value, origin, _get_value_bytes[origin]
-]
+comptime LazyValue[origin: ImmOrigin] = Lazy[Value, origin, RawKind.Any]

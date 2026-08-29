@@ -5,8 +5,22 @@ from std.testing import (
     TestSuite,
 )
 
-from emberjson._serde import EmberJsonDeserializer
+from emberjson._serde import (
+    EmberJsonDeserializer,
+    from_json_string,
+    to_json_string,
+)
 from emberjson._deserialize import Parser, ParseOptions
+from emberjson._deserialize import JsonDeserializable
+from emberjson.lazy import (
+    Lazy,
+    LazyString,
+    LazyInt,
+    LazyUInt,
+    LazyFloat,
+    LazyValue,
+)
+from emberjson.value import Value
 
 from emberserde.deserialize import (
     BorrowingDeserializer,
@@ -173,6 +187,136 @@ def test_conformance_relationships() raises:
             BorrowingDeserializer,
         )
     )
+
+
+# ===========================================================================
+# `emberjson.lazy.Lazy` itself, driven through the new
+# `BorrowingDeserializer` path (`EmberJsonDeserializer.raw_bytes`) via
+# `from_json_string`. `Lazy` keeps dual conformance -- the tests above (and
+# `test/emberjson/test_lazy.mojo`, `test_mixed_lazy.mojo`, `bench.mojo`)
+# exercise the old `JsonDeserializable`/`Parser`-driven path unchanged;
+# these exercise the new `Deserializable`/`Serializable` path this task
+# adds. Both write the same `_data` span, and `get()` always re-parses it
+# through the old `Parser` regardless of which path captured it.
+# ===========================================================================
+
+
+def test_lazy_string_via_borrowing_deserializer() raises:
+    var wire = String('"hello"')
+    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
+    assert_equal(lz.get(), String("hello"))
+
+
+def test_lazy_int_via_borrowing_deserializer() raises:
+    var wire = String("-42")
+    var lz = from_json_string[LazyInt[ImmutAnyOrigin]](wire)
+    assert_equal(lz.get(), Int64(-42))
+
+
+def test_lazy_uint_via_borrowing_deserializer() raises:
+    var wire = String("18446744073709551615")
+    var lz = from_json_string[LazyUInt[ImmutAnyOrigin]](wire)
+    assert_equal(lz.get(), UInt64(18446744073709551615))
+
+
+def test_lazy_float_via_borrowing_deserializer() raises:
+    var wire = String("3.5e2")
+    var lz = from_json_string[LazyFloat[ImmutAnyOrigin]](wire)
+    assert_equal(lz.get(), Float64(3.5e2))
+
+
+def test_lazy_value_via_borrowing_deserializer() raises:
+    var wire = String('{"a": [1, 2, 3]}')
+    var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
+    var v = lz.get()
+    assert_true(v.is_object())
+    assert_equal(v.object()["a"].array()[1].int(), 2)
+
+
+def test_lazy_string_unsafe_slice_strips_quotes() raises:
+    # `unsafe_as_string_slice` returns the RAW (unescaped) bytes between the
+    # quotes -- `RawKind.Str` spans include their quotes, so this must strip
+    # exactly one byte off each end, and must not decode escapes.
+    var wire = String('"a\\"b"')
+    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
+    assert_equal(String(lz.unsafe_as_string_slice()), String('a\\"b'))
+    # `get()` does decode the escape.
+    assert_equal(lz.get(), String('a"b'))
+
+
+def test_lazy_int_kind_mismatch_raises() raises:
+    var wire = String('"not an int"')
+    with assert_raises():
+        _ = from_json_string[LazyInt[ImmutAnyOrigin]](wire)
+
+
+def test_lazy_float_kind_mismatch_raises() raises:
+    var wire = String("[1, 2]")
+    with assert_raises():
+        _ = from_json_string[LazyFloat[ImmutAnyOrigin]](wire)
+
+
+def test_lazy_span_aliases_the_input() raises:
+    # No-copy check, mirrored from `test_borrowed_span_aliases_the_input`
+    # above but exercised through the real `Lazy` type.
+    var wire = String('   "borrowed"')
+    var base = Int(wire.unsafe_ptr())
+    var limit = base + wire.byte_length()
+    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
+    var addr = Int(lz.unsafe_as_string_slice().unsafe_ptr())
+    assert_true(addr >= base)
+    assert_true(addr < limit)
+
+
+def test_lazy_serialize_string_via_new_serializer() raises:
+    var wire = String('"hello"')
+    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
+    assert_equal(to_json_string(lz), String('"hello"'))
+
+
+def test_lazy_serialize_value_via_new_serializer() raises:
+    var wire = String('{"a": [1, 2, 3]}')
+    var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
+    assert_equal(to_json_string(lz), String('{"a":[1,2,3]}'))
+
+
+# A `JsonDeserializable` struct opting into array-style JSON, mirroring
+# `test/emberjson/reflection/test_reflection_deserialize.mojo`'s `Point`.
+# Exercises `__pick_kind`'s default (`Seq` when `deserialize_as_array()` is
+# `True`) for a bare `Lazy[T, origin]` with no explicit `kind`, through the
+# new borrowing path.
+@fieldwise_init
+struct _LazyPoint(JsonDeserializable):
+    var x: Int
+    var y: Int
+
+    @staticmethod
+    def deserialize_as_array() -> Bool:
+        return True
+
+
+def test_lazy_default_kind_picks_seq_for_array_struct() raises:
+    var wire = String("[1, 2]")
+    var lz = from_json_string[Lazy[_LazyPoint, ImmutAnyOrigin]](wire)
+    var p = lz.get()
+    assert_equal(p.x, 1)
+    assert_equal(p.y, 2)
+
+
+# A plain `JsonDeserializable` struct (default `deserialize_as_array() ->
+# False`). Exercises `__pick_kind`'s other branch (`Map`).
+@fieldwise_init
+struct _LazyRecord(JsonDeserializable):
+    var x: Int
+    var y: Int
+
+
+def test_lazy_default_kind_picks_map_for_plain_struct() raises:
+    var wire = String('{"x": 1, "y": 2}')
+    var lz = from_json_string[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
+    var r = lz.get()
+    assert_equal(r.x, 1)
+    assert_equal(r.y, 2)
 
 
 def main() raises:
