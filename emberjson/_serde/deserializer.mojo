@@ -454,8 +454,11 @@ struct EmberJsonDeserializer[
 
 
 def from_json[
-    T: Movable & Deinitable, options: ParseOptions = ParseOptions()
-](s: String, out result: T) raises DeserializationError:
+    o: ImmOrigin,
+    //,
+    T: Movable & Deinitable,
+    options: ParseOptions = ParseOptions(),
+](s: StringSlice[o], out result: T) raises DeserializationError:
     """Deserializes `s` into `T` through emberserde's framework, driven by
     `EmberJsonDeserializer` over EmberJson's hand-written `Parser`.
 
@@ -467,7 +470,7 @@ def from_json[
             `strict_mode` and friends reach the parser from here.
 
     Args:
-        s: The input JSON string.
+        s: The input JSON text.
 
     Returns:
         The deserialized value.
@@ -477,10 +480,10 @@ def from_json[
         the shape of `T`, or carries non-whitespace content after the
         root value.
     """
-    # `_assume_padded` options are unconstructible from a plain `String`
-    # (`Parser.__init__` asserts on it), and `validate_utf8` is the caller's
-    # to apply -- `emberjson.deserialize` does, this private entry point
-    # does not.
+    # `_assume_padded` options are unconstructible from a plain slice
+    # (`Parser.__init__` asserts on it), and `validate_utf8` is the
+    # caller's to apply -- `emberjson.from_json` does, this private entry
+    # point does not.
     var p = Parser[options=options](s)
     var d = EmberJsonDeserializer(p=Pointer(to=p))
     result = deserialize[T](d)

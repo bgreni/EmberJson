@@ -256,5 +256,13 @@ def test_trailing_whitespace_after_root_accepted() raises:
     assert_equal(len(xs), 2)
 
 
+def test_from_json_accepts_a_string_slice() raises:
+    var owned = String('{"x":7,"y":9}')
+    var slice = StringSlice(owned)
+    var p = from_json[Point](slice)
+    assert_equal(p.x, 7)
+    assert_equal(p.y, 9)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
