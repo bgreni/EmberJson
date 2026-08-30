@@ -3,7 +3,7 @@ from .json import JSON
 from .array import Array
 from .object import Object
 from .utils import write, PaddedBuffer, PAD_INPUT_THRESHOLD
-from std.builtin.rebind import rebind_var
+from std.builtin.rebind import rebind_var as _rebind_var
 
 # The public `deserialize`/`try_deserialize`/`serialize`/`to_string` names
 # below are thin wrappers over `emberjson._serde`'s `from_json`/
@@ -249,12 +249,12 @@ def from_json[
     # Validation has run; clear the flag so no branch repeats it.
     comptime checked = options._utf8_validated()
     comptime if T == Value:
-        result = rebind_var[T](_parse_value_root[checked](s))
+        result = _rebind_var[T](_parse_value_root[checked](s))
     elif T == Document:
         # `_parse_document_root` still raises a bare `Error`; translate it
         # so this entry point's contract is uniformly typed.
         try:
-            result = rebind_var[T](_parse_document_root[checked](s))
+            result = _rebind_var[T](_parse_document_root[checked](s))
         except e:
             raise DeserializationError(String(e), DerErrorKind.InvalidValue)
     else:

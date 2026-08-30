@@ -159,5 +159,28 @@ def test_lazy_span_aliases_the_callers_buffer() raises:
     assert_true(addr < limit)
 
 
+def test_from_json_does_not_relocate_a_literal_backed_string() raises:
+    # `String("BORROWED_") * 40` in the two tests above is already a
+    # UNIQUELY heap-owned buffer by the time `from_json` sees it, so
+    # `unsafe_ptr_mut()` -- what a bare, mutable-resolving `StringSlice`
+    # parameter forces a `String` through -- returns that SAME pointer.
+    # Those two tests cannot tell the `ImmOrigin` signature apart from a
+    # bare `StringSlice` one. A `String` built directly from a literal is
+    # different: it holds a pointer into static literal data with no
+    # unique heap ownership behind it, so `unsafe_ptr_mut()` must
+    # reallocate onto the heap to hand back a mutable view -- silently
+    # relocating the caller's buffer out from under any borrow taken from
+    # it. That reallocation is exactly what the `ImmOrigin` signature on
+    # `from_json`/`try_from_json` exists to prevent.
+    var wire = String('"SENTINEL_LITERAL_BACKED_STRING_VALUE"')
+    var before = Int(wire.unsafe_ptr())
+    var lz = from_json[LazyString[ImmutAnyOrigin]](wire)
+    assert_equal(Int(wire.unsafe_ptr()), before)
+    var addr = Int(lz.unsafe_as_string_slice().unsafe_ptr())
+    assert_true(addr >= before)
+    assert_true(addr < before + wire.byte_length())
+    assert_equal(lz.get(), "SENTINEL_LITERAL_BACKED_STRING_VALUE")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
