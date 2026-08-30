@@ -6,7 +6,7 @@ explains the bug and where it lives.
 """
 
 from emberjson import (
-    parse,
+    from_json,
     Object,
     Array,
     Value,
@@ -53,12 +53,12 @@ def test_dict_literal_dedupes_keys() raises:
 # matching dict-literal and `__setitem__` semantics.
 # ---------------------------------------------------------------------------
 def test_eq_with_duplicate_keys() raises:
-    var dup = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](
+    var dup = from_json[Value, ParseOptions(strict_mode=StrictOptions.LENIENT)](
         '{"a":1,"a":2}'
     )
-    var unique = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](
-        '{"a":1,"b":2}'
-    )
+    var unique = from_json[
+        Value, ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ]('{"a":1,"b":2}')
     # Lenient parsing now collapses duplicates (last-write-wins).
     assert_equal(len(dup.object()), 1)
     assert_equal(dup.object()["a"].int(), 2)
@@ -138,8 +138,8 @@ def test_jsonl_malformed_line_raises() raises:
 def test_write_lines_terminates_last_line() raises:
     var p = Path("/tmp/test_bug_jsonl_trailing.jsonl")
     var rows = List[Value]()
-    rows.append(parse('{"a":1}'))
-    rows.append(parse('{"a":2}'))
+    rows.append(from_json[Value]('{"a":1}'))
+    rows.append(from_json[Value]('{"a":2}'))
     write_lines(p, rows)
 
     var content = open(p, "r").read()

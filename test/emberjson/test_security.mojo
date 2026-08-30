@@ -2,19 +2,18 @@
 """
 
 from emberjson import (
-    parse,
-    parse_document,
+    from_json,
     Array,
+    Document,
     Object,
     Value,
-    serialize,
-    deserialize,
+    to_json,
     minify,
     PointerIndex,
     CoerceString,
 )
 from emberjson._pointer import resolve_pointer, parse_int
-from emberjson._serde import from_json
+from emberjson._serde import from_json as _serde_from_json
 from emberjson.patch._patch import patch
 from emberjson.lazy import LazyString
 from std.testing import (
@@ -61,7 +60,7 @@ def test_m2_array_bool_inverted() raises:
 def test_c4_key_not_escaped() raises:
     var obj = Object()
     obj["key\nwith\nnewlines"] = Value("value")
-    var out = serialize(obj)
+    var out = to_json(obj)
     # Correct output would escape the newlines: "key\\nwith\\nnewlines"
     # Bug: literal newline bytes appear in the key — assert the fixed form.
     assert_true("\\n" in out)  # FAILS: newlines are not escaped
@@ -69,7 +68,7 @@ def test_c4_key_not_escaped() raises:
 
 def test_c4_value_not_escaped() raises:
     var v = Value("line1\nline2")
-    var out = serialize(v)
+    var out = to_json(v)
     # Correct: '"line1\\nline2"' (15 chars, newline escaped as \n)
     # Bug: '"line1' + newline + 'line2"' (literal newline inside JSON string)
     assert_equal(out, '"line1\\nline2"')  # FAILS: newline is not escaped
@@ -96,12 +95,12 @@ def test_h5_parse_int_overflow() raises:
 
 def test_c6_invalid_hex_escape() raises:
     with assert_raises():
-        _ = parse(r'{"key": "\uGGGG"}')
+        _ = from_json[Value](r'{"key": "\uGGGG"}')
 
 
 def test_c6_partially_invalid_hex_escape() raises:
     with assert_raises():
-        _ = parse(r'{"key": "\u00GG"}')
+        _ = from_json[Value](r'{"key": "\u00GG"}')
 
 
 # ===========================================================================
@@ -114,7 +113,7 @@ def test_c6_partially_invalid_hex_escape() raises:
 def test_m6_invalid_low_surrogate_range() raises:
     # Second codepoint 0xE000 is above the low-surrogate range — must raise.
     with assert_raises():
-        _ = parse(r'{"key": "\uD800\uE000"}')
+        _ = from_json[Value](r'{"key": "\uD800\uE000"}')
 
 
 # ===========================================================================
@@ -124,15 +123,15 @@ def test_m6_invalid_low_surrogate_range() raises:
 
 def test_h3_leading_plus_in_number() raises:
     with assert_raises():
-        _ = parse('{"n": +42}')
+        _ = from_json[Value]('{"n": +42}')
 
     with assert_raises():
-        _ = deserialize[Int64]("+42")
+        _ = from_json[Int64]("+42")
 
     # Should trigger from_chars_slow
     # Making sure it will also reject a leading plus
     with assert_raises():
-        _ = deserialize[Float64]("+1.23456789012345678901")
+        _ = from_json[Float64]("+1.23456789012345678901")
 
 
 # ===========================================================================
@@ -143,7 +142,7 @@ def test_h3_leading_plus_in_number() raises:
 
 
 def test_l3_coerce_string_null() raises:
-    var cs = deserialize[CoerceString]("null")
+    var cs = from_json[CoerceString]("null")
     # Documents the current buggy value; correct behaviour would be to raise.
     assert_equal(cs.value, "null")
 
@@ -159,7 +158,7 @@ def test_l2_lazy_string_not_decoded() raises:
     # deleted `Parser`-driven reflection walker) to `from_json`,
     # which captures the same borrowed span. Same input, same assertions.
     var s = r'"hello\nworld"'  # JSON string containing \n escape
-    var lazy = from_json[LazyString[origin_of(s)]](s)
+    var lazy = _serde_from_json[LazyString[origin_of(s)]](s)
 
     var raw = lazy.unsafe_as_string_slice()
     # raw contains "hello\nworld" (12 chars — literal backslash-n, not decoded)
@@ -169,7 +168,7 @@ def test_l2_lazy_string_not_decoded() raises:
     )  # documents the undecoded (buggy) length
 
     # Contrast: .get() DOES decode the escape correctly
-    var lazy2 = from_json[LazyString[origin_of(s)]](s)
+    var lazy2 = _serde_from_json[LazyString[origin_of(s)]](s)
     assert_equal(lazy2.get(), "hello\nworld")
 
 
@@ -189,27 +188,29 @@ def test_truncation_at_chunk_boundaries() raises:
     for total in [63, 64, 65, 128]:
         # Number truncated mid-float: "1." with no fraction digits.
         with assert_raises():
-            _ = parse(padded_to(total, "1."))
+            _ = from_json[Value](padded_to(total, "1."))
         # Unterminated string.
         with assert_raises():
-            _ = parse(padded_to(total, '"abc'))
+            _ = from_json[Value](padded_to(total, '"abc'))
         # String ending in a bare backslash.
         with assert_raises():
-            _ = parse(padded_to(total, '"a\\'))
+            _ = from_json[Value](padded_to(total, '"a\\'))
         # Truncated exponent.
         with assert_raises():
-            _ = parse(padded_to(total, "1e"))
+            _ = from_json[Value](padded_to(total, "1e"))
         # Truncated atoms and containers.
         with assert_raises():
-            _ = parse(padded_to(total, "tru"))
+            _ = from_json[Value](padded_to(total, "tru"))
         with assert_raises():
-            _ = parse(padded_to(total, "[1,2"))
+            _ = from_json[Value](padded_to(total, "[1,2"))
         with assert_raises():
-            _ = parse(padded_to(total, '{"k":'))
+            _ = from_json[Value](padded_to(total, '{"k":'))
         # Valid values ending exactly on the boundary must still parse.
-        assert_equal(parse(padded_to(total, "1234")).int(), 1234)
-        assert_equal(parse(padded_to(total, '"ok"')).string(), "ok")
-        assert_equal(len(parse(padded_to(total, "[1,2]")).array()), 2)
+        assert_equal(from_json[Value](padded_to(total, "1234")).int(), 1234)
+        assert_equal(from_json[Value](padded_to(total, '"ok"')).string(), "ok")
+        assert_equal(
+            len(from_json[Value](padded_to(total, "[1,2]")).array()), 2
+        )
 
 
 # ===========================================================================
@@ -241,21 +242,21 @@ def test_embedded_nul_after_scalar_is_rejected() raises:
     for lead in [String(""), filler]:
         var after_number = with_nul("{" + lead + '"a":123', "4}")
         with assert_raises():
-            _ = parse_document(as_slice(after_number))
+            _ = from_json[Document](as_slice(after_number))
         with assert_raises():
-            _ = parse(as_slice(after_number))
+            _ = from_json[Value](as_slice(after_number))
 
         var after_literal = with_nul("{" + lead + '"a":true', "}")
         with assert_raises():
-            _ = parse_document(as_slice(after_literal))
+            _ = from_json[Document](as_slice(after_literal))
         with assert_raises():
-            _ = parse(as_slice(after_literal))
+            _ = from_json[Value](as_slice(after_literal))
 
         var in_array = with_nul("[" + "1", "2]")
         with assert_raises():
-            _ = parse_document(as_slice(in_array))
+            _ = from_json[Document](as_slice(in_array))
         with assert_raises():
-            _ = parse(as_slice(in_array))
+            _ = from_json[Value](as_slice(in_array))
 
 
 def main() raises:
