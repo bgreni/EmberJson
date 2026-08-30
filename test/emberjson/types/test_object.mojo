@@ -1,7 +1,14 @@
 from emberjson.object import Object
 from emberjson.array import Array
 from emberjson.value import Null, Value
-from emberjson import serialize, parse, JSON, ParseOptions, StrictOptions
+from emberjson import (
+    to_json,
+    from_json,
+    JSON,
+    ParseOptions,
+    StrictOptions,
+    Value,
+)
 from std.testing import (
     assert_true,
     assert_equal,
@@ -156,7 +163,7 @@ def test_dict_literal() raises:
 
 def test_parse_simple_object() raises:
     var s = '{"key": 123}'
-    var json = parse(s)
+    var json = from_json[Value](s)
     assert_true(json.is_object())
     assert_equal(json.object()["key"].int(), 123)
     assert_equal(json.object()["key"].int(), 123)
@@ -274,9 +281,11 @@ def test_index_duplicate_detection_across_threshold() raises:
     dup_late += ',"key0":99}'
 
     with assert_raises(contains="Duplicate key"):
-        _ = parse(dup_late)
+        _ = from_json[Value](dup_late)
 
-    var json = parse[ParseOptions(strict_mode=StrictOptions.LENIENT)](dup_late)
+    var json = from_json[
+        Value, ParseOptions(strict_mode=StrictOptions.LENIENT)
+    ](dup_late)
     assert_equal(len(json.object()), 20)
     assert_equal(json.object()["key0"].int(), 99)
     # last-write-wins keeps the first occurrence's position
@@ -294,7 +303,7 @@ def test_object_serialize_preserves_insertion_order() raises:
     o["z"] = 1
     o["a"] = Value('two"quoted')
     o["m"] = Array(1, Null())
-    assert_equal(serialize(o), '{"z":1,"a":"two\\"quoted","m":[1,null]}')
+    assert_equal(to_json(o), '{"z":1,"a":"two\\"quoted","m":[1,null]}')
 
 
 def main() raises:

@@ -1,4 +1,4 @@
-from emberjson import parse, try_parse, ParseOptions
+from emberjson import from_json, try_from_json, ParseOptions, Value
 from std.testing import (
     assert_true,
     assert_false,
@@ -23,7 +23,7 @@ def test_compile_time() raises:
         "string that has unicode in it: \u00FC"
     ]
 }"""
-    comptime j = try_parse(data)
+    comptime j = try_from_json[Value](data)
     assert_true(materialize[j]())
 
     ref arr = materialize[j.value()]().object()["key"].array()
@@ -194,21 +194,21 @@ def test_unicode_parsing() raises:
   "settings_updated": "\u003C\u003E\u003C\u003E\u003C\u003E La configuraci\u00F3n se ha actualizado correctamente \uD83D\uDCE5."
 }
 """
-    _ = parse(s)
-    _ = parse[ParseOptions(ignore_unicode=True)](s)
+    _ = from_json[Value](s)
+    _ = from_json[Value, ParseOptions(ignore_unicode=True)](s)
 
 
 def test_lone_surrogate_error() raises:
     # Lone low surrogate (invalid)
     with assert_raises():
-        _ = parse('"\\uDC00"')
+        _ = from_json[Value]('"\\uDC00"')
 
     # Lone high surrogate (invalid)
     with assert_raises():
-        _ = parse('"\\uD800"')
+        _ = from_json[Value]('"\\uD800"')
 
     # Valid surrogate pair (should pass)
-    var j = parse('"\\uD83D\\uDD25"')  # Pair for 🔥
+    var j = from_json[Value]('"\\uD83D\\uDD25"')  # Pair for 🔥
     assert_equal(j.string(), "🔥")
 
 

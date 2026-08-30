@@ -1,8 +1,8 @@
 from emberjson import (
-    parse,
+    from_json,
     parse_pointer,
     try_parse_pointer,
-    to_string,
+    to_json,
     PointerIndex,
     Value,
 )
@@ -23,7 +23,7 @@ comptime DOC = (
 
 
 def test_basic_paths() raises:
-    var v = parse(DOC)
+    var v = from_json[Value](DOC)
     comptime paths = [
         "/a",
         "/a/b",
@@ -81,7 +81,7 @@ def test_off_path_contract() raises:
     assert_equal(parse_pointer(s, "/good").int(), 1)
     # The same document is rejected by the full parser.
     with assert_raises():
-        _ = parse(s)
+        _ = from_json[Value](s)
 
     # Structural sanity of skipped regions IS still required.
     with assert_raises():
@@ -113,11 +113,11 @@ def test_corpus_paths() raises:
         with open(path, "r") as f:
             data = f.read()
         var got = parse_pointer(data, pointer)
-        var v = parse(data)
+        var v = from_json[Value](data)
         ref want = v.get(PointerIndex(pointer))
         assert_equal(
-            to_string(got),
-            to_string(want),
+            to_json(got),
+            to_json(want),
             String("corpus mismatch: ") + path + " " + pointer,
         )
 

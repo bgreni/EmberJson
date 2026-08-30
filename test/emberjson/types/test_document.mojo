@@ -1,9 +1,7 @@
 from emberjson import (
-    parse,
-    try_parse,
-    parse_document,
-    try_parse_document,
-    to_string,
+    from_json,
+    try_from_json,
+    to_json,
     Document,
     ParseOptions,
     StrictOptions,
@@ -51,63 +49,63 @@ from std.testing import (
 
 
 def test_scalar_documents() raises:
-    var d = parse_document("123")
+    var d = from_json[Document]("123")
     assert_true(d.root().is_int())
     assert_equal(d.root().int(), 123)
 
-    var d2 = parse_document("-45")
+    var d2 = from_json[Document]("-45")
     assert_equal(d2.root().int(), -45)
 
-    var d3 = parse_document("18446744073709551615")
+    var d3 = from_json[Document]("18446744073709551615")
     assert_true(d3.root().is_uint())
     assert_equal(d3.root().uint(), UInt64.MAX)
 
-    var d4 = parse_document("1.5")
+    var d4 = from_json[Document]("1.5")
     assert_true(d4.root().is_float())
     assert_equal(d4.root().float(), 1.5)
 
-    var d5 = parse_document("true")
+    var d5 = from_json[Document]("true")
     assert_true(d5.root().is_bool())
     assert_equal(d5.root().bool(), True)
 
-    var d6 = parse_document("false")
+    var d6 = from_json[Document]("false")
     assert_equal(d6.root().bool(), False)
 
-    var d7 = parse_document("null")
+    var d7 = from_json[Document]("null")
     assert_true(d7.root().is_null())
 
-    var d8 = parse_document('"hello"')
+    var d8 = from_json[Document]('"hello"')
     assert_true(d8.root().is_string())
     assert_equal(d8.root().string(), "hello")
     assert_equal(d8.root().string_slice(), "hello")
 
 
 def test_string_escapes() raises:
-    var d = parse_document(r'"a\nb\t\"c\\"')
+    var d = from_json[Document](r'"a\nb\t\"c\\"')
     assert_equal(d.root().string(), 'a\nb\t"c\\')
 
-    var d2 = parse_document(r'"ü"')
+    var d2 = from_json[Document](r'"ü"')
     assert_equal(d2.root().string(), "ü")
 
     # Surrogate pair for 🔥
-    var d3 = parse_document(r'"🔥"')
+    var d3 = from_json[Document](r'"🔥"')
     assert_equal(d3.root().string(), "🔥")
 
     # Long enough to exercise the SIMD scan path
     var long_str = '"some example string of short length, not all that long"'
-    var d4 = parse_document(long_str)
+    var d4 = from_json[Document](long_str)
     assert_equal(
         d4.root().string(),
         "some example string of short length, not all that long",
     )
 
     # Escape beyond the first SIMD chunk
-    var d5 = parse_document(r'"0123456789012345678\nrest of the string"')
+    var d5 = from_json[Document](r'"0123456789012345678\nrest of the string"')
     assert_equal(d5.root().string(), "0123456789012345678\nrest of the string")
 
 
 def test_navigation() raises:
-    var d = parse_document(
+    var d = from_json[Document](
         '{"a": 1, "b": [1, 2.5, "x", null], "c": {"nested": true}, "d": "s"}'
     )
     var root = d.root()
@@ -151,14 +149,14 @@ def test_navigation() raises:
 
 
 def test_empty_containers() raises:
-    var d = parse_document('{"empty_obj": {}, "empty_arr": [], "x": 1}')
+    var d = from_json[Document]('{"empty_obj": {}, "empty_arr": [], "x": 1}')
     assert_equal(len(d.root()["empty_obj"]), 0)
     assert_equal(len(d.root()["empty_arr"]), 0)
     assert_equal(d.root()["x"].int(), 1)
 
-    var d2 = parse_document("[]")
+    var d2 = from_json[Document]("[]")
     assert_equal(len(d2.root()), 0)
-    var d3 = parse_document("{}")
+    var d3 = from_json[Document]("{}")
     assert_equal(len(d3.root()), 0)
 
 
@@ -189,17 +187,17 @@ comptime PARITY_CASES = [
 def test_to_value_parity() raises:
     comptime for i in range(len(PARITY_CASES)):
         comptime s = PARITY_CASES[i]
-        var d = parse_document(s)
-        var v = parse(s)
+        var d = from_json[Document](s)
+        var v = from_json[Value](s)
         assert_true(d.to_value() == v, String("to_value mismatch for: ") + s)
 
 
 def test_to_string_parity() raises:
     comptime for i in range(len(PARITY_CASES)):
         comptime s = PARITY_CASES[i]
-        var d = parse_document(s)
-        var v = parse(s)
-        assert_equal(to_string(d), to_string(v))
+        var d = from_json[Document](s)
+        var v = from_json[Value](s)
+        assert_equal(to_json(d), to_json(v))
 
 
 def test_padded_path() raises:
@@ -213,10 +211,10 @@ def test_padded_path() raises:
     s += r'], "name": "padded ü input", "flag": true}'
     assert_true(s.byte_length() >= 128)
 
-    var d = parse_document(s)
-    var v = parse(s)
+    var d = from_json[Document](s)
+    var v = from_json[Value](s)
     assert_true(d.to_value() == v)
-    assert_equal(to_string(d), to_string(v))
+    assert_equal(to_json(d), to_json(v))
     assert_equal(len(d.root()["values"]), 50)
     assert_equal(d.root()["values"][49].int(), 49)
     assert_equal(d.root()["name"].string(), "padded ü input")
@@ -224,20 +222,20 @@ def test_padded_path() raises:
 
 def test_strictness() raises:
     with assert_raises():
-        _ = parse_document("[1, 2,]")
+        _ = from_json[Document]("[1, 2,]")
     with assert_raises():
-        _ = parse_document('{"a": 1,}')
+        _ = from_json[Document]('{"a": 1,}')
     with assert_raises():
-        _ = parse_document('{"a": 1, "a": 2}')
+        _ = from_json[Document]('{"a": 1, "a": 2}')
 
     comptime lenient = ParseOptions(strict_mode=StrictOptions.LENIENT)
-    var d = parse_document[lenient]("[1, 2,]")
+    var d = from_json[Document, lenient]("[1, 2,]")
     assert_equal(len(d.root()), 2)
 
     # Lenient duplicate keys: last-write-wins, matching the DOM parser.
-    var d2 = parse_document[lenient]('{"a": 1, "b": 2, "a": 3}')
+    var d2 = from_json[Document, lenient]('{"a": 1, "b": 2, "a": 3}')
     assert_equal(d2.root()["a"].int(), 3)
-    var v2 = parse[lenient]('{"a": 1, "b": 2, "a": 3}')
+    var v2 = from_json[Value, lenient]('{"a": 1, "b": 2, "a": 3}')
     assert_true(d2.to_value() == v2)
 
 
@@ -261,17 +259,17 @@ def test_errors() raises:
     comptime for i in range(len(bad_cases)):
         comptime bad = bad_cases[i]
         with assert_raises():
-            _ = parse_document(bad)
+            _ = from_json[Document](bad)
 
-    assert_false(Bool(try_parse_document("{")))
-    assert_true(Bool(try_parse_document("{}")))
+    assert_false(Bool(try_from_json[Document]("{")))
+    assert_true(Bool(try_from_json[Document]("{}")))
 
 
 def test_ignore_unicode() raises:
     comptime opts = ParseOptions(ignore_unicode=True)
-    var d = parse_document[opts](r'"ü"')
+    var d = from_json[Document, opts](r'"ü"')
     # Verbatim bytes, escapes left undecoded — same as the DOM parser.
-    var v = parse[opts](r'"ü"')
+    var v = from_json[Value, opts](r'"ü"')
     assert_equal(d.root().string(), v.string())
 
 
@@ -287,22 +285,22 @@ def test_corpus_parity() raises:
         var data: String
         with open(path, "r") as f:
             data = f.read()
-        var d = parse_document(data)
-        var v = parse(data)
+        var d = from_json[Document](data)
+        var v = from_json[Value](data)
         # Serialized-output comparison instead of `Value.__eq__`: equally
         # strong for parity (order + values), but linear — deep equality
         # is O(n^2) on citm's ~10k-key objects.
-        var expected = to_string(v)
-        assert_equal(to_string(d), expected)
-        assert_equal(to_string(d.to_value()), expected)
+        var expected = to_json(v)
+        assert_equal(to_json(d), expected)
+        assert_equal(to_json(d.to_value()), expected)
 
 
 def test_indexed_engine_parity() raises:
     comptime for i in range(len(PARITY_CASES)):
         comptime s = PARITY_CASES[i]
         var d = indexed_doc(s)
-        var v = parse(s)
-        assert_equal(to_string(d), to_string(v))
+        var v = from_json[Value](s)
+        assert_equal(to_json(d), to_json(v))
         assert_true(d.to_value() == v, String("indexed mismatch for: ") + s)
 
     comptime bad_cases = [
@@ -354,8 +352,8 @@ def test_indexed_engine_corpus() raises:
         with open(path, "r") as f:
             data = f.read()
         var d = indexed_doc(data)
-        var v = parse(data)
-        assert_equal(to_string(d), to_string(v))
+        var v = from_json[Value](data)
+        assert_equal(to_json(d), to_json(v))
 
     # Verdict agreement over the jsonchecker fixtures.
     var fixtures = listdir("bench_data/data/jsonchecker")
@@ -365,7 +363,7 @@ def test_indexed_engine_corpus() raises:
         var data: String
         with open("bench_data/data/jsonchecker/" + f, "r") as fh:
             data = fh.read()
-        var byte_walk_ok = Bool(try_parse(data))
+        var byte_walk_ok = Bool(try_from_json[Value](data))
         var indexed_ok: Bool
         try:
             var d = indexed_doc(data)
@@ -391,11 +389,11 @@ def test_jsonchecker_differential() raises:
         var data: String
         with open("bench_data/data/jsonchecker/" + f, "r") as fh:
             data = fh.read()
-        var v = try_parse(data)
-        var d = try_parse_document(data)
+        var v = try_from_json[Value](data)
+        var d = try_from_json[Document](data)
         assert_equal(Bool(v), Bool(d), String("verdict mismatch on ") + f)
         if v and d:
-            assert_equal(to_string(d.value()), to_string(v.value()))
+            assert_equal(to_json(d.value()), to_json(v.value()))
         checked += 1
     assert_true(checked >= 30)
 
@@ -405,7 +403,7 @@ def test_parse_document_root_skips_utf8_prepass() raises:
     # caller's job. Valid input must parse identically to parse_document.
     var wire = '{"a":[1,2,3],"b":{"c":"x"}}'
     var viaroot = _parse_document_root[ParseOptions()](wire)
-    var viapublic = parse_document(wire)
+    var viapublic = from_json[Document](wire)
     assert_equal(viaroot.to_string(), viapublic.to_string())
 
 
@@ -414,7 +412,7 @@ def test_parse_document_root_handles_padded_path() raises:
     var wire = '{"k":"' + String("PADDING_") * 40 + '"}'
     assert_true(wire.byte_length() > PAD_INPUT_THRESHOLD)
     var viaroot = _parse_document_root[ParseOptions()](wire)
-    assert_equal(viaroot.to_string(), parse_document(wire).to_string())
+    assert_equal(viaroot.to_string(), from_json[Document](wire).to_string())
 
 
 def main() raises:

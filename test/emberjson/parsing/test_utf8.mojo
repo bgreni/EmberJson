@@ -1,10 +1,10 @@
 from emberjson import (
     is_valid_utf8,
-    parse,
-    parse_document,
+    from_json,
     parse_pointer,
     ParseOptions,
     Value,
+    Document,
 )
 from emberjson._utf8 import _is_valid_utf8_scalar
 from std.testing import (
@@ -124,9 +124,9 @@ def test_utf8_validation_default_on() raises:
     # Rejected by DEFAULT on every entry point (RFC 8259: JSON text is
     # UTF-8).
     with assert_raises():
-        _ = parse(bad)
+        _ = from_json[Value](bad)
     with assert_raises():
-        _ = parse_document(bad)
+        _ = from_json[Document](bad)
     with assert_raises():
         _ = parse_pointer(bad, "/a")
     with assert_raises():
@@ -135,13 +135,13 @@ def test_utf8_validation_default_on() raises:
     # Opting out for trusted/raw input: the tape engine carries the raw
     # bytes through its arena untouched.
     comptime unchecked = ParseOptions(validate_utf8=False)
-    var d0 = parse_document[unchecked](bad)
+    var d0 = from_json[Document, unchecked](bad)
     assert_true(d0.root()["a"].is_string())
 
     # Valid multibyte content passes by default.
     var good = String('{"a": "héllo 🔥"}')
-    assert_equal(parse(good)["a"].string(), "héllo 🔥")
-    var d = parse_document(good)
+    assert_equal(from_json[Value](good)["a"].string(), "héllo 🔥")
+    var d = from_json[Document](good)
     assert_equal(d.root()["a"].string(), "héllo 🔥")
     assert_equal(parse_pointer(good, "/a").string(), "héllo 🔥")
 

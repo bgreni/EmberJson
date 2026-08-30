@@ -1,5 +1,5 @@
 from emberjson.value import Value, Null
-from emberjson import Object, Array, write_pretty
+from emberjson import Object, Array, to_json_pretty
 from std.sys import size_of
 from std.testing import (
     assert_equal,
@@ -231,7 +231,7 @@ def test_pretty() raises:
     43564,
     false
 ]"""
-    assert_equal(expected, write_pretty(v))
+    assert_equal(expected, to_json_pretty(v))
 
     v = Value(parse_string='{"key": 123, "k2": null}')
     expected = """{
@@ -239,7 +239,7 @@ def test_pretty() raises:
     "k2": null
 }"""
 
-    assert_equal(expected, write_pretty(v))
+    assert_equal(expected, to_json_pretty(v))
 
 
 def test_repr_null() raises:

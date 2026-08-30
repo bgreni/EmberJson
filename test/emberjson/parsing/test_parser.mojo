@@ -1,5 +1,5 @@
 from emberjson._deserialize.parser import Parser, ParseOptions
-from emberjson import JSON, Null, Array, Object, parse
+from emberjson import JSON, Null, Array, Object, Value, from_json
 from std.testing import assert_true, assert_equal, assert_raises, TestSuite
 
 
@@ -16,7 +16,7 @@ def test_parse() raises:
     assert_equal(len(json), 1)
 
     s = "[123, 345]"
-    json = parse(s)
+    json = from_json[Value](s)
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
@@ -48,43 +48,43 @@ def test_parse_utf16_surrogates() raises:
 def test_parse_escaped_strings() raises:
     # Quotes
     var s_quote = r'{"key": "foo \"bar\""}'
-    var json_quote = parse(s_quote)
+    var json_quote = from_json[Value](s_quote)
     assert_equal(json_quote.object()["key"].string(), 'foo "bar"')
 
     # Backslash
     var s_bs = r'{"key": "foo \\ bar"}'
-    var json_bs = parse(s_bs)
+    var json_bs = from_json[Value](s_bs)
     assert_equal(json_bs.object()["key"].string(), "foo \\ bar")
 
     # Forward slash
     var s_fs = r'{"key": "foo \/ bar"}'
-    var json_fs = parse(s_fs)
+    var json_fs = from_json[Value](s_fs)
     assert_equal(json_fs.object()["key"].string(), "foo / bar")
 
     # Controls
     var s_b = r'{"key": "foo \b bar"}'
-    var json_b = parse(s_b)
+    var json_b = from_json[Value](s_b)
     assert_equal(json_b.object()["key"].string(), "foo \b bar")
 
     var s_f = r'{"key": "foo \f bar"}'
-    var json_f = parse(s_f)
+    var json_f = from_json[Value](s_f)
     assert_equal(json_f.object()["key"].string(), "foo \f bar")
 
     var s_n = r'{"key": "foo \n bar"}'
-    var json_n = parse(s_n)
+    var json_n = from_json[Value](s_n)
     assert_equal(json_n.object()["key"].string(), "foo \n bar")
 
     var s_r = r'{"key": "foo \r bar"}'
-    var json_r = parse(s_r)
+    var json_r = from_json[Value](s_r)
     assert_equal(json_r.object()["key"].string(), "foo \r bar")
 
     var s_t = r'{"key": "foo \t bar"}'
-    var json_t = parse(s_t)
+    var json_t = from_json[Value](s_t)
     assert_equal(json_t.object()["key"].string(), "foo \t bar")
 
     # Null byte \u0000
     var s_null = r'{"key": "foo \u0000 bar"}'
-    var json_null = parse(s_null)
+    var json_null = from_json[Value](s_null)
     # Construct expected string with null byte manually
     var expected_null = String("foo ")
     expected_null.append(Codepoint(0))
@@ -304,22 +304,22 @@ def test_float_edge_cases() raises:
 def test_unicode_byte_lengths() raises:
     # 1 byte: A (U+0041)
     var s1 = r'{"key": "\u0041"}'
-    var j1 = parse(s1)
+    var j1 = from_json[Value](s1)
     assert_equal(j1.object()["key"].string(), "A")
 
     # 2 bytes: £ (U+00A3)
     var s2 = r'{"key": "\u00A3"}'
-    var j2 = parse(s2)
+    var j2 = from_json[Value](s2)
     assert_equal(j2.object()["key"].string(), "£")
 
     # 3 bytes: € (U+20AC)
     var s3 = r'{"key": "\u20AC"}'
-    var j3 = parse(s3)
+    var j3 = from_json[Value](s3)
     assert_equal(j3.object()["key"].string(), "€")
 
     # 4 bytes: 𝄞 (U+1D11E) - Surrogate pair \uD834\uDD1E
     var s5 = r'{"key": "\uD834\uDD1E"}'
-    var j5 = parse(s5)
+    var j5 = from_json[Value](s5)
     assert_equal(j5.object()["key"].string(), "𝄞")
 
 
@@ -327,28 +327,28 @@ def test_trailing_tokens() raises:
     with assert_raises(
         contains="Invalid json, expected end of input, recieved: garbage tokens"
     ):
-        _ = parse("[1, null, false] garbage tokens")
+        _ = from_json[Value]("[1, null, false] garbage tokens")
 
     with assert_raises(
         contains=(
             'Invalid json, expected end of input, recieved: "trailing string"'
         )
     ):
-        _ = parse('{"key": null} "trailing string"')
+        _ = from_json[Value]('{"key": null} "trailing string"')
 
 
 def test_incomplete_data() raises:
     with assert_raises():
-        _ = parse("[1 null, false,")
+        _ = from_json[Value]("[1 null, false,")
 
     with assert_raises():
-        _ = parse('{"key": 123')
+        _ = from_json[Value]('{"key": 123')
 
     with assert_raises():
-        _ = parse('["asdce]')
+        _ = from_json[Value]('["asdce]')
 
     with assert_raises():
-        _ = parse('["no close')
+        _ = from_json[Value]('["no close')
 
 
 def test_reject_comment() raises:
@@ -359,7 +359,7 @@ def test_reject_comment() raises:
     }
 """
     with assert_raises():
-        _ = parse(s)
+        _ = from_json[Value](s)
 
 
 def test_expect_object_bytes() raises:

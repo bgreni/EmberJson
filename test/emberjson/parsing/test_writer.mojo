@@ -1,4 +1,4 @@
-from emberjson import parse, minify, write_pretty
+from emberjson import from_json, minify, to_json_pretty, Value
 from std.testing import assert_equal, TestSuite
 from std.sys import is_defined
 
@@ -25,14 +25,14 @@ def test_minify_citm_catalog() raises:
 
 
 def test_pretty_print_array() raises:
-    var arr = parse('[123,"foo",false,null]')
+    var arr = from_json[Value]('[123,"foo",false,null]')
     var expected: String = """[
     123,
     "foo",
     false,
     null
 ]"""
-    assert_equal(expected, write_pretty(arr))
+    assert_equal(expected, to_json_pretty(arr))
 
     expected = """[
 iamateapot123,
@@ -40,9 +40,9 @@ iamateapot"foo",
 iamateapotfalse,
 iamateapotnull
 ]"""
-    assert_equal(expected, write_pretty[indent="iamateapot"](arr))
+    assert_equal(expected, to_json_pretty[indent="iamateapot"](arr))
 
-    arr = parse('[123,"foo",false,{"key": null}]')
+    arr = from_json[Value]('[123,"foo",false,{"key": null}]')
     expected = """[
     123,
     "foo",
@@ -52,18 +52,18 @@ iamateapotnull
     }
 ]"""
 
-    assert_equal(expected, write_pretty(arr))
+    assert_equal(expected, to_json_pretty(arr))
 
 
 def test_pretty_print_object() raises:
-    var ob = parse('{"k1": null, "k2": 123}')
+    var ob = from_json[Value]('{"k1": null, "k2": 123}')
     var expected = """{
     "k1": null,
     "k2": 123
 }""".as_string_slice()
-    assert_equal(expected, write_pretty(ob))
+    assert_equal(expected, to_json_pretty(ob))
 
-    ob = parse('{"key": 123, "k": [123, false, null]}')
+    ob = from_json[Value]('{"key": 123, "k": [123, false, null]}')
 
     expected = """{
     "key": 123,
@@ -74,9 +74,9 @@ def test_pretty_print_object() raises:
     ]
 }""".as_string_slice()
 
-    assert_equal(expected, write_pretty(ob))
+    assert_equal(expected, to_json_pretty(ob))
 
-    ob = parse('{"key": 123, "k": [123, false, [1, 2, 3]]}')
+    ob = from_json[Value]('{"key": 123, "k": [123, false, [1, 2, 3]]}')
     expected = """{
     "key": 123,
     "k": [
@@ -89,7 +89,7 @@ def test_pretty_print_object() raises:
         ]
     ]
 }""".as_string_slice()
-    assert_equal(expected, write_pretty(ob))
+    assert_equal(expected, to_json_pretty(ob))
 
 
 def main() raises:
