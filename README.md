@@ -729,7 +729,9 @@ The `get()` method works on `Value` types and returns a reference
 to the nested value. It also supports syntactic sugar via backticks.
 
 ```mojo
-var j = Value(parse_string='{"foo": ["bar", "baz"]}')
+from emberjson import from_json, Value
+
+var j = from_json[Value]('{"foo": ["bar", "baz"]}')
 
 # Access nested values
 print(j.get("/foo/1").string())  # prints baz
@@ -743,7 +745,7 @@ j.get("/foo/1") = "modified"
 j.`/foo/1` = "modified"
 
 # RFC 6901 Escaping (~1 for /, ~0 for ~) covers special characters
-var j2 = Value(parse_string='{"a/b": 1, "m~n": 2}')
+var j2 = from_json[Value]('{"a/b": 1, "m~n": 2}')
 print(j2.get("/a~1b").int()) # prints 1
 print(j2.get("/m~0n").int()) # prints 2
 ```
