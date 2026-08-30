@@ -1,5 +1,11 @@
 from emberjson import parse, try_parse, ParseOptions
-from std.testing import assert_true, assert_equal, assert_raises, TestSuite
+from std.testing import (
+    assert_true,
+    assert_false,
+    assert_equal,
+    assert_raises,
+    TestSuite,
+)
 
 
 def test_compile_time() raises:
@@ -204,6 +210,22 @@ def test_lone_surrogate_error() raises:
     # Valid surrogate pair (should pass)
     var j = parse('"\\uD83D\\uDD25"')  # Pair for 🔥
     assert_equal(j.string(), "🔥")
+
+
+def test_utf8_validated_clears_only_that_flag() raises:
+    comptime base = ParseOptions(ignore_unicode=True)
+    comptime cleared = base._utf8_validated()
+    assert_true(base.validate_utf8)
+    assert_false(cleared.validate_utf8)
+    assert_true(cleared.ignore_unicode)
+    assert_true(cleared.strict_mode == base.strict_mode)
+    assert_false(cleared._assume_padded)
+
+
+def test_utf8_validated_composes_with_padded() raises:
+    comptime both = ParseOptions()._utf8_validated()._padded()
+    assert_false(both.validate_utf8)
+    assert_true(both._assume_padded)
 
 
 def main() raises:

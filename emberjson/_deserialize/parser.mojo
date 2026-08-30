@@ -170,6 +170,15 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
         res._assume_padded = True
         return res
 
+    def _utf8_validated(self) -> Self:
+        # The caller has already run `is_valid_utf8` over the whole input,
+        # so downstream entry points must not run the pre-pass again.
+        # Mirrors `_padded()`: a comptime-only options transform, never
+        # something user code constructs directly.
+        var res = self
+        res.validate_utf8 = False
+        return res
+
 
 comptime IntegerParseResult[origin: ImmOrigin, acc_type: DType] = Tuple[
     Scalar[acc_type], Bool, CheckedPointer[origin], Int, CheckedPointer[origin]
