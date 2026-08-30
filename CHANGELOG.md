@@ -10,13 +10,41 @@ serialization framework, with EmberJson supplying the JSON *format* for it
 (`emberjson/_serde/`).
 
 The parser, the SIMD structural index, the Teju Jagua float writer and the
-UTF-8 validator are untouched — `parse`, `try_parse`, `parse_document`,
-`parse_pointer`, `minify` and `is_valid_utf8` behave exactly as before.
-Everything below is confined to the reflection/trait surface.
+UTF-8 validator are untouched — the JSON text they produce and consume is
+identical to before. What changed is the surface above them: the nine
+JSON entry points that used to expose that machinery are now the four
+described in the first breaking change below.
 
 ### Breaking changes
 
-#### 1. Unknown wire fields are skipped, not rejected
+#### 1. The JSON entry points are unified into `from_json` / `to_json`
+
+The JSON entry points are unified into `from_json`, `try_from_json`,
+`to_json` and `to_json_pretty`. `parse`, `try_parse`, `parse_document`,
+`try_parse_document`, `deserialize`, `try_deserialize`, `serialize`,
+`to_string` and `write_pretty` are removed with no deprecation period.
+
+| old | new |
+| --- | --- |
+| `parse(s)` | `from_json[Value](s)` |
+| `try_parse(s)` | `try_from_json[Value](s)` |
+| `parse_document(s)` | `from_json[Document](s)` |
+| `try_parse_document(s)` | `try_from_json[Document](s)` |
+| `deserialize[T](s)` | `from_json[T](s)` |
+| `try_deserialize[T](s)` | `try_from_json[T](s)` |
+| `to_string(v)` / `serialize(v)` | `to_json(v)` |
+| `write_pretty(v)` | `to_json_pretty(v)` |
+
+`parse_pointer` and `try_parse_pointer` are unchanged.
+
+UTF-8 validation now applies uniformly. Reflection-based deserialization
+previously skipped the check; it no longer does. Pass
+`ParseOptions(validate_utf8=False)` to opt out.
+
+`to_json[pretty=True]` on a `Document` is a compile-time error —
+`Document` has no indented writer. Deserialize into a `Value` first.
+
+#### 2. Unknown wire fields are skipped, not rejected
 
 A JSON key matching no declared struct field used to raise
 `"Unexpected field: <name>"`. It is now **skipped** — serde/Jackson
@@ -40,14 +68,14 @@ struct Strict(DenyUnknownFields, Defaultable, Movable):
         self.x = 0
 
 # raises DeserializationError(kind=UnknownField)
-_ = deserialize[Strict]('{"x": 1, "extra": 2}')
+_ = from_json[Strict]('{"x": 1, "extra": 2}')
 ```
 
 This is a **permissiveness** change on a security-relevant surface: a
 caller who relied on EmberJson rejecting unexpected keys now gets no
 error. Audit for that before upgrading.
 
-#### 2. `Default` fills on an absent key only, never on an explicit `null`
+#### 3. `Default` fills on an absent key only, never on an explicit `null`
 
 `Default[T, d]` is now emberserde's `Field[T, default=d]`, and its
 fallback fires when the key is **missing from the object**. An explicit
@@ -56,7 +84,7 @@ non-`Optional` `T` is now an error where it previously produced the
 default.
 
 ```mojo
-from emberjson import deserialize, Defaulted
+from emberjson import from_json, Defaulted
 
 
 @fieldwise_init
@@ -81,24 +109,24 @@ struct OptRec(Defaultable, Movable):
 
 def main() raises:
     # Key absent -> the default fills (unchanged).
-    print(deserialize[Rec]('{"a": 1}').b[])          # prints 42
+    print(from_json[Rec]('{"a": 1}').b[])          # prints 42
 
     # Explicit null -> a PRESENT value, parsed as `Int`: now an error.
     try:
-        _ = deserialize[Rec]('{"a": 1, "b": null}')
+        _ = from_json[Rec]('{"a": 1, "b": null}')
         print("accepted")
     except e:
         print("raises:", e.kind)
 
     # Escape hatch: an `Optional` payload resolves both absence and null.
-    print(deserialize[OptRec]('{"a": 1, "b": null}').b[])  # prints None
-    print(deserialize[OptRec]('{"a": 1}').b[])             # prints 42
+    print(from_json[OptRec]('{"a": 1, "b": null}').b[])  # prints None
+    print(from_json[OptRec]('{"a": 1}').b[])             # prints 42
 ```
 
 This one is silent at the call site: nothing about the spelling changes,
 only the behaviour on `null`.
 
-#### 3. `JsonSerializable` / `JsonDeserializable` removed
+#### 4. `JsonSerializable` / `JsonDeserializable` removed
 
 Implement emberserde's `Serializable` / `Deserializable` instead. They are
 format-agnostic, so an implementation works for any emberserde format.
@@ -117,7 +145,7 @@ def from_json(mut p: Parser) raises -> Self:
 Now it declares `serialize` / `deserialize` against emberserde's traits:
 
 ```mojo
-from emberjson import deserialize, serialize
+from emberjson import from_json, to_json
 from emberserde import (
     Deserializable,
     DeserializationError,
@@ -143,8 +171,8 @@ struct Counter(Deserializable, Serializable):
 
 
 def main() raises:
-    print(serialize(Counter(7)))
-    print(deserialize[Counter]("7").value)
+    print(to_json(Counter(7)))
+    print(from_json[Counter]("7").value)
 ```
 
 Removed along with them: EmberJson's own `Serializer` and
@@ -155,7 +183,7 @@ Removed along with them: EmberJson's own `Serializer` and
 See the README's *Custom serialization and deserialization* section for a
 complete working example.
 
-#### 4. `serialize_as_array` / `deserialize_as_array` removed, with no counterpart
+#### 5. `serialize_as_array` / `deserialize_as_array` removed, with no counterpart
 
 A struct could opt into riding the wire as a JSON array (`[1, 2]` instead
 of `{"x":1,"y":2}`). emberserde has no equivalent: a struct is always an
@@ -165,7 +193,7 @@ Workarounds: use a `Tuple` field (emberserde encodes tuples as arrays), or
 hand-write a `Serializable`/`Deserializable` pair driving
 `begin_seq`/`begin_tuple` directly.
 
-#### 5. The `Parser`-taking `deserialize` / `try_deserialize` overloads are gone
+#### 6. The `Parser`-taking `deserialize` / `try_deserialize` overloads are gone
 
 ```mojo
 # before
@@ -173,33 +201,43 @@ var parser = Parser[options](doc)
 var v = deserialize[T](parser^)
 
 # now — `ParseOptions` is a parameter on the function itself
-var v = deserialize[T, options](doc)
+# (and, per breaking change 1 above, the function itself is `from_json`)
+var v = from_json[T, options](doc)
 ```
 
 The overload existed mainly to let callers choose `ParseOptions`. That
-channel is now a parameter on `deserialize`, `try_deserialize` and the
+channel is now a parameter on `from_json`, `try_from_json` and the
 format-layer `emberjson._serde.from_json`, all defaulting to
-`ParseOptions()`. `deserialize` additionally honours
-`options.validate_utf8`, matching `parse`.
+`ParseOptions()`. The public `from_json` additionally honours
+`options.validate_utf8` uniformly, whatever `T` is.
 
-#### 6. `serialize` and `to_string` now raise
+#### 7. `serialize` and `to_string` now raise
+
+(These names were themselves renamed to `to_json` in breaking change 1
+above; the raising behaviour described here carries over to `to_json`.)
 
 Both are `raises SerializationError`. A `Serializable` implementation is
 free to fail (`Lazy.serialize` surfaces a failing `get()` this way), so
 the signature admits it. Callers in non-`raises` closures need updating.
 
-Relatedly, `parse`, `deserialize` and friends raise typed errors —
+Relatedly, `from_json` and friends raise typed errors —
 `DeserializationError` (with `.message`, `.kind`, and `.path`, the wire
 path to a nested failure) and `SerializationError` — rather than a bare
 `Error`. Both are re-exported from `emberjson`. Code that catches
 `except e:` and reads `String(e)` keeps working.
 
-#### 7. `from_json` / `to_json` are not public
+#### 8. `emberjson._serde`'s `from_json` / `to_json` are not public
 
-They are the format layer (`emberjson._serde`) and, unlike `deserialize`,
-`from_json` does **not** validate UTF-8. They are no longer
-re-exported from `emberjson`; import them from `emberjson._serde`
-explicitly if you want the unvalidated entry point.
+*(Superseded by breaking change 1 above: `from_json` and `to_json` are now
+the public top-level names too, dispatching to `Value`, `Document`, or
+reflection depending on `T`. This item describes the private format-layer
+functions the public ones are built on.)*
+
+`emberjson._serde.from_json` / `.to_json` are the format layer, not the
+public entry points. Unlike the public `from_json`, the format layer's
+version does **not** validate UTF-8 on its own -- the public `from_json`
+runs that check once, before dispatch, so every strategy (`Value`,
+`Document`, reflection) sees it uniformly.
 
 ### Fixed during the migration
 
@@ -259,8 +297,9 @@ noise band is ±7%.
 
 ### Added
 
-- `deserialize` / `try_deserialize` / `emberjson._serde.from_json`
-  take `options: ParseOptions`.
+- `deserialize` / `try_deserialize` (renamed `from_json` / `try_from_json`
+  per breaking change 1 above) / `emberjson._serde.from_json` take
+  `options: ParseOptions`.
 - `Field[T, ...]` wire metadata on struct fields — `rename`,
   `extra_names`, `default`, `skip` — with `Defaulted`, `Rename` and `Skip`
   aliases. Re-exported from `emberjson`; read the payload with `[]`.

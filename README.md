@@ -11,44 +11,55 @@ A lightweight JSON parsing library for Mojo.
 
 ## Usage
 
+The entire JSON surface is four functions:
+
+| | |
+| --- | --- |
+| `from_json[T](s)` | JSON text -> `T`. `T` may be `Value`, `Document`, or any reflected type. |
+| `try_from_json[T](s)` | the same, returning `Optional[T]` instead of raising. |
+| `to_json(v)` | any value -> JSON text. |
+| `to_json_pretty(v)` | the same, indented. |
+
 ### Parsing JSON
 
-Use the `parse` function to parse a JSON value from a string. It accepts a
-`ParseOptions` struct as a parameter to alter parsing behaviour.
+Use `from_json[Value]` to parse a JSON value from a string. It accepts a
+`ParseOptions` struct as a second parameter to alter parsing behaviour.
 
 ```mojo
-from emberjson import parse, ParseOptions
+from emberjson import from_json, Value, ParseOptions
 
 # Use custom options
-var json = parse[ParseOptions(ignore_unicode=True)](r'["\uD83D\uDD25"]')
+var json = from_json[Value, ParseOptions(ignore_unicode=True)](r'["\uD83D\uDD25"]')
 ```
 
 EmberJSON supports decoding escaped unicode characters.
 
 ```mojo
-print(parse(r'["\uD83D\uDD25"]')) # prints '["🔥"]'
+from emberjson import from_json, Value
+
+print(from_json[Value](r'["\uD83D\uDD25"]')) # prints '["🔥"]'
 ```
 
-Use `try_parse` for a non-raising variant that returns an `Optional[Value]`:
+Use `try_from_json` for a non-raising variant that returns an `Optional[Value]`:
 
 ```mojo
-from emberjson import try_parse
+from emberjson import try_from_json, Value
 
-var result = try_parse('{"key": 123}')
+var result = try_from_json[Value]('{"key": 123}')
 if result:
     print(result.value())  # prints {"key":123}
 ```
 
 ### Fast immutable documents
 
-`parse_document` parses onto an immutable, self-contained tape `Document`
-(simdjson-style).
+`from_json[Document]` parses onto an immutable, self-contained tape
+`Document` (simdjson-style).
 
 ```mojo
-from emberjson import parse_document, to_string
+from emberjson import from_json, to_json, Document
 
 def main() raises:
-    var d = parse_document('{"name": "ember", "versions": [1, 2.5]}')
+    var d = from_json[Document]('{"name": "ember", "versions": [1, 2.5]}')
 
     print(d.root()["name"].string())        # ember
     print(d.root()["versions"][1].float())  # 2.5
@@ -57,7 +68,7 @@ def main() raises:
     for entry in d.root().object():         # zero-copy keys and values
         print(entry.key)
 
-    print(to_string(d))                     # serialize straight off the tape
+    print(to_json(d))                       # serialize straight off the tape
 
     # Materialize an owned, mutable Value tree when you need to modify
     # the data or keep it beyond the Document's lifetime:
@@ -65,7 +76,7 @@ def main() raises:
     v["name"] = "modified"
 ```
 
-`try_parse_document` is the non-raising variant returning an
+`try_from_json[Document]` is the non-raising variant returning an
 `Optional[Document]`.
 
 ### Partial access with JSON Pointer
@@ -74,7 +85,8 @@ When you need one value out of a large document, `parse_pointer` navigates
 the raw text to an RFC 6901 target using a SIMD structural index and
 parses only that subtree — sibling values are skipped with bracket hops,
 never visiting their contents. Sparse queries run 2-5x faster than even
-`parse_document` on the bench corpus (4.5-16x faster than `parse`).
+`from_json[Document]` on the bench corpus (4.5-16x faster than
+`from_json[Value]`).
 
 ```mojo
 from emberjson import parse_pointer
@@ -86,25 +98,26 @@ print(name.string())
 The trade-off: the target (and everything actually traversed) is fully
 validated, but bytes that are merely skipped over are checked only for
 structural sanity — `parse_pointer('{"bad": nope, "good": 1}', "/good")`
-succeeds. Use `parse` when whole-document validation matters.
+succeeds. Use `from_json[Value]` when whole-document validation matters.
 `try_parse_pointer` is the non-raising variant.
 
 ### UTF-8 validation
 
-JSON text is required to be UTF-8 (RFC 8259), and every parse entry
-point validates that by default: input containing overlongs, surrogates,
+JSON text is required to be UTF-8 (RFC 8259), and every `from_json` entry
+point validates that by default -- uniformly, whether `T` is `Value`,
+`Document`, or a reflected struct: input containing overlongs, surrogates,
 truncated sequences, or code points above U+10FFFF is rejected before
 parsing. The check is a SIMD validator running at ~19-30 GB/s (with an
 ASCII fast path), so it typically costs 2-4% of a parse. For trusted
 input you can opt out:
 
 ```mojo
-from emberjson import parse, is_valid_utf8, ParseOptions
+from emberjson import from_json, Value, is_valid_utf8, ParseOptions
 
-var v = parse(untrusted_bytes)  # raises on invalid UTF-8
+var v = from_json[Value](untrusted_bytes)  # raises on invalid UTF-8
 
 comptime trusted = ParseOptions(validate_utf8=False)
-var w = parse[trusted](my_own_bytes)  # skips the check
+var w = from_json[Value, trusted](my_own_bytes)  # skips the check
 
 # Also available standalone:
 if is_valid_utf8(some_bytes):
@@ -113,23 +126,29 @@ if is_valid_utf8(some_bytes):
 
 ### Converting to String
 
-Use the `to_string` function to convert a JSON struct to its string representation.
-It accepts a parameter to control whether to pretty print the value.
-The JSON struct also conforms to the `Writable` trait.
+Use `to_json` to convert a JSON struct to its string representation. It
+accepts a parameter to control whether to pretty print the value, or use
+`to_json_pretty` directly. The JSON struct also conforms to the
+`Writable` trait.
 
 ```mojo
-from emberjson import parse, to_string
+from emberjson import from_json, to_json, to_json_pretty, Value
 
 def main() raises:
-    var json = parse('{"key": 123}')
-    
-    print(to_string(json)) # prints {"key":123}
-    print(to_string[pretty=True](json))
+    var json = from_json[Value]('{"key": 123}')
+
+    print(to_json(json)) # prints {"key":123}
+    print(to_json_pretty(json))
 # prints:
 #{
 #    "key": 123
 #}
 ```
+
+> `to_json[pretty=True]` on a `Document` is a **compile-time error** --
+> `Document` writes straight off its tape and has no indented writer.
+> Deserialize into a `Value` first if you need indented output from
+> tape input.
 
 Use `minify` to strip whitespace from a JSON string without parsing:
 
@@ -148,7 +167,7 @@ an `Object`, `Array`, `String`, `Int`, `Float64`, `Bool`, or `Null`.
 ```mojo
 from emberjson import *
 
-var json = parse('{"key": 123}')
+var json = from_json[Value]('{"key": 123}')
 
 # check inner type
 print(json.is_object()) # prints True
@@ -157,7 +176,7 @@ print(json.is_object()) # prints True
 print(json.object()["key"].int()) # prints 123
 
 # array
-var value = parse('[123, 4.5, "string", true, null]')
+var value = from_json[Value]('[123, 4.5, "string", true, null]')
 ref array = value.array()
 
 # array style access
@@ -215,7 +234,7 @@ of its fields have non-trivial destructors (`String`, `List`, a nested
 struct holding either, …).
 
 ```mojo
-from emberjson import deserialize, try_deserialize
+from emberjson import from_json, try_from_json
 
 
 @fieldwise_init
@@ -236,19 +255,19 @@ def main() raises:
     var json_str = '{"id": 1, "name": "Mojo", "is_active": true, "scores": [9.9, 8.5]}'
 
     # Raises `DeserializationError` on invalid JSON
-    var user = deserialize[User](json_str)
+    var user = from_json[User](json_str)
     print(user.name)  # prints Mojo
 
     # Returns `Optional[User]` instead of raising
-    var user_opt = try_deserialize[User](json_str)
+    var user_opt = try_from_json[User](json_str)
     if user_opt:
         print(user_opt.value().name)  # prints Mojo
 ```
 
-`deserialize` and `try_deserialize` take the same `ParseOptions` as `parse`:
+`from_json` and `try_from_json` take the same `ParseOptions` as any other call:
 
 ```mojo
-from emberjson import deserialize, try_deserialize, ParseOptions
+from emberjson import from_json, try_from_json, ParseOptions
 
 @fieldwise_init
 struct Doc(Defaultable, Movable):
@@ -260,10 +279,10 @@ struct Doc(Defaultable, Movable):
 
 def main() raises:
     comptime fast = ParseOptions(ignore_unicode=True, validate_utf8=False)
-    var d = deserialize[Doc, fast]('{"text": "\\u0041"}')
+    var d = from_json[Doc, fast]('{"text": "\\u0041"}')
     print(d.text)  # prints \u0041 -- the escape is left undecoded
 
-    var maybe = try_deserialize[Doc, fast]('{"text": "hi"}')
+    var maybe = try_from_json[Doc, fast]('{"text": "hi"}')
     print(maybe.value().text)  # prints hi
 ```
 
@@ -271,7 +290,7 @@ Nested structs and `Optional` fields are handled automatically. A missing
 JSON key for an `Optional` field reads as `None`:
 
 ```mojo
-from emberjson import deserialize
+from emberjson import from_json
 
 
 @fieldwise_init
@@ -296,7 +315,7 @@ struct Person(Defaultable, Movable):
 
 def main() raises:
     var json_str = '{"name": "Mojo", "address": {"city": "SF"}}'
-    var person = deserialize[Person](json_str)
+    var person = from_json[Person](json_str)
     print(person.name)              # prints Mojo
     print(person.address.city)      # prints SF
     print(person.address.zip)       # prints None (missing field)
@@ -310,7 +329,7 @@ blind hop — but it no longer fails the deserialization. Conform the struct
 to `DenyUnknownFields` to reject it instead:
 
 ```mojo
-from emberjson import deserialize
+from emberjson import from_json
 from emberserde import DenyUnknownFields
 
 
@@ -333,11 +352,11 @@ struct Strict(DenyUnknownFields, Defaultable, Movable):
 def main() raises:
     # Unknown wire fields are SKIPPED by default (they are still fully
     # validated on the way past, not blindly hopped over).
-    print(deserialize[Loose]('{"x": 1, "extra": [1, 2]}').x)  # prints 1
+    print(from_json[Loose]('{"x": 1, "extra": [1, 2]}').x)  # prints 1
 
     # Opt back in to rejecting them per type.
     try:
-        _ = deserialize[Strict]('{"x": 1, "extra": 2}')
+        _ = from_json[Strict]('{"x": 1, "extra": 2}')
     except e:
         print(e.kind)  # prints UnknownField
 ```
@@ -345,7 +364,7 @@ def main() raises:
 #### Serialization
 
 ```mojo
-from emberjson import serialize
+from emberjson import to_json
 
 
 @fieldwise_init
@@ -355,8 +374,8 @@ struct Point:
 
 
 def main() raises:
-    print(serialize(Point(1, 2)))               # prints {"x":1,"y":2}
-    print(serialize[pretty=True](Point(1, 2)))  # pretty printed
+    print(to_json(Point(1, 2)))               # prints {"x":1,"y":2}
+    print(to_json[pretty=True](Point(1, 2)))  # pretty printed
 ```
 
 #### Typed errors
@@ -367,7 +386,7 @@ The public entry points raise typed errors rather than a bare `Error`.
 `.message` and `.kind`. Both are re-exported from `emberjson`.
 
 ```mojo
-from emberjson import deserialize, DeserializationError, DerErrorKind
+from emberjson import from_json, DeserializationError, DerErrorKind
 
 
 @fieldwise_init
@@ -392,24 +411,26 @@ struct Outer(Defaultable, Movable):
 
 def main() raises:
     try:
-        _ = deserialize[Outer]('{"label": "a", "inner": {"x": 1}}')
+        _ = from_json[Outer]('{"label": "a", "inner": {"x": 1}}')
     except e:
         print(e.message)  # missing field: y
         print(e.kind)     # MissingField
         print(e.path)     # .inner
 ```
 
-`try_parse`, `try_deserialize`, `try_parse_document` and `try_parse_pointer`
-swallow these and hand back an `Optional` instead.
+`try_from_json` and `try_parse_pointer` swallow these and hand back an
+`Optional` instead.
 
 #### Custom serialization and deserialization
 
 Implement emberserde's `Serializable` and/or `Deserializable` to take over
 how a type rides the wire. `serialize` receives the active `Serializer`;
 `deserialize` is a `@staticmethod` receiving the active `Deserializer`.
+These are the trait methods -- unrelated to the top-level `to_json`/
+`from_json` functions, which call them under the hood.
 
 ```mojo
-from emberjson import deserialize, serialize
+from emberjson import from_json, to_json
 from emberserde import (
     DerErrorKind,
     Deserializable,
@@ -446,8 +467,8 @@ struct Celsius(Deserializable, Serializable):
 
 
 def main() raises:
-    print(serialize(Celsius(21.5)))                 # prints "21.5C"
-    print(deserialize[Celsius]('"21.5C"').degrees)  # prints 21.5
+    print(to_json(Celsius(21.5)))                 # prints "21.5C"
+    print(from_json[Celsius]('"21.5C"').degrees)  # prints 21.5
 ```
 
 Those surfaces are format-agnostic — `serialize_bool`, `serialize_number`,
@@ -472,7 +493,7 @@ absent key (`default`), or exclusion from the wire entirely (`skip`).
 cases. Read the payload back with `[]`.
 
 ```mojo
-from emberjson import deserialize, serialize, Field, Defaulted
+from emberjson import from_json, to_json, Field, Defaulted
 
 
 # `Defaultable` because the payloads have non-trivial destructors: the
@@ -491,10 +512,10 @@ struct Config(Defaultable, Movable):
 
 
 def main() raises:
-    var c = deserialize[Config]('{"hostname": "localhost"}')
+    var c = from_json[Config]('{"hostname": "localhost"}')
     print(c.host[])          # prints localhost
     print(c.port[])          # prints 8080 -- the key was absent
-    print(serialize(c))      # prints {"hostname":"localhost","port":8080}
+    print(to_json(c))        # prints {"hostname":"localhost","port":8080}
 ```
 
 > `default` fires on an **absent key** only. An explicit `null` is a present
@@ -506,28 +527,28 @@ def main() raises:
 
 Any deserialized struct can defer expensive subtrees by declaring fields
 as `Lazy` wrappers (`LazyValue`, `LazyString`, `LazyInt`, `LazyFloat`,
-or `Lazy[YourType, origin]`): during `deserialize` those fields only
+or `Lazy[YourType, origin]`): during `from_json` those fields only
 record their byte span (grammar-validated, so re-serialization is safe),
 and materialize when you call `.get()`. The struct is parameterized on
 the input's origin, which lets the compiler guarantee the spans cannot
 outlive the source string.
 
 ```mojo
-from emberjson import deserialize, LazyValue, LazyString
+from emberjson import from_json, LazyValue, LazyString
 
 struct Event[origin: ImmOrigin](Movable):
     var id: Int64                      # parsed eagerly
     var payload: LazyValue[Self.origin]  # span captured, parsed on demand
     var note: LazyString[Self.origin]
 
-var e = deserialize[Event[origin_of(data)]](data)
+var e = from_json[Event[origin_of(data)]](data)
 print(e.id)                  # already materialized
 print(e.payload.get())       # parses just this subtree, now
 ```
 
 ### Schema Validation
 
-EmberJson provides compile-time schema validation types that enforce constraints during both construction and deserialization. Validators wrap a value and raise on constraint violations. All validators integrate with `serialize`/`deserialize` and can be used as struct field types.
+EmberJson provides compile-time schema validation types that enforce constraints during both construction and deserialization. Validators wrap a value and raise on constraint violations. All validators integrate with `to_json`/`from_json` and can be used as struct field types.
 
 Access the validated value with `[]`:
 
@@ -537,7 +558,7 @@ from emberjson import *
 var port = Range[Int, 1, 65535](8080)
 print(port[])  # prints 8080
 
-var port2 = deserialize[Range[Int, 1, 65535]]("443")
+var port2 = from_json[Range[Int, 1, 65535]]("443")
 print(port2[])  # prints 443
 ```
 
@@ -561,14 +582,14 @@ print(port2[])  # prints 443
 from emberjson import *
 
 # Validate on deserialization
-var name = deserialize[NonEmpty[String]]('"Alice"')
+var name = from_json[NonEmpty[String]]('"Alice"')
 
 # Validate on construction
 var score = Range[Float64, 0.0, 100.0](95.5)
 
 # Enum-style validation (the element type is inferred from the values)
 comptime Color = Enum["red", "green", "blue"]
-var c = deserialize[Color]('"red"')
+var c = from_json[Color]('"red"')
 print(c[])  # prints red
 ```
 
@@ -580,27 +601,27 @@ Combine validators for complex constraints:
 from emberjson import *
 
 # AllOf: ALL validators must pass
-var v = deserialize[
+var v = from_json[
     AllOf[String, Size[String, 3, 7], StartsWith["a"]]
 ]('"astring"')
 
 # OneOf: EXACTLY one validator must pass
-var o = deserialize[
+var o = from_json[
     OneOf[String, Eq["red"], Eq["green"], Eq["blue"]]
 ]('"red"')
 
 # AnyOf: AT LEAST one validator must pass
-var a = deserialize[
+var a = from_json[
     AnyOf[Int, Eq[1], Eq[2], Range[Int, 10, 20]]
 ]("15")
 
 # NoneOf: NO validators must pass
-var n = deserialize[
+var n = from_json[
     NoneOf[Int, Range[Int, 0, 5], Eq[100]]
 ]("7")
 
 # Not: invert any validator
-var x = deserialize[Not[Int, Range[Int, 0, 10]]]("15")
+var x = from_json[Not[Int, Range[Int, 0, 10]]]("15")
 ```
 
 #### Data Transformers
@@ -616,20 +637,20 @@ from emberjson import *
 # is parsed as `T` (see the struct example below). Wrap the payload in
 # `Optional` when `null` should be tolerated too:
 #   Defaulted[Optional[Int], Optional[Int](42)]
-var d = deserialize[Default[Int, 42]]("7")
+var d = from_json[Default[Int, 42]]("7")
 print(d[])  # prints 7
 
 # Secret: deserializes normally, serializes as "********"
-var pw = deserialize[Secret[String]]('"my_password"')
-print(pw[])           # prints my_password
-print(serialize(pw))  # prints "********"
+var pw = from_json[Secret[String]]('"my_password"')
+print(pw[])         # prints my_password
+print(to_json(pw))  # prints "********"
 
 # Clamp: constrains value to a range instead of rejecting
-var c = deserialize[Clamp[Int, 0, 100]]("150")
+var c = from_json[Clamp[Int, 0, 100]]("150")
 print(c[])  # prints 100 (clamped to max)
 
 # CoerceInt/CoerceFloat/CoerceString: type coercion from JSON
-var i = deserialize[CoerceInt]('"123"')
+var i = from_json[CoerceInt]('"123"')
 print(i[])  # prints 123 (coerced from string)
 
 # Transform: apply a function during deserialization
@@ -638,7 +659,7 @@ def date_to_epoch(s: String) -> Int:
         return 1704067200
     return 0
 
-var epoch = deserialize[Transform[String, Int, date_to_epoch]]('"2024-01-01"')
+var epoch = from_json[Transform[String, Int, date_to_epoch]]('"2024-01-01"')
 print(epoch[])  # prints 1704067200
 ```
 
@@ -655,11 +676,11 @@ struct Config(Movable):
     var timeout: Default[Int, 30]
 
 def main() raises:
-    var cfg = deserialize[Config]('{"port": 8080, "retries": 3}')
+    var cfg = from_json[Config]('{"port": 8080, "retries": 3}')
     print(cfg.port[])      # prints 8080
     print(cfg.retries[])   # prints 3
     print(cfg.timeout[])   # prints 30 (default, since missing from JSON)
-    print(serialize(cfg))  # prints {"port":8080,"retries":3,"timeout":30}
+    print(to_json(cfg))    # prints {"port":8080,"retries":3,"timeout":30}
 ```
 
 > **Current limitation:** a validator field whose wrapped type has a
@@ -668,7 +689,7 @@ def main() raises:
 > be `Defaultable`, but validators only expose a raising constructor, so a
 > non-raising `__init__` cannot build one. Validators wrapping trivially
 > destructible types (`Int`, `Float64`, `Bool`, …) work as shown above, and
-> `deserialize[NonEmpty[String]](...)` works fine on its own.
+> `from_json[NonEmpty[String]](...)` works fine on its own.
 
 #### Cross-Field Validation
 
@@ -692,7 +713,7 @@ def validate_order(start: Int, end: Int) raises:
         raise Error("start must be before end")
 
 def main() raises:
-    var dr = deserialize[
+    var dr = from_json[
         CrossFieldValidator[DateRange, "start", "end", validate_order]
     ]('{"start": 1, "end": 10}')
     print(dr[].start)  # prints 1
@@ -751,12 +772,12 @@ print(j.foo.bar[1])  # prints 2
 EmberJson supports [RFC 6902](https://tools.ietf.org/html/rfc6902) JSON Patch for applying a sequence of operations to a JSON document, and [RFC 7386](https://tools.ietf.org/html/rfc7386) JSON Merge Patch for recursive merging.
 
 ```mojo
-from emberjson import parse, Value, Object
+from emberjson import from_json, Value, Object
 from emberjson.patch import patch, merge_patch
 
 def main() raises:
     # RFC 6902: apply a sequence of operations
-    var doc = parse('{"foo": "bar", "items": [1, 2]}')
+    var doc = from_json[Value]('{"foo": "bar", "items": [1, 2]}')
     patch(doc, """[
         {"op": "replace", "path": "/foo", "value": "baz"},
         {"op": "add", "path": "/items/-", "value": 3},
@@ -769,7 +790,7 @@ def main() raises:
     patch(doc, '[{"op": "test", "path": "/foo", "value": "baz"}]')
 
     # RFC 7386: recursive merge patch
-    var target = parse('{"a": "b", "c": {"d": "e", "f": "g"}}')
+    var target = from_json[Value]('{"a": "b", "c": {"d": "e", "f": "g"}}')
     merge_patch(target, '{"a": "z", "c": {"f": null}}')
     # target is now {"a": "z", "c": {"d": "e"}}
     # null values remove keys

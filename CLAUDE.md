@@ -44,7 +44,7 @@ All JSON data is represented as this unified type.
 
 ### Module Layout
 
-- **`emberjson/__init__.mojo`** — public API: `parse`, `to_string`, `serialize`, `deserialize`, etc.
+- **`emberjson/__init__.mojo`** — public API: `from_json`, `try_from_json`, `to_json`, `to_json_pretty`, etc.
 - **`emberjson/value.mojo`** — core `Value` type
 - **`emberjson/array.mojo`**, **`object.mojo`** — collection types
 - **`emberjson/_deserialize/`** — parsing pipeline:
@@ -74,17 +74,19 @@ All JSON data is represented as this unified type.
 ### Public API
 
 ```mojo
-parse[options](json_string)          # → Value (raises on error)
-try_parse[options](json_string)      # → Optional[Value]
-parse_document[options](json_string) # → Document (immutable tape, fastest full parse)
-try_parse_document[options](s)       # → Optional[Document]
-parse_pointer[options](s, "/a/b/0")  # → Value (partial access: only the target is parsed/validated)
-try_parse_pointer[options](s, path)  # → Optional[Value]
-is_valid_utf8(bytes_or_slice)        # → Bool (RFC 3629 SIMD validator; ON by default in parsing — ParseOptions(validate_utf8=False) to skip)
-to_string[pretty=False](value)       # → String
-serialize[pretty=False](value)       # → String
-deserialize[T](json_string)          # → T (reflection-based)
-try_deserialize[T](json_string)      # → Optional[T]
+from_json[T, options](json_string)     # → T (raises DeserializationError)
+try_from_json[T, options](json_string) # → Optional[T]
+to_json[pretty, indent](value)         # → String (raises SerializationError)
+to_json_pretty[indent](value)          # → String, indented
+
+# T selects the strategy at compile time:
+#   Value    → hand-written recursive-descent parser, mutable variant
+#   Document → immutable tape, no per-node allocation, fastest full parse
+#   other    → emberserde reflection
+
+parse_pointer[options](s, "/a/b/0")    # → Value (only the target is parsed)
+try_parse_pointer[options](s, path)    # → Optional[Value]
+is_valid_utf8(bytes_or_slice)          # → Bool (ON by default in from_json)
 ```
 
 ## Mojo Version
