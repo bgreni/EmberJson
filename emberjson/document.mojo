@@ -542,6 +542,35 @@ def _write_tape_value(doc: Document, idx: Int, mut writer: Some[Writer]) -> Int:
         return close + 1
 
 
+def _parse_document_root[
+    options: ParseOptions
+](s: StringSlice) raises -> Document:
+    """`parse_document`'s parse, with the UTF-8 pre-pass removed.
+
+    Split out so `emberjson.from_json` can run the pre-pass once at the
+    top and dispatch here without paying for it twice. Callers are
+    responsible for having validated the input (or for deliberately
+    skipping validation).
+    """
+    var sink = TapeSink(
+        tape_capacity=s.byte_length() // 3 + 8,
+        strings_capacity=s.byte_length() // 2 + 16,
+    )
+    # See `emberjson.from_json`: pad-and-copy enables unchecked hot loops;
+    # tiny inputs skip the copy since it would cost more than the parse.
+    if s.byte_length() < PAD_INPUT_THRESHOLD:
+        var p = Parser[options=options](s)
+        parse_document_tape(p, sink)
+    else:
+        # Padded inputs take the two-stage engine (structural index +
+        # simdjson-style stage-2 walk); it beats the byte-walk on every
+        # corpus workload.
+        var buf = PaddedBuffer(s.as_bytes())
+        var p = Parser[options=options._padded()](padded=buf)
+        parse_document_tape_indexed(p, sink)
+    return _finish_document[options](sink^)
+
+
 def parse_document[
     options: ParseOptions = ParseOptions()
 ](s: StringSlice) raises -> Document:
@@ -565,23 +594,7 @@ def parse_document[
     comptime if options.validate_utf8:
         if not is_valid_utf8(s):
             raise Error("Invalid UTF-8 in input")
-    var sink = TapeSink(
-        tape_capacity=s.byte_length() // 3 + 8,
-        strings_capacity=s.byte_length() // 2 + 16,
-    )
-    # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
-    # tiny inputs skip the copy since it would cost more than the parse.
-    if s.byte_length() < PAD_INPUT_THRESHOLD:
-        var p = Parser[options=options](s)
-        parse_document_tape(p, sink)
-    else:
-        # Padded inputs take the two-stage engine (structural index +
-        # simdjson-style stage-2 walk); it beats the byte-walk on every
-        # corpus workload.
-        var buf = PaddedBuffer(s.as_bytes())
-        var p = Parser[options=options._padded()](padded=buf)
-        parse_document_tape_indexed(p, sink)
-    return _finish_document[options](sink^)
+    return _parse_document_root[options._utf8_validated()](s)
 
 
 def _finish_document[options: ParseOptions](var sink: TapeSink) -> Document:

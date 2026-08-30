@@ -8,12 +8,14 @@ from emberjson import (
     ParseOptions,
     StrictOptions,
     Value,
+    PAD_INPUT_THRESHOLD,
 )
 from std.os import listdir
 from emberjson import Parser
 from emberjson._deserialize.tape import TapeSink, _Arena
 from emberjson._deserialize.tape_indexed import parse_document_tape_indexed
 from emberjson.utils import PaddedBuffer
+from emberjson.document import _parse_document_root
 
 
 def indexed_doc[
@@ -396,6 +398,23 @@ def test_jsonchecker_differential() raises:
             assert_equal(to_string(d.value()), to_string(v.value()))
         checked += 1
     assert_true(checked >= 30)
+
+
+def test_parse_document_root_skips_utf8_prepass() raises:
+    # The root helper does no UTF-8 validation of its own -- that is the
+    # caller's job. Valid input must parse identically to parse_document.
+    var wire = '{"a":[1,2,3],"b":{"c":"x"}}'
+    var viaroot = _parse_document_root[ParseOptions()](wire)
+    var viapublic = parse_document(wire)
+    assert_equal(viaroot.to_string(), viapublic.to_string())
+
+
+def test_parse_document_root_handles_padded_path() raises:
+    # Comfortably over PAD_INPUT_THRESHOLD (128) so the indexed engine runs.
+    var wire = '{"k":"' + String("PADDING_") * 40 + '"}'
+    assert_true(wire.byte_length() > PAD_INPUT_THRESHOLD)
+    var viaroot = _parse_document_root[ParseOptions()](wire)
+    assert_equal(viaroot.to_string(), parse_document(wire).to_string())
 
 
 def main() raises:
