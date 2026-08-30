@@ -9,7 +9,7 @@ from .utils import (
     PAD_INPUT_THRESHOLD,
 )
 from std.utils.variant import Variant
-from .traits import JsonValue, PrettyPrintable
+from .traits import JsonValue
 from std.sys.intrinsics import unlikely, likely
 from ._deserialize import Parser, ParseOptions
 from ._utf8 import is_valid_utf8
@@ -62,12 +62,6 @@ struct Null(JsonValue, TrivialRegisterPassable):
     @always_inline
     def write_repr_to(self, mut writer: Some[Writer]):
         writer.write("Null()")
-
-    @always_inline
-    def pretty_to(
-        self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
-    ):
-        writer.write(self)
 
     def to_python_object(self) raises -> PythonObject:
         return {}
@@ -453,34 +447,6 @@ struct Value(JsonValue, Sized):
             self.array().write_repr_to(writer)
         else:
             abort("Unreachable: write_repr_to")
-
-    def _pretty_to_as_element(
-        self, mut writer: Some[Writer], indent: String, curr_depth: UInt
-    ):
-        if self.is_object():
-            writer.write("{\n")
-            self.object()._pretty_write_items(writer, indent, curr_depth + 1)
-            for _ in range(curr_depth):
-                writer.write(indent)
-            writer.write("}")
-        elif self.is_array():
-            writer.write("[\n")
-            self.array()._pretty_write_items(writer, indent, curr_depth + 1)
-            for _ in range(curr_depth):
-                writer.write(indent)
-            writer.write("]")
-        else:
-            self.write_to(writer)
-
-    def pretty_to(
-        self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
-    ):
-        if self.is_object():
-            self.object().pretty_to(writer, indent, curr_depth=curr_depth)
-        elif self.is_array():
-            self.array().pretty_to(writer, indent, curr_depth=curr_depth)
-        else:
-            self.write_to(writer)
 
     def serialize(self, mut s: Some[Serializer]) raises SerializationError:
         if self.is_int():

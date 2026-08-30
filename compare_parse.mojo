@@ -17,33 +17,29 @@ comptime iters = 1_000_000
 @__parameter
 def bench_emberjson(mut b: Bencher, val: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm val}:
         for _ in range(iters):
             var p = Parser(val)
             var f = p.expect_float()
             keep(f)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def bench_stdlib(mut b: Bencher, val: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm val}:
         for _ in range(iters):
             var f = Float64(val)
             keep(f)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 def run_group(mut m: Bench, name: String, val: String) raises:
-    m.bench_with_input[String, bench_emberjson](
-        BenchId("EmberJson/" + name), val
-    )
-    m.bench_with_input[String, bench_stdlib](BenchId("Stdlib/" + name), val)
+    m.bench_with_input(bench_emberjson, BenchId("EmberJson/" + name), val)
+    m.bench_with_input(bench_stdlib, BenchId("Stdlib/" + name), val)
 
 
 def capture_report(mut m: Bench) raises -> String:

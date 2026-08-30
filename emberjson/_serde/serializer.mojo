@@ -19,12 +19,13 @@ from std.format._utils import _WriteBufferStack
 #   - generic over the writer type `W` (instead of hardcoding `String`), so a
 #     future caller can hand it EmberJson's `_WriteBufferStack` and keep that
 #     writer's speed;
-#   - comptime-branching on `pretty` to match the indentation behavior of
-#     `emberjson.utils.write_pretty`, the hand-written pretty printer
-#     `Value`/`Object`/`Array` still use (4-space indent, newline after
-#     every opening bracket/brace, indented closing bracket/brace). The two
-#     are pinned byte-for-byte against each other by
-#     `test/emberjson/serde/test_format_serialize.mojo`.
+#   - comptime-branching on `pretty` (and on the `indent` string) to drive
+#     `write_pretty`, which used to be a hand-written printer over a
+#     `PrettyPrintable` trait on `Value`/`Object`/`Array`. Its layout is
+#     preserved exactly — newline after every opening bracket/brace, closing
+#     bracket/brace indented to its opener's column — and pinned by
+#     `test/emberjson/serde/test_format_serialize.mojo` plus
+#     `test/emberjson/parsing/test_writer.mojo`.
 #
 # `serialize_seq` and `serialize_struct` are intentionally NOT overridden —
 # per the trait's comments they are framework drivers (size hints, skip/
@@ -32,9 +33,17 @@ from std.format._utils import _WriteBufferStack
 # logic. Only the `begin_*`/state hooks are implemented here.
 
 
-def _write_indent(mut out: Some[Writer], depth: Int):
+comptime DefaultIndent = "    "
+"""Indent one nesting level costs when `pretty` is on.
+
+A comptime parameter rather than a runtime field: the alternative threads a
+`String` through all five `*SerState` structs, paying an indirection per
+container in the compact path too, which is the hot one."""
+
+
+def _write_indent[indent: String](mut out: Some[Writer], depth: Int):
     for _ in range(depth):
-        out.write("    ")
+        out.write(indent)
 
 
 @fieldwise_init
@@ -42,6 +51,7 @@ struct EmberJsonSeqSer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
     pretty: Bool = False,
+    indent: String = DefaultIndent,
 ](SeqSerState):
     var out: Pointer[Self.W, Self.origin]
     var first: Bool
@@ -54,10 +64,10 @@ struct EmberJsonSeqSer[
                 self.out[].write("\n")
         self.first = False
         comptime if Self.pretty:
-            _write_indent(self.out[], self.depth)
-        var sub = EmberJsonSerializer[Self.W, Self.origin, Self.pretty](
-            out=self.out, depth=self.depth
-        )
+            _write_indent[Self.indent](self.out[], self.depth)
+        var sub = EmberJsonSerializer[
+            Self.W, Self.origin, Self.pretty, Self.indent
+        ](out=self.out, depth=self.depth)
         serialize(v, sub)
 
     def end(mut self) raises SerializationError:
@@ -68,13 +78,13 @@ struct EmberJsonSeqSer[
             # no trailing element that owes the closing bracket a
             # separating newline. Skipping it here (but still indenting to
             # `depth - 1`, matching this container's own opening-bracket
-            # column) turns `"[\n\n]"` into `"[\n]"` — matching
-            # `emberjson.utils.write_pretty`, whose per-item writer (not
-            # its closing brace) owns the inter-element/trailing newline
-            # and so never emits one when there were no items.
+            # column) turns `"[\n\n]"` into `"[\n]"`, the layout the
+            # hand-written `write_pretty` produced because its per-item
+            # writer (not its closing brace) owned the inter-element and
+            # trailing newline, and so emitted none when there were no items.
             if not self.first:
                 self.out[].write("\n")
-            _write_indent(self.out[], self.depth - 1)
+            _write_indent[Self.indent](self.out[], self.depth - 1)
         self.out[].write("]")
 
 
@@ -83,6 +93,7 @@ struct EmberJsonMapSer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
     pretty: Bool = False,
+    indent: String = DefaultIndent,
 ](MapSerState):
     var out: Pointer[Self.W, Self.origin]
     var first: Bool
@@ -95,7 +106,7 @@ struct EmberJsonMapSer[
                 self.out[].write("\n")
         self.first = False
         comptime if Self.pretty:
-            _write_indent(self.out[], self.depth)
+            _write_indent[Self.indent](self.out[], self.depth)
 
         # Fast path: `String` keys are by far the common case (every
         # `Object`/`Dict[String, V]` key is one) — write straight into the
@@ -105,29 +116,31 @@ struct EmberJsonMapSer[
             write_escaped_string(rebind[String](k), self.out[])
         else:
             # Stringify non-string keys (serde_json behavior, mirroring the
-            # toy format): render the key into a scratch buffer, then wrap
-            # in quotes unless it already produced a quoted JSON string.
+            # toy format): render the key compactly into a scratch buffer,
+            # then emit it as a JSON string. A quoted render (string-like
+            # keys) is already a valid JSON string and passes through
+            # verbatim; anything else is escaped, so a composite key
+            # (struct/tuple/enum) whose render contains quotes or
+            # backslashes cannot corrupt the output.
             var keybuf = String()
-            var sub = EmberJsonSerializer[
-                String, origin_of(keybuf), Self.pretty
-            ](out=Pointer(to=keybuf), depth=self.depth)
+            var sub = EmberJsonSerializer[String, origin_of(keybuf), False](
+                out=Pointer(to=keybuf), depth=0
+            )
             serialize(k, sub)
             if keybuf.byte_length() > 0 and Int(keybuf.as_bytes()[0]) == ord(
                 '"'
             ):
                 self.out[].write(keybuf)
             else:
-                self.out[].write('"')
-                self.out[].write(keybuf)
-                self.out[].write('"')
+                write_escaped_string(keybuf, self.out[])
 
     def serialize_value(mut self, v: Some[AnyType]) raises SerializationError:
         self.out[].write(":")
         comptime if Self.pretty:
             self.out[].write(" ")
-        var sub = EmberJsonSerializer[Self.W, Self.origin, Self.pretty](
-            out=self.out, depth=self.depth
-        )
+        var sub = EmberJsonSerializer[
+            Self.W, Self.origin, Self.pretty, Self.indent
+        ](out=self.out, depth=self.depth)
         serialize(v, sub)
 
     def end(mut self) raises SerializationError:
@@ -135,7 +148,7 @@ struct EmberJsonMapSer[
             # See EmberJsonSeqSer.end for why this is guarded on `first`.
             if not self.first:
                 self.out[].write("\n")
-            _write_indent(self.out[], self.depth - 1)
+            _write_indent[Self.indent](self.out[], self.depth - 1)
         self.out[].write("}")
 
 
@@ -144,6 +157,7 @@ struct EmberJsonStructSer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
     pretty: Bool = False,
+    indent: String = DefaultIndent,
 ](StructSerState):
     var out: Pointer[Self.W, Self.origin]
     var first: Bool
@@ -158,14 +172,14 @@ struct EmberJsonStructSer[
                 self.out[].write("\n")
         self.first = False
         comptime if Self.pretty:
-            _write_indent(self.out[], self.depth)
+            _write_indent[Self.indent](self.out[], self.depth)
         write_escaped_string(field_name, self.out[])
         self.out[].write(":")
         comptime if Self.pretty:
             self.out[].write(" ")
-        var sub = EmberJsonSerializer[Self.W, Self.origin, Self.pretty](
-            out=self.out, depth=self.depth
-        )
+        var sub = EmberJsonSerializer[
+            Self.W, Self.origin, Self.pretty, Self.indent
+        ](out=self.out, depth=self.depth)
         serialize(v, sub)
 
     def end(mut self) raises SerializationError:
@@ -173,7 +187,7 @@ struct EmberJsonStructSer[
             # See EmberJsonSeqSer.end for why this is guarded on `first`.
             if not self.first:
                 self.out[].write("\n")
-            _write_indent(self.out[], self.depth - 1)
+            _write_indent[Self.indent](self.out[], self.depth - 1)
         self.out[].write("}")
 
 
@@ -182,6 +196,7 @@ struct EmberJsonTupleSer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
     pretty: Bool = False,
+    indent: String = DefaultIndent,
 ](TupleSerState):
     var out: Pointer[Self.W, Self.origin]
     var first: Bool
@@ -194,10 +209,10 @@ struct EmberJsonTupleSer[
                 self.out[].write("\n")
         self.first = False
         comptime if Self.pretty:
-            _write_indent(self.out[], self.depth)
-        var sub = EmberJsonSerializer[Self.W, Self.origin, Self.pretty](
-            out=self.out, depth=self.depth
-        )
+            _write_indent[Self.indent](self.out[], self.depth)
+        var sub = EmberJsonSerializer[
+            Self.W, Self.origin, Self.pretty, Self.indent
+        ](out=self.out, depth=self.depth)
         serialize(v, sub)
 
     def end(mut self) raises SerializationError:
@@ -205,7 +220,7 @@ struct EmberJsonTupleSer[
             # See EmberJsonSeqSer.end for why this is guarded on `first`.
             if not self.first:
                 self.out[].write("\n")
-            _write_indent(self.out[], self.depth - 1)
+            _write_indent[Self.indent](self.out[], self.depth - 1)
         self.out[].write("]")
 
 
@@ -214,20 +229,21 @@ struct EmberJsonEnumSer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
     pretty: Bool = False,
+    indent: String = DefaultIndent,
 ](EnumSerState):
     var out: Pointer[Self.W, Self.origin]
     var depth: Int
 
     def serialize_payload(mut self, v: Some[AnyType]) raises SerializationError:
-        var sub = EmberJsonSerializer[Self.W, Self.origin, Self.pretty](
-            out=self.out, depth=self.depth
-        )
+        var sub = EmberJsonSerializer[
+            Self.W, Self.origin, Self.pretty, Self.indent
+        ](out=self.out, depth=self.depth)
         serialize(v, sub)
 
     def end(mut self) raises SerializationError:
         comptime if Self.pretty:
             self.out[].write("\n")
-            _write_indent(self.out[], self.depth - 1)
+            _write_indent[Self.indent](self.out[], self.depth - 1)
         self.out[].write("}")
 
 
@@ -236,15 +252,26 @@ struct EmberJsonSerializer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
     pretty: Bool = False,
+    indent: String = DefaultIndent,
 ](Serializer):
     var out: Pointer[Self.W, Self.origin]
     var depth: Int
 
-    comptime SeqType = EmberJsonSeqSer[Self.W, Self.origin, Self.pretty]
-    comptime MapType = EmberJsonMapSer[Self.W, Self.origin, Self.pretty]
-    comptime StructType = EmberJsonStructSer[Self.W, Self.origin, Self.pretty]
-    comptime TupleType = EmberJsonTupleSer[Self.W, Self.origin, Self.pretty]
-    comptime EnumType = EmberJsonEnumSer[Self.W, Self.origin, Self.pretty]
+    comptime SeqType = EmberJsonSeqSer[
+        Self.W, Self.origin, Self.pretty, Self.indent
+    ]
+    comptime MapType = EmberJsonMapSer[
+        Self.W, Self.origin, Self.pretty, Self.indent
+    ]
+    comptime StructType = EmberJsonStructSer[
+        Self.W, Self.origin, Self.pretty, Self.indent
+    ]
+    comptime TupleType = EmberJsonTupleSer[
+        Self.W, Self.origin, Self.pretty, Self.indent
+    ]
+    comptime EnumType = EmberJsonEnumSer[
+        Self.W, Self.origin, Self.pretty, Self.indent
+    ]
 
     def serialize_bool(mut self, v: Bool) raises SerializationError:
         self.out[].write("true" if v else "false")
@@ -285,7 +312,7 @@ struct EmberJsonSerializer[
         comptime if Self.pretty:
             self.out[].write("\n")
             d += 1
-        return EmberJsonSeqSer[Self.W, Self.origin, Self.pretty](
+        return EmberJsonSeqSer[Self.W, Self.origin, Self.pretty, Self.indent](
             out=self.out, first=True, depth=d
         )
 
@@ -297,7 +324,7 @@ struct EmberJsonSerializer[
         comptime if Self.pretty:
             self.out[].write("\n")
             d += 1
-        return EmberJsonMapSer[Self.W, Self.origin, Self.pretty](
+        return EmberJsonMapSer[Self.W, Self.origin, Self.pretty, Self.indent](
             out=self.out, first=True, depth=d
         )
 
@@ -311,9 +338,9 @@ struct EmberJsonSerializer[
         comptime if Self.pretty:
             self.out[].write("\n")
             d += 1
-        return EmberJsonStructSer[Self.W, Self.origin, Self.pretty](
-            out=self.out, first=True, depth=d
-        )
+        return EmberJsonStructSer[
+            Self.W, Self.origin, Self.pretty, Self.indent
+        ](out=self.out, first=True, depth=d)
 
     def begin_tuple[
         field_count: Int
@@ -323,7 +350,7 @@ struct EmberJsonSerializer[
         comptime if Self.pretty:
             self.out[].write("\n")
             d += 1
-        return EmberJsonTupleSer[Self.W, Self.origin, Self.pretty](
+        return EmberJsonTupleSer[Self.W, Self.origin, Self.pretty, Self.indent](
             out=self.out, first=True, depth=d
         )
 
@@ -336,27 +363,27 @@ struct EmberJsonSerializer[
         comptime if Self.pretty:
             self.out[].write("\n")
             d += 1
-            _write_indent(self.out[], d)
+            _write_indent[Self.indent](self.out[], d)
         write_escaped_string(variant, self.out[])
         self.out[].write(":")
         comptime if Self.pretty:
             self.out[].write(" ")
-        return EmberJsonEnumSer[Self.W, Self.origin, Self.pretty](
+        return EmberJsonEnumSer[Self.W, Self.origin, Self.pretty, Self.indent](
             out=self.out, depth=d
         )
 
 
-def to_json_string[
-    T: AnyType, //, pretty: Bool = False
+def to_json[
+    T: AnyType, //, pretty: Bool = False, indent: String = DefaultIndent
 ](value: T) raises SerializationError -> String:
     var buf = String()
     # Route writes through a stack-buffered writer instead of hitting the
     # destination `String` on every single token (`{`, `"`, `:`, `,`, ...).
-    # Matches the pattern used by `emberjson.utils.write`/`write_pretty`.
+    # Matches the pattern used by `emberjson.utils.write`.
     # Must `flush()` before returning `buf` or the trailing buffered bytes
     # are silently dropped.
     var w = _WriteBufferStack(buf)
-    var s = EmberJsonSerializer[type_of(w), origin_of(w), pretty](
+    var s = EmberJsonSerializer[type_of(w), origin_of(w), pretty, indent](
         out=Pointer(to=w), depth=0
     )
     serialize(value, s)

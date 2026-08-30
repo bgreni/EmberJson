@@ -1,6 +1,7 @@
 from std.testing import assert_equal, TestSuite
-from emberjson._serde import to_json_string
-from emberjson import Value, Object, Array, Null
+from emberjson._serde import to_json
+from emberjson import Value, Object, Array, Null, parse
+from std.hashlib import Hasher
 
 
 @fieldwise_init
@@ -10,25 +11,25 @@ struct Point(Copyable, Movable):
 
 
 def test_struct_serializes_compact() raises:
-    assert_equal(to_json_string(Point(1, 2)), String('{"x":1,"y":2}'))
+    assert_equal(to_json(Point(1, 2)), String('{"x":1,"y":2}'))
 
 
 def test_string_is_escaped() raises:
-    assert_equal(to_json_string(String('a"b')), String('"a\\"b"'))
+    assert_equal(to_json(String('a"b')), String('"a\\"b"'))
 
 
 def test_float_uses_teju() raises:
-    assert_equal(to_json_string(Float64(0.1)), String("0.1"))
+    assert_equal(to_json(Float64(0.1)), String("0.1"))
 
 
 def test_list_serializes_as_array() raises:
     var xs: List[Int] = [1, 2, 3]
-    assert_equal(to_json_string(xs), String("[1,2,3]"))
+    assert_equal(to_json(xs), String("[1,2,3]"))
 
 
 def test_pretty_nests_with_indent() raises:
     assert_equal(
-        to_json_string[pretty=True](Point(1, 2)),
+        to_json[pretty=True](Point(1, 2)),
         String('{\n    "x": 1,\n    "y": 2\n}'),
     )
 
@@ -42,27 +43,27 @@ def test_pretty_nests_with_indent() raises:
 
 
 def test_null_serializes_to_null_literal() raises:
-    assert_equal(to_json_string(Null()), String("null"))
+    assert_equal(to_json(Null()), String("null"))
 
 
 def test_array_serializes_compact() raises:
     var a = Array(1, 2, 3)
-    assert_equal(to_json_string(a), String("[1,2,3]"))
+    assert_equal(to_json(a), String("[1,2,3]"))
 
 
 def test_empty_array_serializes_compact() raises:
-    assert_equal(to_json_string(Array()), String("[]"))
+    assert_equal(to_json(Array()), String("[]"))
 
 
 def test_object_serializes_compact() raises:
     var o = Object()
     o["x"] = Value(1)
     o["y"] = Value("z")
-    assert_equal(to_json_string(o), String('{"x":1,"y":"z"}'))
+    assert_equal(to_json(o), String('{"x":1,"y":"z"}'))
 
 
 def test_empty_object_serializes_compact() raises:
-    assert_equal(to_json_string(Object()), String("{}"))
+    assert_equal(to_json(Object()), String("{}"))
 
 
 def test_non_string_dict_key_is_quoted() raises:
@@ -71,7 +72,7 @@ def test_non_string_dict_key_is_quoted() raises:
     # exercising the `else` side of that comptime split.
     var d = Dict[Int, Int]()
     d[1] = 2
-    assert_equal(to_json_string(d), String('{"1":2}'))
+    assert_equal(to_json(d), String('{"1":2}'))
 
 
 def test_object_key_needing_escape_is_escaped() raises:
@@ -82,17 +83,17 @@ def test_object_key_needing_escape_is_escaped() raises:
     var o = Object()
     o['a"b'] = Value(1)
     o["c\\d"] = Value(2)
-    assert_equal(to_json_string(o), String('{"a\\"b":1,"c\\\\d":2}'))
+    assert_equal(to_json(o), String('{"a\\"b":1,"c\\\\d":2}'))
 
 
 def test_value_serializes_every_scalar_arm() raises:
-    assert_equal(to_json_string(Value(Int64(-7))), String("-7"))
-    assert_equal(to_json_string(Value(UInt64(7))), String("7"))
-    assert_equal(to_json_string(Value(Float64(0.5))), String("0.5"))
-    assert_equal(to_json_string(Value("hi")), String('"hi"'))
-    assert_equal(to_json_string(Value(True)), String("true"))
-    assert_equal(to_json_string(Value(False)), String("false"))
-    assert_equal(to_json_string(Value(None)), String("null"))
+    assert_equal(to_json(Value(Int64(-7))), String("-7"))
+    assert_equal(to_json(Value(UInt64(7))), String("7"))
+    assert_equal(to_json(Value(Float64(0.5))), String("0.5"))
+    assert_equal(to_json(Value("hi")), String('"hi"'))
+    assert_equal(to_json(Value(True)), String("true"))
+    assert_equal(to_json(Value(False)), String("false"))
+    assert_equal(to_json(Value(None)), String("null"))
 
 
 def test_value_serializes_object_and_array_arms_by_delegation() raises:
@@ -103,7 +104,7 @@ def test_value_serializes_object_and_array_arms_by_delegation() raises:
     var o = Object()
     o["a"] = Value(Array(1, 2))
     var v = Value(o^)
-    assert_equal(to_json_string(v), String('{"a":[1,2]}'))
+    assert_equal(to_json(v), String('{"a":[1,2]}'))
 
 
 # ===========================================================================
@@ -149,7 +150,7 @@ def test_serializes_every_arm() raises:
 
     var value = Value(top^)
     assert_equal(
-        to_json_string(value),
+        to_json(value),
         String(
             '{"obj":{"nested":[1,{"deep":true}]},"arr":[1,"two",3.5,false,'
             'null],"str":"hello","int":-42,"uint":9223372036854775817,'
@@ -160,17 +161,17 @@ def test_serializes_every_arm() raises:
 
 def test_serializes_bare_array() raises:
     var a = Array(1, "two", Array(3, 4))
-    assert_equal(to_json_string(a), String('[1,"two",[3,4]]'))
+    assert_equal(to_json(a), String('[1,"two",[3,4]]'))
 
 
 def test_serializes_bare_object() raises:
     var o = Object()
     o["k"] = Value(Array(1, 2))
-    assert_equal(to_json_string(o), String('{"k":[1,2]}'))
+    assert_equal(to_json(o), String('{"k":[1,2]}'))
 
 
 def test_serializes_null() raises:
-    assert_equal(to_json_string(Null()), String("null"))
+    assert_equal(to_json(Null()), String("null"))
 
 
 # ===========================================================================
@@ -188,11 +189,11 @@ def test_serializes_null() raises:
 
 
 def test_pretty_empty_object() raises:
-    assert_equal(to_json_string[pretty=True](Object()), String("{\n}"))
+    assert_equal(to_json[pretty=True](Object()), String("{\n}"))
 
 
 def test_pretty_empty_array() raises:
-    assert_equal(to_json_string[pretty=True](Array()), String("[\n]"))
+    assert_equal(to_json[pretty=True](Array()), String("[\n]"))
 
 
 def test_pretty_nested_empty_object() raises:
@@ -200,7 +201,7 @@ def test_pretty_nested_empty_object() raises:
     var outer = Object()
     outer["a"] = Value(Object())
     assert_equal(
-        to_json_string[pretty=True](outer),
+        to_json[pretty=True](outer),
         String('{\n    "a": {\n    }\n}'),
     )
 
@@ -209,13 +210,11 @@ def test_pretty_nested_empty_array() raises:
     # An empty array nested inside a non-empty pretty-printed array.
     var outer = Array()
     outer.append(Value(Array()))
-    assert_equal(
-        to_json_string[pretty=True](outer), String("[\n    [\n    ]\n]")
-    )
+    assert_equal(to_json[pretty=True](outer), String("[\n    [\n    ]\n]"))
 
 
 # ===========================================================================
-# Output-buffering regression (Task 10): `to_json_string` used to write
+# Output-buffering regression (Task 10): `to_json` used to write
 # every token straight into the destination `String` with no batching,
 # which was correct but ~3-5x slower than routing through
 # `std.format._utils._WriteBufferStack` (see `emberjson.utils.write`'s
@@ -242,7 +241,7 @@ def test_large_array_survives_buffer_overflow() raises:
         expected += String(i)
     expected += "]"
 
-    var got = to_json_string(xs)
+    var got = to_json(xs)
     assert_equal(got.byte_length(), expected.byte_length())
     assert_equal(got, expected)
 
@@ -261,9 +260,34 @@ def test_large_pretty_array_survives_buffer_overflow() raises:
         expected += "\n"
     expected += "]"
 
-    var got = to_json_string[pretty=True](xs)
+    var got = to_json[pretty=True](xs)
     assert_equal(got.byte_length(), expected.byte_length())
     assert_equal(got, expected)
+
+
+@fieldwise_init
+struct CompositeKey(Copyable, Equatable, Hashable, Movable):
+    var a: Int
+
+    def __eq__(self, other: Self) -> Bool:
+        return self.a == other.a
+
+    def __ne__(self, other: Self) -> Bool:
+        return self.a != other.a
+
+    def __hash__(self, mut h: Some[Hasher]):
+        h.update(self.a)
+
+
+def test_composite_dict_key_is_escaped_to_valid_json() raises:
+    # A non-string key stringifies through the scratch serializer; the
+    # rendered text must be emitted as a properly escaped JSON string, not
+    # wrapped in bare quotes (which produced unparseable output).
+    var m = Dict[CompositeKey, Int]()
+    m[CompositeKey(1)] = 2
+    var got = to_json(m)
+    assert_equal(got, String('{"{\\"a\\":1}":2}'))
+    _ = parse(got)
 
 
 def main() raises:

@@ -178,7 +178,7 @@ var v = deserialize[T, options](doc)
 
 The overload existed mainly to let callers choose `ParseOptions`. That
 channel is now a parameter on `deserialize`, `try_deserialize` and the
-format-layer `emberjson._serde.from_json_string`, all defaulting to
+format-layer `emberjson._serde.from_json`, all defaulting to
 `ParseOptions()`. `deserialize` additionally honours
 `options.validate_utf8`, matching `parse`.
 
@@ -194,10 +194,10 @@ path to a nested failure) and `SerializationError` — rather than a bare
 `Error`. Both are re-exported from `emberjson`. Code that catches
 `except e:` and reads `String(e)` keeps working.
 
-#### 7. `from_json_string` / `to_json_string` are not public
+#### 7. `from_json` / `to_json` are not public
 
 They are the format layer (`emberjson._serde`) and, unlike `deserialize`,
-`from_json_string` does **not** validate UTF-8. They are no longer
+`from_json` does **not** validate UTF-8. They are no longer
 re-exported from `emberjson`; import them from `emberjson._serde`
 explicitly if you want the unvalidated entry point.
 
@@ -259,7 +259,7 @@ noise band is ±7%.
 
 ### Added
 
-- `deserialize` / `try_deserialize` / `emberjson._serde.from_json_string`
+- `deserialize` / `try_deserialize` / `emberjson._serde.from_json`
   take `options: ParseOptions`.
 - `Field[T, ...]` wire metadata on struct fields — `rename`,
   `extra_names`, `default`, `skip` — with `Defaulted`, `Rename` and `Skip`

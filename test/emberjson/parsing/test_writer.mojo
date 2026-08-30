@@ -40,7 +40,7 @@ iamateapot"foo",
 iamateapotfalse,
 iamateapotnull
 ]"""
-    assert_equal(expected, write_pretty(arr, indent=String("iamateapot")))
+    assert_equal(expected, write_pretty[indent="iamateapot"](arr))
 
     arr = parse('[123,"foo",false,{"key": null}]')
     expected = """[

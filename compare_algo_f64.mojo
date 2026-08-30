@@ -19,14 +19,13 @@ comptime iters = 1_000_000
 @__parameter
 def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
-    @__parameter
-    def do():
+    def do() {imm val}:
         for _ in range(iters):
             var bin = fp_to_binary(val)
             var dec = teju[dtype](bin)
             keep(dec)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
@@ -36,8 +35,7 @@ def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     ]()
 
     @always_inline
-    @__parameter
-    def do():
+    def do() {imm casted}:
         for _ in range(iters):
             var sig = FPUtils.get_mantissa_uint(casted)
             var exp = FPUtils.get_exponent_biased(casted)
@@ -45,18 +43,14 @@ def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
             keep(sig)
             keep(exp)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 def run_group[
     dtype: DType
 ](mut m: Bench, name: String, val: Scalar[dtype]) raises:
-    m.bench_with_input[Scalar[dtype], bench_teju[dtype]](
-        BenchId("Teju/" + name), val
-    )
-    m.bench_with_input[Scalar[dtype], bench_stdlib[dtype]](
-        BenchId("Stdlib/" + name), val
-    )
+    m.bench_with_input(bench_teju[dtype], BenchId("Teju/" + name), val)
+    m.bench_with_input(bench_stdlib[dtype], BenchId("Stdlib/" + name), val)
 
 
 def capture_report(mut m: Bench) raises -> String:

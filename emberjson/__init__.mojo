@@ -2,11 +2,11 @@ from .value import Value, Null
 from .json import JSON
 from .array import Array
 from .object import Object
-from .utils import write, write_pretty, PaddedBuffer, PAD_INPUT_THRESHOLD
+from .utils import write, PaddedBuffer, PAD_INPUT_THRESHOLD
 
 # The public `deserialize`/`try_deserialize`/`serialize`/`to_string` names
-# below are thin wrappers over `emberjson._serde`'s `from_json_string`/
-# `to_json_string`, which drive emberserde's format-agnostic framework over
+# below are thin wrappers over `emberjson._serde`'s `from_json`/
+# `to_json`, which drive emberserde's format-agnostic framework over
 # the same hand-written `Parser`.
 from ._deserialize import (
     Parser,
@@ -16,14 +16,15 @@ from ._deserialize import (
 )
 
 # Imported under private names ON PURPOSE. `emberjson._serde` is the format
-# layer, not part of the public surface: re-exporting `from_json_string` /
-# `to_json_string` here gave callers a second way to deserialize with
+# layer, not part of the public surface: re-exporting `from_json` /
+# `to_json` here gave callers a second way to deserialize with
 # DIFFERENT semantics from `deserialize` below (which validates UTF-8 first,
 # where the format layer does not). Reach for `emberjson._serde` explicitly
 # if you really want the unvalidated entry point.
 from ._serde import (
-    from_json_string as _from_json_string,
-    to_json_string as _to_json_string,
+    from_json as _from_json,
+    to_json as _to_json,
+    DefaultIndent,
 )
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
@@ -211,7 +212,7 @@ def to_string[
 # `deserialize` / `try_deserialize`
 # ===============================================
 #
-# Both ride `emberjson._serde`'s `from_json_string`, i.e. emberserde's
+# Both ride `emberjson._serde`'s `from_json`, i.e. emberserde's
 # format-agnostic `deserialize` framework driven by
 # `EmberJsonDeserializer` over the same hand-written `Parser`. Errors are
 # raised typed at the source (`DeserializationError` with a real `kind`
@@ -244,7 +245,7 @@ def deserialize[
             raise DeserializationError(
                 "Invalid UTF-8 in input", DerErrorKind.InvalidValue
             )
-    res = _from_json_string[T, options](s)
+    res = _from_json[T, options](s)
 
 
 def try_deserialize[
@@ -273,7 +274,7 @@ def try_deserialize[
 # `serialize`
 # ===============================================
 #
-# Rides `emberjson._serde`'s `to_json_string`, i.e. emberserde's
+# Rides `emberjson._serde`'s `to_json`, i.e. emberserde's
 # format-agnostic `serialize` framework driven by `EmberJsonSerializer`.
 # Unlike the superseded reflection writer, this one really can raise:
 # a `Serializable` implementation is free to fail (see `Lazy.serialize`,
@@ -299,4 +300,26 @@ def serialize[
     Raises:
         `SerializationError` if `value` cannot be serialized.
     """
-    output = _to_json_string[pretty=pretty](value)
+    output = _to_json[pretty=pretty](value)
+
+
+def write_pretty[
+    T: AnyType, //, indent: String = DefaultIndent
+](value: T, out output: String) raises SerializationError:
+    """Serializes `value` to an indented JSON string.
+
+    Parameters:
+        T: The type to serialize.
+        indent: The string one nesting level costs. A comptime parameter, so
+            `write_pretty[indent="\\t"](v)` picks tabs.
+
+    Args:
+        value: The value to serialize.
+
+    Returns:
+        The indented JSON string representation of `value`.
+
+    Raises:
+        `SerializationError` if `value` cannot be serialized.
+    """
+    output = _to_json[pretty=True, indent=indent](value)

@@ -9,7 +9,7 @@ bare `Error`.
 a typed one at the public boundary.
 
 `deserialize`/`try_deserialize`/`serialize` ride `emberjson._serde`'s
-`from_json_string`/`to_json_string` (Task 8), i.e. emberserde's
+`from_json`/`to_json` (Task 8), i.e. emberserde's
 format-agnostic framework over that same `Parser`. Errors there are typed
 at the source: a real `kind`, and a real `path` for a nested failure.
 
@@ -44,7 +44,7 @@ from emberjson import (
     StrictOptions,
 )
 from emberserde import DenyUnknownFields
-from emberjson._serde import from_json_string
+from emberjson._serde import from_json
 
 
 @fieldwise_init
@@ -239,7 +239,7 @@ def test_deserialize_populates_path_for_nested_failure() raises:
     # Task 8's headline gain. Task 7's `deserialize` drove the reflection
     # walker, which had no path machinery at all: a nested failure's
     # `.path` was ALWAYS empty and its `.kind` had to be reverse-engineered
-    # from the walker's message text. Riding `from_json_string` instead
+    # from the walker's message text. Riding `from_json` instead
     # means the framework's own `prepend_path` runs as the error unwinds
     # through `expect_field_value`, so `.path` now names the route to the
     # failure. `inner` is missing its required `y`, two levels down.
@@ -403,11 +403,11 @@ def test_parse_accepts_invalid_utf8_when_validation_is_off() raises:
 def test_the_private_format_layer_does_not_validate_utf8() raises:
     # `emberjson._serde` is the format layer, not a public entry point:
     # it hands its input straight to the `Parser`. This asymmetry is
-    # exactly why `from_json_string`/`to_json_string` are NOT re-exported
+    # exactly why `from_json`/`to_json` are NOT re-exported
     # from `emberjson` -- two public spellings of "deserialize" with
     # different safety properties is a trap.
     var bad = _invalid_utf8_doc()
-    var p = from_json_string[Point](bad)
+    var p = from_json[Point](bad)
     assert_equal(p.x, 1)
     assert_equal(p.y, 2)
 

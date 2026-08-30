@@ -51,9 +51,13 @@ All JSON data is represented as this unified type.
   - `parser.mojo` — hand-written recursive descent parser
   - `slow_float_parse.mojo` — fallback float parsing
   - `tables.mojo` — lookup tables for character classification
-  - `reflection.mojo` — reflection-based struct deserialization
-- **`emberjson/_serialize/`** — serialization:
-  - `reflection.mojo` — reflection-based struct serialization
+- **`emberjson/_serde/`** — the JSON format layer for
+  [emberserde](../emberserde) (a path dependency), which supplies the
+  format-agnostic `Serializable`/`Deserializable` framework and reflection
+  defaults:
+  - `serializer.mojo` — `EmberJsonSerializer` + `to_json`
+  - `deserializer.mojo` — `EmberJsonDeserializer` (drives the hand-written
+    `Parser`) + `from_json`
 - **`emberjson/teju/`** — Teju Jagua float-to-string algorithm (large lookup tables in `tables.mojo`)
 - **`emberjson/schema.mojo`** — JSON Schema validation
 - **`emberjson/_pointer.mojo`** — RFC 6901 JSON Pointer
@@ -64,8 +68,8 @@ All JSON data is represented as this unified type.
 ### Key Traits
 
 - `JsonValue` — base trait for JSON-compatible types
-- `JsonSerializable` — implement for custom serialization
-- `JsonDeserializable` — implement for custom deserialization
+- emberserde's `Serializable` / `Deserializable` — implement for custom
+  serialization/deserialization (re-exported through `emberjson.traits`)
 
 ### Public API
 
@@ -85,6 +89,8 @@ try_deserialize[T](json_string)      # → Optional[T]
 
 ## Mojo Version
 
-Requires `mojo >=1.1.0.dev2026081813,<2` (MAX nightly channel). Platforms: osx-arm64, linux-aarch64, linux-64.
+Requires `mojo >=1.1.0.dev2026082905,<2` (MAX nightly channel; the
+authoritative pin is `pixi.toml`, spelled out there three times — workspace
+plus the two `[package.*-dependencies]` tables). Platforms: osx-arm64, linux-aarch64, linux-64.
 
 A full reference for the Mojo APIs https://docs.modular.com/llms-mojo.txt

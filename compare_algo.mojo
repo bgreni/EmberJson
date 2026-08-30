@@ -19,36 +19,30 @@ comptime ITERS = 10000
 @__parameter
 def bench_teju[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
-    @__parameter
-    def do():
+    def do() {imm val}:
         for _ in range(ITERS):
             var writer = String()
             write_float[dtype](val, writer)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def bench_stdlib[dtype: DType](mut b: Bencher, val: Scalar[dtype]):
     @always_inline
-    @__parameter
-    def do():
+    def do() {imm val}:
         for _ in range(ITERS):
             var writer = String()
             writer.write(val)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 def run_group[
     dtype: DType
 ](mut m: Bench, name: String, val: Scalar[dtype]) raises:
-    m.bench_with_input[Scalar[dtype], bench_teju[dtype]](
-        BenchId("Teju/" + name), val
-    )
-    m.bench_with_input[Scalar[dtype], bench_stdlib[dtype]](
-        BenchId("Stdlib/" + name), val
-    )
+    m.bench_with_input(bench_teju[dtype], BenchId("Teju/" + name), val)
+    m.bench_with_input(bench_stdlib[dtype], BenchId("Stdlib/" + name), val)
 
 
 def capture_report(mut m: Bench) raises -> String:

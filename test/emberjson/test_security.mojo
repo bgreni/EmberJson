@@ -14,7 +14,7 @@ from emberjson import (
     CoerceString,
 )
 from emberjson._pointer import resolve_pointer, parse_int
-from emberjson._serde import from_json_string
+from emberjson._serde import from_json
 from emberjson.patch._patch import patch
 from emberjson.lazy import LazyString
 from std.testing import (
@@ -156,10 +156,10 @@ def test_l3_coerce_string_null() raises:
 
 def test_l2_lazy_string_not_decoded() raises:
     # Ported in Task 8 from `var p = Parser(s); deserialize[...](p)` (the
-    # deleted `Parser`-driven reflection walker) to `from_json_string`,
+    # deleted `Parser`-driven reflection walker) to `from_json`,
     # which captures the same borrowed span. Same input, same assertions.
     var s = r'"hello\nworld"'  # JSON string containing \n escape
-    var lazy = from_json_string[LazyString[origin_of(s)]](s)
+    var lazy = from_json[LazyString[origin_of(s)]](s)
 
     var raw = lazy.unsafe_as_string_slice()
     # raw contains "hello\nworld" (12 chars — literal backslash-n, not decoded)
@@ -169,7 +169,7 @@ def test_l2_lazy_string_not_decoded() raises:
     )  # documents the undecoded (buggy) length
 
     # Contrast: .get() DOES decode the escape correctly
-    var lazy2 = from_json_string[LazyString[origin_of(s)]](s)
+    var lazy2 = from_json[LazyString[origin_of(s)]](s)
     assert_equal(lazy2.get(), "hello\nworld")
 
 

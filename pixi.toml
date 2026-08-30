@@ -30,7 +30,10 @@ gen_large = "python tools/gen_large_datasets.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=1.1.0.dev2026081813,<2"
+mojo = ">=1.1.0.dev2026082905,<2"
+# Local source dependency while the emberserde port is in flight; swap for the
+# git spec once the API settles.
+emberserde = { path = "../emberserde" }
 
 
 
@@ -39,14 +42,20 @@ name = "emberjson"
 version = "0.3.4"
 
 [package.build]
-backend = { name = "pixi-build-mojo", version = "0.2.*" }
+backend = { name = "pixi-build-mojo", version = ">=0.2.6,<0.3" }
 
 [package.host-dependencies]
-mojo-compiler = ">=1.1.0.dev2026081813,<2"
+mojo-compiler = ">=1.1.0.dev2026082905,<2"
 
+# The library imports emberserde throughout (`__init__`, `value`, `object`,
+# `array`, `lazy`, `schema`, `traits`, `_serde/`), so `mojo precompile`
+# needs its `.mojoc` next to the compiler (build env) and consumers need it
+# at run time -- the workspace [dependencies] entry above only covers dev
+# tasks. Keep all three in sync (swap them for the git spec together).
 [package.build-dependencies]
-mojo-compiler = ">=1.1.0.dev2026081813,<2"
+mojo-compiler = ">=1.1.0.dev2026082905,<2"
+emberserde = { path = "../emberserde" }
 
 [package.run-dependencies]
-mojo-compiler = ">=1.1.0.dev2026081813,<2"
-
+mojo-compiler = ">=1.1.0.dev2026082905,<2"
+emberserde = { path = "../emberserde" }

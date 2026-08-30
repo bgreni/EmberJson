@@ -1,7 +1,6 @@
 from std.bit import pop_count, count_trailing_zeros
 from std.memory.unsafe import pack_bits
 from .constants import ` `, `\n`, `\t`, `\r`, `\b`, `\f`, `"`, `\\`
-from std.utils import Variant
 from std.utils.numerics import FPUtils
 from std.math import log10, log2
 from std.collections import Span
@@ -11,7 +10,7 @@ from std.memory import (
     unsafe_memset,
 )
 from std.format._utils import _WriteBufferStack
-from .traits import JsonValue, PrettyPrintable
+from .traits import JsonValue
 from .object import Object
 from .array import Array
 from std.collections import Array as StdArray
@@ -190,8 +189,6 @@ struct PaddedBuffer(Movable):
         )
 
 
-comptime DefaultPrettyIndent = 4
-
 comptime StackArray[T: Copyable & Deinitable, size: Int] = StdArray[T, size]
 
 
@@ -207,19 +204,6 @@ def write(out s: String, v: Some[JsonValue]):
     writer.flush()
 
 
-@no_inline
-def write_pretty(
-    value: Some[PrettyPrintable],
-    indent: Variant[Int, String] = DefaultPrettyIndent,
-    out s: String,
-):
-    var ind = String(" ") * indent[Int] if indent.isa[Int]() else indent[String]
-    s = String()
-    var writer = _WriteBufferStack(s)
-    value.pretty_to(writer, ind)
-    writer.flush()
-
-
 @always_inline
 def is_space(char: Byte) -> Bool:
     return char == ` ` or char == `\n` or char == `\t` or char == `\r`
@@ -232,7 +216,7 @@ def to_string(b: ByteView[_]) -> StringSlice[b.origin]:
 
 @always_inline
 def to_string(v: ByteVec, out s: String):
-    s = String(capacity=v.length)
+    s = String(capacity_bytes=v.length)
 
     comptime for i in range(v.length):
         s.append(Codepoint(v[i]))
@@ -240,7 +224,7 @@ def to_string(v: ByteVec, out s: String):
 
 @always_inline
 def to_string(b: Byte, out s: String):
-    s = String(capacity=1)
+    s = String(capacity_bytes=1)
     s.append(Codepoint(b))
     return s^
 

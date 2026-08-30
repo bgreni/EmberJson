@@ -1341,7 +1341,7 @@ def minify(s: String, out out_str: String) raises:
         A copy of the input string with all whitespace characters removed.
     """
     var s_len = s.byte_length()
-    out_str = String(capacity=s_len)
+    out_str = String(capacity_bytes=s_len)
 
     var ptr = BytePtr[origin_of(s)](s.unsafe_ptr())
     var end = ptr.unsafe_offset(s_len)

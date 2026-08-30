@@ -1,6 +1,6 @@
 from .object import Object
 from .value import Value
-from .traits import JsonValue, PrettyPrintable
+from .traits import JsonValue
 from .utils import PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._utf8 import is_valid_utf8
 from ._deserialize import Parser, ParseOptions
@@ -168,24 +168,6 @@ struct Array(JsonValue, Sized):
             arr.append(st.expect_element[Value]())
         st.end()
         return arr^
-
-    def pretty_to(
-        self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
-    ):
-        writer.write("[\n")
-        self._pretty_write_items(writer, indent, curr_depth + 1)
-        writer.write("]")
-
-    def _pretty_write_items(
-        self, mut writer: Some[Writer], indent: String, curr_depth: UInt
-    ):
-        for i in range(len(self._data)):
-            for _ in range(curr_depth):
-                writer.write(indent)
-            self._data[i]._pretty_to_as_element(writer, indent, curr_depth)
-            if i < len(self._data) - 1:
-                writer.write(",")
-            writer.write("\n")
 
     @always_inline
     def append(mut self, var item: Value):

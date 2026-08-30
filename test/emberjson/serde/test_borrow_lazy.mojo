@@ -7,8 +7,8 @@ from std.testing import (
 
 from emberjson._serde import (
     EmberJsonDeserializer,
-    from_json_string,
-    to_json_string,
+    from_json,
+    to_json,
 )
 from emberjson._deserialize import Parser, ParseOptions
 from emberjson.lazy import (
@@ -212,7 +212,7 @@ def test_raw_bytes_refuses_padded_options() raises:
 # ===========================================================================
 # `emberjson.lazy.Lazy` itself, driven through the
 # `BorrowingDeserializer` path (`EmberJsonDeserializer.raw_bytes`) via
-# `from_json_string` -- which, since Task 8 retired the `Parser`-driven
+# `from_json` -- which, since Task 8 retired the `Parser`-driven
 # reflection walker, is the only capture path there is. `get()` re-parses
 # the captured span through a fresh `Parser`.
 # ===========================================================================
@@ -223,7 +223,7 @@ def test_lazy_string_unsafe_slice_strips_quotes() raises:
     # quotes -- `RawKind.Str` spans include their quotes, so this must strip
     # exactly one byte off each end, and must not decode escapes.
     var wire = String('"a\\"b"')
-    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
+    var lz = from_json[LazyString[ImmutAnyOrigin]](wire)
     assert_equal(String(lz.unsafe_as_string_slice()), String('a\\"b'))
     # `get()` does decode the escape.
     assert_equal(lz.get(), String('a"b'))
@@ -232,13 +232,13 @@ def test_lazy_string_unsafe_slice_strips_quotes() raises:
 def test_lazy_int_kind_mismatch_raises() raises:
     var wire = String('"not an int"')
     with assert_raises():
-        _ = from_json_string[LazyInt[ImmutAnyOrigin]](wire)
+        _ = from_json[LazyInt[ImmutAnyOrigin]](wire)
 
 
 def test_lazy_float_kind_mismatch_raises() raises:
     var wire = String("[1, 2]")
     with assert_raises():
-        _ = from_json_string[LazyFloat[ImmutAnyOrigin]](wire)
+        _ = from_json[LazyFloat[ImmutAnyOrigin]](wire)
 
 
 def test_lazy_span_aliases_the_input() raises:
@@ -247,7 +247,7 @@ def test_lazy_span_aliases_the_input() raises:
     var wire = String('   "borrowed"')
     var base = Int(wire.unsafe_ptr())
     var limit = base + wire.byte_length()
-    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
+    var lz = from_json[LazyString[ImmutAnyOrigin]](wire)
     var addr = Int(lz.unsafe_as_string_slice().unsafe_ptr())
     assert_true(addr >= base)
     assert_true(addr < limit)
@@ -255,14 +255,14 @@ def test_lazy_span_aliases_the_input() raises:
 
 def test_lazy_serialize_string_via_new_serializer() raises:
     var wire = String('"hello"')
-    var lz = from_json_string[LazyString[ImmutAnyOrigin]](wire)
-    assert_equal(to_json_string(lz), String('"hello"'))
+    var lz = from_json[LazyString[ImmutAnyOrigin]](wire)
+    assert_equal(to_json(lz), String('"hello"'))
 
 
 def test_lazy_serialize_value_via_new_serializer() raises:
     var wire = String('{"a": [1, 2, 3]}')
-    var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
-    assert_equal(to_json_string(lz), String('{"a":[1,2,3]}'))
+    var lz = from_json[LazyValue[ImmutAnyOrigin]](wire)
+    assert_equal(to_json(lz), String('{"a":[1,2,3]}'))
 
 
 def test_serialize_reencodes_rather_than_echoing() raises:
@@ -279,9 +279,9 @@ def test_serialize_reencodes_rather_than_echoing() raises:
     # grew no raw hook), so what is left to assert is the re-encoding
     # itself.
     var wire = String('{"a": [1, 2, 3]}')
-    var lz = from_json_string[LazyValue[ImmutAnyOrigin]](wire)
+    var lz = from_json[LazyValue[ImmutAnyOrigin]](wire)
 
-    var out = to_json_string(lz)
+    var out = to_json(lz)
     assert_equal(out, String('{"a":[1,2,3]}'))
     assert_true(out != wire)
 
@@ -308,7 +308,7 @@ struct _LazyRecord(Copyable, Movable):
 
 def test_lazy_default_kind_is_map_for_plain_struct() raises:
     var wire = String('{"x": 1, "y": 2}')
-    var lz = from_json_string[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
+    var lz = from_json[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
     var r = lz.get()
     assert_equal(r.x, 1)
     assert_equal(r.y, 2)
@@ -321,16 +321,30 @@ def test_lazy_serialize_surfaces_get_failure() raises:
     # `get()` re-parses it. `{"x": 1}` is a well-formed object missing the
     # required `y` field: capture succeeds, `get()` fails. `serialize`'s
     # `_checked_get` must convert that failure into a `SerializationError`
-    # that surfaces through `to_json_string`, not crash or produce bad
+    # that surfaces through `to_json`, not crash or produce bad
     # output silently.
     var wire = String('{"x": 1}')
-    var lz = from_json_string[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
+    var lz = from_json[Lazy[_LazyRecord, ImmutAnyOrigin]](wire)
 
     with assert_raises():
         _ = lz.get()  # sanity: get() itself does fail on this input
 
     with assert_raises():
-        _ = to_json_string(lz)
+        _ = to_json(lz)
+
+
+def test_raw_bytes_allows_non_default_unpadded_options() raises:
+    # The padded refusal above is about buffer provenance, not options
+    # generally: an ordinary borrowed input parsed with non-default
+    # options is safe to borrow from. Regression coverage for the gate
+    # that refused every non-default `ParseOptions`.
+    comptime opts = ParseOptions(ignore_unicode=True)
+    var wire = String("5")
+    var p = Parser[options=opts](wire)
+    var d = EmberJsonDeserializer(p=Pointer(to=p))
+    var b = d.raw_bytes[RawKind.Integer]()
+    assert_equal(len(b), 1)
+    assert_equal(b[0], Byte(ord("5")))
 
 
 def main() raises:

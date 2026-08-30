@@ -1,7 +1,7 @@
 from .value import Value, Null
 from std.collections import Dict, List
 from std.sys.intrinsics import unlikely, likely
-from .traits import JsonValue, PrettyPrintable
+from .traits import JsonValue
 from ._deserialize import Parser, ParseOptions
 from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
 from ._utf8 import is_valid_utf8
@@ -11,8 +11,13 @@ from std.hashlib.hasher import Hasher
 from std.hashlib import hash
 
 from emberserde.serialize import Serializer
-from emberserde.deserialize import Deserializer
-from emberserde.error import SerializationError, DeserializationError
+from emberserde.deserialize import Deserializer, SelfDescribingDeserializer
+from emberserde.error import (
+    SerializationError,
+    DeserializationError,
+    DerErrorKind,
+)
+from std.builtin.rebind import rebind_var
 
 
 @fieldwise_init
@@ -407,35 +412,24 @@ struct Object(JsonValue, Sized):
     def deserialize(
         mut d: Some[Deserializer],
     ) raises DeserializationError -> Self:
+        # Route through the format's own object parser instead of driving
+        # `begin_map` generically: `parse_object` enforces the format's
+        # strict-mode semantics (duplicate keys, trailing commas) and keeps
+        # large-object insertion O(1) via its parse index -- the generic
+        # map loop silently dropped both. Sound for the same reason as
+        # `Value.deserialize` (the only self-describing format in scope
+        # declares `comptime Value = Value`).
+        comptime assert conforms_to(
+            type_of(d), SelfDescribingDeserializer
+        ), "Object requires a self-describing deserializer"
+        var v = rebind_var[Value](d.deserialize_any())
+        if not v.is_object():
+            raise DeserializationError(
+                String("expected an object"), DerErrorKind.TypeMismatch
+            )
         var obj = Self()
-        var st = d.begin_map()
-        while st.has_next():
-            var k = st.expect_key[String]()
-            obj[k^] = st.expect_value[Value]()
-        st.end()
+        swap(obj, v.object())
         return obj^
-
-    def pretty_to(
-        self, mut writer: Some[Writer], indent: String, *, curr_depth: UInt = 0
-    ):
-        writer.write("{\n")
-        self._pretty_write_items(writer, indent, curr_depth + 1)
-        writer.write("}")
-
-    def _pretty_write_items(
-        self, mut writer: Some[Writer], indent: String, curr_depth: UInt
-    ):
-        var done = 0
-        for item in self._data:
-            for _ in range(curr_depth):
-                writer.write(indent)
-            write_escaped_string(item.key, writer)
-            writer.write(": ")
-            item.value._pretty_to_as_element(writer, indent, curr_depth)
-            if done < len(self._data) - 1:
-                writer.write(",")
-            writer.write("\n")
-            done += 1
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("{")

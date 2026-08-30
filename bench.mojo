@@ -26,6 +26,7 @@ from std.benchmark import (
 )
 from emberjson._index import structural_index
 from emberjson.utils import PaddedBuffer
+from emberjson._serde import from_json
 from std.python import Python, PythonObject
 from std.sys import argv
 from std.pathlib import Path
@@ -144,6 +145,12 @@ def parse_report(report: String) raises -> BenchResults:
     return results^
 
 
+def _trunc(s: String, n: Int) -> String:
+    """Truncate to at most `n` bytes; slicing past the end now asserts."""
+    var end = n if n < s.byte_length() else s.byte_length()
+    return String(s[byte=0:end])
+
+
 def print_relative_performance(
     var old_results: BenchResults,
     var new_results: BenchResults,
@@ -175,10 +182,10 @@ def print_relative_performance(
             var speedup = new_val / old_val
 
             var sign = "+" if diff_pct >= 0 else ""
-            var diff_str = String(sign + String(diff_pct)[byte=0:5] + "%")
-            var speedup_str = String(String(speedup)[byte=0:4] + "x")
-            var old_str = String(String(old_val)[byte=0:6])
-            var new_str = String(String(new_val)[byte=0:6])
+            var diff_str = String(sign + _trunc(String(diff_pct), 5) + "%")
+            var speedup_str = String(_trunc(String(speedup), 4) + "x")
+            var old_str = _trunc(String(old_val), 6)
+            var new_str = _trunc(String(new_val), 6)
 
             # Pad output manually (inefficient but works without formatting lib)
             var pad_len = 10
@@ -222,7 +229,7 @@ def print_relative_performance(
                 "| "
                 + name_pad
                 + " | N/A        | "
-                + String(new_val)[byte=0:6]
+                + _trunc(String(new_val), 6)
                 + "     | N/A        | N/A         |"
             )
 
@@ -314,42 +321,24 @@ def get_gbs_measure(input: String) raises -> ThroughputMeasure:
 
 
 def run[
-    func: def(mut Bencher, String) raises capturing, name: String
-](mut m: Bench, data: String) raises:
-    m.bench_with_input[String, func](
-        BenchId(name), data, [get_gbs_measure(data)]
+    F: def(mut Bencher, String) raises -> None, //, name: String
+](mut m: Bench, func: F, data: String) raises:
+    m.bench_with_input(func, BenchId(name), data, [get_gbs_measure(data)])
+
+
+def run[
+    F: def(mut Bencher, Value) raises -> None, //, name: String
+](mut m: Bench, func: F, data: Value) raises:
+    m.bench_with_input(
+        func, BenchId(name), data, [get_gbs_measure(String(data))]
     )
 
 
 def run[
-    func: def[strict: Bool = True](mut Bencher, String) raises capturing,
-    name: String,
-](mut m: Bench, data: String) raises:
-    @__parameter
-    @always_inline
-    def wrapper(mut b: Bencher, s: String) raises:
-        func(b, s)
-
-    m.bench_with_input[String, wrapper](
-        BenchId(name), data, [get_gbs_measure(data)]
-    )
-
-
-def run[
-    func: def(mut Bencher, Value) raises capturing, name: String
-](mut m: Bench, data: Value) raises:
-    m.bench_with_input[Value, func](
-        BenchId(name), data, [get_gbs_measure(String(data))]
-    )
-
-
-def run[
-    T: Movable,
-    //,
-    func: def[_T: Movable](mut Bencher, _T) raises capturing,
-    name: String,
-](mut m: Bench, data: T) raises:
-    m.bench_with_input[T, func[T]](
+    T: Movable, F: def(mut Bencher, T) raises -> None, //, name: String
+](mut m: Bench, func: F, data: T) raises:
+    m.bench_with_input(
+        func,
         BenchId(name),
         data,
         [
@@ -359,28 +348,29 @@ def run[
 
 
 def run[
-    func: def(mut Bencher, Path) raises capturing, name: String
-](mut m: Bench, path: Path) raises:
+    F: def(mut Bencher, Path) raises -> None, //, name: String
+](mut m: Bench, func: F, path: Path) raises:
     var size: Int
     with open(path, "r") as f:
         var data = f.read()
         size = data.byte_length()
 
-    m.bench_with_input[Path, benchmark_jsonl_parse](
-        BenchId("ParseLargeJsonl"),
+    m.bench_with_input(
+        func,
+        BenchId(name),
         path,
         [ThroughputMeasure(BenchMetric.bytes, size)],
     )
 
 
 def run_batch[
-    func: def(mut Bencher, List[String]) raises capturing, name: String
-](mut m: Bench, docs: List[String]) raises:
+    F: def(mut Bencher, List[String]) raises -> None, //, name: String
+](mut m: Bench, func: F, docs: List[String]) raises:
     var total = 0
     for doc in docs:
         total += doc.byte_length()
-    m.bench_with_input[List[String], func](
-        BenchId(name), docs, [ThroughputMeasure(BenchMetric.bytes, total)]
+    m.bench_with_input(
+        func, BenchId(name), docs, [ThroughputMeasure(BenchMetric.bytes, total)]
     )
 
 
@@ -402,69 +392,68 @@ def run_benchchecks(mut m: Bench) raises:
     with open("./bench_data/users_1k.json", "r") as f:
         data = f.read()
 
-    run[benchmark_json_parse, "ParseTwitter"](m, twitter)
-    run[benchmark_json_parse[strict=False], "ParseTwitterNoStrictMode"](
-        m, twitter
+    run["ParseTwitter"](m, benchmark_json_parse[True], twitter)
+    run["ParseTwitterNoStrictMode"](
+        m, benchmark_json_parse[strict=False], twitter
     )
-    run[benchmark_json_parse, "ParseCitmCatalog"](m, catalog)
-    run[
-        benchmark_deserialize_with_reflection[CatalogData],
-        "ParseCitmCatalogWithReflection",
-    ](m, catalog)
+    run["ParseCitmCatalog"](m, benchmark_json_parse[True], catalog)
+    run["ParseCitmCatalogWithReflection"](
+        m, benchmark_deserialize_with_reflection[CatalogData], catalog
+    )
 
-    run[
+    run["ParseCitmCatalogWithReflectionLazy"](
+        m,
         benchmark_deserialize_with_reflection[
             LazyCatalogData[origin_of(catalog)]
         ],
-        "ParseCitmCatalogWithReflectionLazy",
-    ](m, catalog)
+        catalog,
+    )
 
-    run[benchmark_json_parse, "ParseCitmCatalogMinify"](m, catalog_minify)
-    run[
+    run["ParseCitmCatalogMinify"](m, benchmark_json_parse[True], catalog_minify)
+    run["ParseCitmCatalogWithReflectionLazyMinify"](
+        m,
         benchmark_deserialize_with_reflection[
             LazyCatalogData[origin_of(catalog_minify)]
         ],
-        "ParseCitmCatalogWithReflectionLazyMinify",
-    ](m, catalog_minify)
-
-    run[benchmark_json_parse, "ParseCanada"](m, canada)
-    run[
-        benchmark_deserialize_with_reflection[Canada],
-        "ParseCanadaWithReflection",
-    ](m, canada)
-
-    run[benchmark_document_parse, "ParseTwitterDoc"](m, twitter)
-    run[benchmark_document_parse, "ParseCitmCatalogDoc"](m, catalog)
-    run[benchmark_document_parse, "ParseCitmCatalogMinifyDoc"](
-        m, catalog_minify
-    )
-    run[benchmark_document_parse, "ParseCanadaDoc"](m, canada)
-
-    run[benchmark_stage1, "Stage1Twitter"](m, twitter)
-    run[benchmark_stage1, "Stage1CitmCatalog"](m, catalog)
-    run[benchmark_stage1, "Stage1CitmCatalogMinify"](m, catalog_minify)
-    run[benchmark_stage1, "Stage1Canada"](m, canada)
-
-    run[
-        benchmark_parse_pointer["/statuses/99/user/screen_name"],
-        "ParsePointerTwitter",
-    ](m, twitter)
-    run[benchmark_parse_pointer["/venueNames"], "ParsePointerCitmCatalog"](
-        m, catalog
-    )
-    run[benchmark_parse_pointer["/type"], "ParsePointerCanada"](m, canada)
-
-    run[benchmark_utf8_validate, "Utf8ValidateTwitter"](m, twitter)
-    run[benchmark_utf8_validate, "Utf8ValidateCanada"](m, canada)
-
-    run[benchmark_jsonl_parse, "ParseLargeJSONL"](
-        m, "./bench_data/big_lines_complex.jsonl"
+        catalog_minify,
     )
 
-    run[benchmark_json_parse, "ParseExtraLarge"](m, data)
-    run[benchmark_document_parse, "ParseExtraLargeDoc"](m, data)
-    run[benchmark_json_parse, "ParseHeavyUnicode"](m, unicode)
-    run[benchmark_ignore_unicode, "ParseHeavyIgnoreUnicode"](m, unicode)
+    run["ParseCanada"](m, benchmark_json_parse[True], canada)
+    run["ParseCanadaWithReflection"](
+        m, benchmark_deserialize_with_reflection[Canada], canada
+    )
+
+    run["ParseTwitterDoc"](m, benchmark_document_parse, twitter)
+    run["ParseCitmCatalogDoc"](m, benchmark_document_parse, catalog)
+    run["ParseCitmCatalogMinifyDoc"](
+        m, benchmark_document_parse, catalog_minify
+    )
+    run["ParseCanadaDoc"](m, benchmark_document_parse, canada)
+
+    run["Stage1Twitter"](m, benchmark_stage1, twitter)
+    run["Stage1CitmCatalog"](m, benchmark_stage1, catalog)
+    run["Stage1CitmCatalogMinify"](m, benchmark_stage1, catalog_minify)
+    run["Stage1Canada"](m, benchmark_stage1, canada)
+
+    run["ParsePointerTwitter"](
+        m, benchmark_parse_pointer["/statuses/99/user/screen_name"], twitter
+    )
+    run["ParsePointerCitmCatalog"](
+        m, benchmark_parse_pointer["/venueNames"], catalog
+    )
+    run["ParsePointerCanada"](m, benchmark_parse_pointer["/type"], canada)
+
+    run["Utf8ValidateTwitter"](m, benchmark_utf8_validate, twitter)
+    run["Utf8ValidateCanada"](m, benchmark_utf8_validate, canada)
+
+    run["ParseLargeJsonl"](
+        m, benchmark_jsonl_parse, Path("./bench_data/big_lines_complex.jsonl")
+    )
+
+    run["ParseExtraLarge"](m, benchmark_json_parse[True], data)
+    run["ParseExtraLargeDoc"](m, benchmark_document_parse, data)
+    run["ParseHeavyUnicode"](m, benchmark_json_parse[True], unicode)
+    run["ParseHeavyIgnoreUnicode"](m, benchmark_ignore_unicode, unicode)
 
     # Web-server-style workloads: many independent small payloads, each
     # parsed from a fresh buffer. Batching keeps the aggregate measurement
@@ -474,31 +463,33 @@ def run_benchchecks(mut m: Bench) raises:
     # Users: ~1000 docs of ~310B (tiny microservice responses).
     var statuses = make_corpus(parse(twitter)["statuses"])
     var users = make_corpus(parse(data))
-    run_batch[benchmark_batch_parse, "ParseStatusBatch"](m, statuses)
-    run_batch[benchmark_batch_document_parse, "ParseStatusBatchDoc"](
-        m, statuses
+    run_batch["ParseStatusBatch"](m, benchmark_batch_parse, statuses)
+    run_batch["ParseStatusBatchDoc"](
+        m, benchmark_batch_document_parse, statuses
     )
-    run_batch[benchmark_batch_parse, "ParseUserBatch"](m, users)
-    run_batch[benchmark_batch_document_parse, "ParseUserBatchDoc"](m, users)
-    run_batch[
-        benchmark_batch_deserialize[User], "ParseUserBatchWithReflection"
-    ](m, users)
-
-    run[benchmark_value_stringify, "StringifyCanada"](m, parse(canada))
-    run[benchmark_reflection_serialize, "StringifyCanadaWithReflection"](
-        m, deserialize[Canada](canada)
+    run_batch["ParseUserBatch"](m, benchmark_batch_parse, users)
+    run_batch["ParseUserBatchDoc"](m, benchmark_batch_document_parse, users)
+    run_batch["ParseUserBatchWithReflection"](
+        m, benchmark_batch_deserialize[User], users
     )
-    run[benchmark_value_stringify, "StringifyTwitter"](m, parse(twitter))
 
-    run[benchmark_reflection_serialize, "StringifyCitmCatalogWithReflection"](
-        m, deserialize[CatalogData](catalog)
+    run["StringifyCanada"](m, benchmark_value_stringify, parse(canada))
+    run["StringifyCanadaWithReflection"](
+        m, benchmark_reflection_serialize[Canada], deserialize[Canada](canada)
     )
-    run[benchmark_value_stringify, "StringifyCitmCatalog"](m, parse(catalog))
+    run["StringifyTwitter"](m, benchmark_value_stringify, parse(twitter))
 
-    run[benchmark_minify, "MinifyCitmCatalog"](m, catalog)
-    run[benchmark_pretty_print, "WritePrettyCitmCatalog"](m, parse(catalog))
-    run[benchmark_pretty_print, "WritePrettyTwitter"](m, parse(twitter))
-    run[benchmark_pretty_print, "WritePrettyCanada"](m, parse(canada))
+    run["StringifyCitmCatalogWithReflection"](
+        m,
+        benchmark_reflection_serialize[CatalogData],
+        deserialize[CatalogData](catalog),
+    )
+    run["StringifyCitmCatalog"](m, benchmark_value_stringify, parse(catalog))
+
+    run["MinifyCitmCatalog"](m, benchmark_minify, catalog)
+    run["WritePrettyCitmCatalog"](m, benchmark_pretty_print, parse(catalog))
+    run["WritePrettyTwitter"](m, benchmark_pretty_print, parse(twitter))
+    run["WritePrettyCanada"](m, benchmark_pretty_print, parse(canada))
 
     run_benchmarks(m)
 
@@ -506,69 +497,61 @@ def run_benchchecks(mut m: Bench) raises:
 @__parameter
 def benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm p}:
         var lines = read_lines(p).collect()
         keep(lines)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         var p = Parser[options=ParseOptions(ignore_unicode=True)](s)
         var v = p.parse()
         keep(v)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_minify(mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         var v = minify(s)
         keep(v)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
-def benchmark_reflection_serialize[
-    T: Movable, //
-](mut b: Bencher, data: T) raises:
+def benchmark_reflection_serialize[T: Movable](mut b: Bencher, data: T) raises:
     @always_inline
-    @__parameter
-    def do():
+    def do() raises {imm data}:
         var a = serialize(data)
         keep(a)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     @always_inline
-    @__parameter
-    def do():
+    def do() raises {imm s}:
         var a = write_pretty(s)
         keep(a)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_utf8_validate(mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         keep(is_valid_utf8(StringSlice(s)))
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
@@ -576,12 +559,11 @@ def benchmark_parse_pointer[
     path: StringLiteral
 ](mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         var v = parse_pointer(s, String(path))
         keep(v)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
@@ -589,50 +571,46 @@ def benchmark_stage1(mut b: Bencher, s: String) raises:
     # End-to-end stage-1 structural indexing: pad-copy + index, fresh
     # buffers per iteration (matching the Parse* rows' methodology).
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         var buf = PaddedBuffer(StringSlice(s).as_bytes())
         var span = buf.span()
         var positions = List[UInt32]()
         structural_index[True](span.unsafe_ptr(), len(span), positions)
         keep(positions)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_document_parse(mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         var d = parse_document(s)
         keep(d)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm docs}:
         for doc in docs:
             var v = parse(doc)
             keep(v)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm docs}:
         for doc in docs:
             var d = parse_document(doc)
             keep(d)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
@@ -640,21 +618,18 @@ def benchmark_batch_deserialize[
     T: Movable & Deinitable
 ](mut b: Bencher, docs: List[String]) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm docs}:
         for doc in docs:
-            var parser = Parser(doc)
-            var a = deserialize[T](parser^)
+            var a = from_json[T](doc)
             keep(a)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
+    def do() raises {imm s}:
         var a = parse[
             ParseOptions(
                 strict_mode=StrictOptions.STRICT if strict else StrictOptions.LENIENT
@@ -662,18 +637,17 @@ def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
         ](s)
         keep(a)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 @__parameter
 def benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
-    @__parameter
-    def do():
+    def do() raises {imm v}:
         var a = to_string(v)
         keep(a)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 comptime LazyCatalogData[origin: ImmOrigin] = Lazy[CatalogData, origin]
@@ -844,13 +818,11 @@ def benchmark_deserialize_with_reflection[
     T: Movable & Deinitable
 ](mut b: Bencher, s: String) raises:
     @always_inline
-    @__parameter
-    def do() raises:
-        var parser = Parser(s)
-        var a = deserialize[T](parser^)
+    def do() raises {imm s}:
+        var a = from_json[T](s)
         keep(a)
 
-    b.iter[do]()
+    b.iter(do)
 
 
 comptime unicode = r"""{
@@ -891,7 +863,7 @@ comptime unicode = r"""{
           "user": "ana_love",
           "comment": "Perfecto para leer un buen libro, \u00F3jala pueda descansar. \uD83D\uDCDA"
         }
-      ]
+     ]
     },
     {
       "post_id": 102,
@@ -907,7 +879,7 @@ comptime unicode = r"""{
           "user": "luisita_23",
           "comment": "¡Es increíble! Nunca vi una tan cerca de mi casa. \uD83D\uDC36"
         }
-      ]
+     ]
     },
     {
       "post_id": 103,
@@ -923,9 +895,9 @@ comptime unicode = r"""{
           "user": "marta_92",
           "comment": "¡Te lo mereces! Yo estoy en medio de un proyecto, espero terminar pronto. \uD83D\uDCDD"
         }
-      ]
+     ]
     }
-  ],
+ ],
   "notifications": [
     {
       "notification_id": 201,
@@ -945,7 +917,7 @@ comptime unicode = r"""{
       "message": "Te han mencionado en una conversaci\u00F3n sobre el caf\u00E9 de la ma\u00F1ana. \uD83C\uDF75",
       "status": "unread"
     }
-  ],
+ ],
   "settings": {
     "privacy": "public",
     "notifications": "enabled",
@@ -976,7 +948,7 @@ comptime unicode = r"""{
       "status": "active",
       "last_active": "2025-01-18T10:10:00Z"
     }
-  ],
+ ],
   "favorite_books": [
     {
       "title": "Cien años de soledad",
@@ -996,7 +968,7 @@ comptime unicode = r"""{
       "description": "Una reflexión sobre el totalitarismo y el control social. \u201CLa vigilancia constante es el peor enemigo de la libertad\u201D.",
       "year": 1949
     }
-  ],
+ ],
   "settings_updated": "\u003C\u003E\u003C\u003E\u003C\u003E La configuraci\u00F3n se ha actualizado correctamente \uD83D\uDCE5."
 }
 """
