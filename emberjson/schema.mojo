@@ -1,4 +1,4 @@
-# `deserialize` is the public (emberserde-backed) entry point, used by the
+# `from_json` is the public (emberserde-backed) entry point, used by the
 # `Coerce*` helpers below to read a number out of a JSON string payload.
 from emberjson import Value, from_json
 from emberserde import Defaulted, Field

@@ -571,32 +571,6 @@ def _parse_document_root[
     return _finish_document[options](sink^)
 
 
-def parse_document[
-    options: ParseOptions = ParseOptions()
-](s: StringSlice) raises -> Document:
-    """Parses a JSON document onto an immutable tape `Document`.
-
-    Several times faster than `parse` on document-heavy inputs because it
-    performs no per-node allocation; see `Document` for the trade-offs.
-
-    Parameters:
-        options: The parsing options to be applied.
-
-    Args:
-        s: The input String.
-
-    Returns:
-        The parsed `Document`, which owns all of its data.
-
-    Raises:
-        If an invalid JSON string is provided.
-    """
-    comptime if options.validate_utf8:
-        if not is_valid_utf8(s):
-            raise Error("Invalid UTF-8 in input")
-    return _parse_document_root[options._utf8_validated()](s)
-
-
 def _finish_document[options: ParseOptions](var sink: TapeSink) -> Document:
     """Moves a finished sink's outputs into a `Document`.
 
@@ -613,13 +587,3 @@ def _finish_document[options: ParseOptions](var sink: TapeSink) -> Document:
         strings^,
         StrictOptions.ALLOW_DUPLICATE_KEYS in options.strict_mode,
     )
-
-
-@always_inline
-def try_parse_document[
-    options: ParseOptions = ParseOptions()
-](s: StringSlice) -> Optional[Document]:
-    try:
-        return parse_document[options](s)
-    except:
-        return {}
