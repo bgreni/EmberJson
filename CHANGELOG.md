@@ -37,9 +37,13 @@ The JSON entry points are unified into `from_json`, `try_from_json`,
 
 `parse_pointer` and `try_parse_pointer` are unchanged.
 
-UTF-8 validation now applies uniformly. Reflection-based deserialization
-previously skipped the check; it no longer does. Pass
-`ParseOptions(validate_utf8=False)` to opt out.
+UTF-8 validation is unchanged in effect: the old `parse`, `parse_document`
+and `deserialize` already validated UTF-8 (gated on
+`options.validate_utf8`), and `from_json` still does, for all three
+dispatch strategies (`Value`, `Document`, reflection). What changed is
+where the check lives — `from_json` runs it once at the top instead of
+each old entry point repeating it. Pass `ParseOptions(validate_utf8=False)`
+to opt out, as before.
 
 `to_json[pretty=True]` on a `Document` is a compile-time error —
 `Document` has no indented writer. Deserialize into a `Value` first.

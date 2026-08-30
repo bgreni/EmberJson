@@ -81,8 +81,9 @@ def test_invalid_utf8_rejected_for_document() raises:
 
 
 def test_invalid_utf8_rejected_for_reflection() raises:
-    # This is the case that silently passed before unification: the
-    # reflection path did no UTF-8 validation at all.
+    # Pins the guarantee for the unified entry point: `from_json` runs the
+    # UTF-8 check once, up front, and every dispatch strategy -- Value,
+    # Document, and reflection alike -- sees it.
     with assert_raises(contains="Invalid UTF-8"):
         _ = from_json[Point](_invalid_utf8_wire())
 

@@ -171,10 +171,14 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
         return res
 
     def _utf8_validated(self) -> Self:
-        # The caller has already run `is_valid_utf8` over the whole input,
-        # so downstream entry points must not run the pre-pass again.
-        # Mirrors `_padded()`: a comptime-only options transform, never
-        # something user code constructs directly.
+        # Defence-in-depth, not the enforcing mechanism: `validate_utf8` is
+        # only read by `from_json` (which sets this flag) and by
+        # `parse_pointer` (an unrelated entry point `from_json` never
+        # reaches), so clearing it here prevents no double-check today.
+        # The real guarantee is structural: `from_json` is the sole caller
+        # of the root helpers, and it runs the UTF-8 check exactly once,
+        # before dispatching to them. Mirrors `_padded()`: a comptime-only
+        # options transform, never something user code constructs directly.
         var res = self
         res.validate_utf8 = False
         return res

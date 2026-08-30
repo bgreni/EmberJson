@@ -398,7 +398,7 @@ def test_jsonchecker_differential() raises:
     assert_true(checked >= 30)
 
 
-def test_parse_document_root_skips_utf8_prepass() raises:
+def test_parse_document_root_matches_public_path() raises:
     # The root helper does no UTF-8 validation of its own -- that is the
     # caller's job. Valid input must parse identically to parse_document.
     var wire = '{"a":[1,2,3],"b":{"c":"x"}}'

@@ -114,8 +114,8 @@ __extension Field:
 
 
 def _parse_value_root[
-    options: ParseOptions
-](s: StringSlice, out j: Value) raises DeserializationError:
+    o: ImmOrigin, //, options: ParseOptions
+](s: StringSlice[o], out j: Value) raises DeserializationError:
     """`from_json[Value]`'s parse, with the UTF-8 pre-pass removed.
 
     Copies the input into a NUL-padded buffer (one memcpy, cheap relative

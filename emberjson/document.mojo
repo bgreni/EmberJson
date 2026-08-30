@@ -19,7 +19,6 @@ from ._deserialize.tape import (
     _Arena,
 )
 from .teju import write_float
-from ._utf8 import is_valid_utf8
 from std.format._utils import _WriteBufferStack
 from std.memory import unsafe_memcmp
 from std.memory.unsafe import bitcast
@@ -543,8 +542,8 @@ def _write_tape_value(doc: Document, idx: Int, mut writer: Some[Writer]) -> Int:
 
 
 def _parse_document_root[
-    options: ParseOptions
-](s: StringSlice) raises -> Document:
+    o: ImmOrigin, //, options: ParseOptions
+](s: StringSlice[o]) raises -> Document:
     """`parse_document`'s parse, with the UTF-8 pre-pass removed.
 
     Split out so `emberjson.from_json` can run the pre-pass once at the
