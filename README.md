@@ -166,6 +166,7 @@ an `Object`, `Array`, `String`, `Int`, `Float64`, `Bool`, or `Null`.
 
 ```mojo
 from emberjson import *
+from std.testing import assert_equal
 
 var json = from_json[Value]('{"key": 123}')
 
