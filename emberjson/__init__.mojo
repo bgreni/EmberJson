@@ -3,6 +3,7 @@ from .json import JSON
 from .array import Array
 from .object import Object
 from .utils import write, PaddedBuffer, PAD_INPUT_THRESHOLD
+from std.builtin.rebind import rebind_var
 
 # The public `deserialize`/`try_deserialize`/`serialize`/`to_string` names
 # below are thin wrappers over `emberjson._serde`'s `from_json`/
@@ -48,6 +49,7 @@ from .document import (
     DocEntry,
     parse_document,
     try_parse_document,
+    _parse_document_root,
 )
 
 from ._deserialize.query import parse_pointer, try_parse_pointer
@@ -169,6 +171,123 @@ def try_parse[
 ](s: String) -> Optional[Value]:
     try:
         return parse[options](s)
+    except:
+        return {}
+
+
+def _parse_value_root[
+    options: ParseOptions
+](s: StringSlice, out j: Value) raises DeserializationError:
+    """`from_json[Value]`'s parse, with the UTF-8 pre-pass removed.
+
+    Copies the input into a NUL-padded buffer (one memcpy, cheap relative
+    to parsing) so the parser's hot loops can skip per-byte bounds checks.
+    Safe because the returned `Value` owns all of its data. Tiny inputs
+    skip the copy: the allocation would cost more than the parse.
+
+    `Parser.parse()` still raises a bare `Error`; every syntax failure it
+    can produce is a malformed-JSON condition, so it is translated to
+    `DeserializationError(..., DerErrorKind.InvalidValue)` here rather
+    than propagated untyped.
+    """
+    if s.byte_length() < PAD_INPUT_THRESHOLD:
+        var p = Parser[options=options](s)
+        try:
+            j = p.parse()
+        except e:
+            raise DeserializationError(String(e), DerErrorKind.InvalidValue)
+    else:
+        var buf = PaddedBuffer(s.as_bytes())
+        var p = Parser[options=options._padded()](padded=buf)
+        try:
+            j = p.parse()
+        except e:
+            raise DeserializationError(String(e), DerErrorKind.InvalidValue)
+
+
+def from_json[
+    o: ImmOrigin,
+    //,
+    T: Movable & Deinitable,
+    options: ParseOptions = ParseOptions(),
+](s: StringSlice[o], out result: T) raises DeserializationError:
+    """Deserializes JSON text into `T`.
+
+    The single deserialization entry point. `T` selects the strategy at
+    compile time:
+
+    - `Value` -- the hand-written recursive-descent parser, into the
+      mutable `Value` variant.
+    - `Document` -- the immutable tape parser: no per-node allocation,
+      several times faster on document-heavy input.
+    - anything else -- emberserde's reflection framework, driven by
+      `EmberJsonDeserializer` over the same hand-written `Parser`.
+
+    UTF-8 is validated once here, before dispatch, so every strategy sees
+    the same rule. `ParseOptions(validate_utf8=False)` skips the check for
+    trusted input.
+
+    Parameters:
+        T: The type to deserialize into.
+        options: The parsing options to be applied.
+
+    Args:
+        s: The input JSON text.
+
+    Returns:
+        The deserialized value.
+
+    Raises:
+        `DeserializationError` if `s` is not valid UTF-8, is not valid
+        JSON, or does not match the shape of `T`.
+    """
+    comptime if options.validate_utf8:
+        if not is_valid_utf8(s):
+            raise DeserializationError(
+                "Invalid UTF-8 in input", DerErrorKind.InvalidValue
+            )
+    # Validation has run; clear the flag so no branch repeats it.
+    comptime checked = options._utf8_validated()
+    comptime if T == Value:
+        result = rebind_var[T](_parse_value_root[checked](s))
+    elif T == Document:
+        # `_parse_document_root` still raises a bare `Error`; translate it
+        # so this entry point's contract is uniformly typed.
+        try:
+            result = rebind_var[T](_parse_document_root[checked](s))
+        except e:
+            raise DeserializationError(String(e), DerErrorKind.InvalidValue)
+    else:
+        # NOTE: the reflection branch must stay UNPADDED. `raw_bytes`
+        # refuses `_assume_padded` because a `PaddedBuffer` is a local
+        # that does not outlive the call, so every borrowing type
+        # (`Lazy`, `LazyString`, ...) would dangle. See the spec's
+        # "Known limitation".
+        result = _from_json[T, checked](s)
+
+
+def try_from_json[
+    o: ImmOrigin,
+    //,
+    T: Movable & Deinitable,
+    options: ParseOptions = ParseOptions(),
+](s: StringSlice[o]) -> Optional[T]:
+    """Deserializes JSON text into `T`, or `None` on any failure.
+
+    Parameters:
+        T: The type to deserialize into.
+        options: The parsing options to be applied, exactly as on
+            `from_json`.
+
+    Args:
+        s: The input JSON text.
+
+    Returns:
+        The deserialized value, or `None` if `s` could not be
+        deserialized into `T`.
+    """
+    try:
+        return from_json[T, options](s)
     except:
         return {}
 
