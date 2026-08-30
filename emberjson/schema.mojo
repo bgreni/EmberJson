@@ -1,6 +1,6 @@
 # `deserialize` is the public (emberserde-backed) entry point, used by the
 # `Coerce*` helpers below to read a number out of a JSON string payload.
-from emberjson import Value, deserialize
+from emberjson import Value, from_json
 from emberserde import Defaulted, Field
 from emberserde.utils import Base as _Base
 
@@ -708,7 +708,7 @@ def __try_coerce_int(v: Value) raises -> Int64:
     elif v.is_float():
         return Int64(v.float())
     elif v.is_string():
-        return deserialize[Int64](v.string())
+        return from_json[Int64](v.string())
     else:
         raise Error("Value cannot be converted to an integer")
 
@@ -719,7 +719,7 @@ def __try_coerce_uint(v: Value) raises -> UInt64:
     elif v.is_float():
         return UInt64(v.float())
     elif v.is_string():
-        return deserialize[UInt64](v.string())
+        return from_json[UInt64](v.string())
     else:
         raise Error("Value cannot be converted to an unsigned integer")
 
@@ -730,7 +730,7 @@ def __try_coerce_float(v: Value) raises -> Float64:
     elif v.is_float():
         return v.float()
     elif v.is_string():
-        return deserialize[Float64](v.string())
+        return from_json[Float64](v.string())
     else:
         raise Error("Value cannot be converted to a float")
 
