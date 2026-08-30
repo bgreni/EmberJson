@@ -10,7 +10,7 @@ because they import both. This file deliberately imports nothing but the
 `emberjson` facade so that regression cannot come back.
 """
 
-from emberjson import Defaulted, Field, deserialize, serialize
+from emberjson import Defaulted, Field, from_json, to_json
 from std.testing import assert_equal, TestSuite
 
 
@@ -28,8 +28,8 @@ def test_subscript_resolves_from_the_facade_alone() raises:
 
 
 def test_public_entry_points_resolve_from_the_facade_alone() raises:
-    assert_equal(deserialize[Defaulted[Int, 42]]("10")[], 10)
-    assert_equal(serialize(Defaulted[Int, 42](10)), "10")
+    assert_equal(from_json[Defaulted[Int, 42]]("10")[], 10)
+    assert_equal(to_json(Defaulted[Int, 42](10)), "10")
 
 
 def main() raises:

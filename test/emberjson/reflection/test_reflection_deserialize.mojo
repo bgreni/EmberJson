@@ -9,7 +9,7 @@ from std.testing import (
 # Ported in Task 8 from the deleted `Parser`-driven reflection walker to
 # the public (emberserde-backed) entry points. Same inputs, same
 # expectations, except where called out below.
-from emberjson import deserialize, try_deserialize, serialize
+from emberjson import from_json, try_from_json, to_json
 from emberserde import DenyUnknownFields
 from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
@@ -66,7 +66,7 @@ struct Foo[I: IntLiteral, F: FloatLiteral](Defaultable, Movable):
 
 
 def test_deserialize() raises:
-    var foo = deserialize[Foo[23, 234.23]](
+    var foo = from_json[Foo[23, 234.23]](
         """
 {
     "a": "hello",
@@ -132,13 +132,13 @@ struct Bar(Defaultable, Movable):
 
 
 def test_out_of_order_keys() raises:
-    var bar = deserialize[Bar]('{"b": false, "a": 10}')
+    var bar = from_json[Bar]('{"b": false, "a": 10}')
     assert_equal(bar.a, 10)
     assert_equal(bar.b, False)
 
 
 def test_ctime_deserialize() raises:
-    comptime foo_ctime = try_deserialize[Foo[23, 234.23]](
+    comptime foo_ctime = try_from_json[Foo[23, 234.23]](
         """
 {
     "a": "hello",
@@ -207,7 +207,7 @@ def test_unexpected() raises:
     # unbound `"c"` is now skipped (see `test_unexpected_keys` below) and
     # what fails is `Baz.a`/`Baz.b` being missing.
     with assert_raises():
-        var b = deserialize[Baz]('{"c": 230}')
+        var b = from_json[Baz]('{"c": 230}')
 
 
 @fieldwise_init
@@ -219,7 +219,7 @@ struct StrictBaz(DenyUnknownFields, Movable):
 def test_unexpected_key_rejected_under_deny_unknown_fields() raises:
     # The opt-in that recovers the old always-reject behavior.
     with assert_raises(contains="Unknown field"):
-        _ = deserialize[StrictBaz]('{"a": 1, "b": 2, "c": 230}')
+        _ = from_json[StrictBaz]('{"a": 1, "b": 2, "c": 230}')
 
 
 def test_unexpected_keys() raises:
@@ -242,7 +242,7 @@ def test_unexpected_keys() raises:
 
 
 def _deserialize_with_extras() raises -> Foo[23, 234.23]:
-    return deserialize[Foo[23, 234.23]](
+    return from_json[Foo[23, 234.23]](
         """
 {
     "a": "hello",
@@ -296,7 +296,7 @@ struct OptionalTest(Movable):
 
 def test_missing_optional() raises:
     var json_str = '{"a": 1}'
-    var o = deserialize[OptionalTest](json_str)
+    var o = from_json[OptionalTest](json_str)
     assert_equal(o.a, 1)
     assert_false(o.b)
 
@@ -315,7 +315,7 @@ def test_long_ints() raises:
         ' "u128": 340282366920938463463374607431768211455, "u256":'
         " 115792089237316195423570985008687907853269984665640564039457584007913129639935}"
     )
-    var vals = deserialize[LongInts](s)
+    var vals = from_json[LongInts](s)
 
     assert_equal(vals.i128, Scalar[DType.int128].MIN)
     assert_equal(vals.i256, Scalar[DType.int256].MAX)
@@ -331,20 +331,20 @@ def test_long_ints() raises:
 
 
 def test_simd_bool_reads_a_json_boolean() raises:
-    assert_true(Bool(deserialize[SIMD[DType.bool, 1]]("true")))
-    assert_false(Bool(deserialize[SIMD[DType.bool, 1]]("false")))
+    assert_true(Bool(from_json[SIMD[DType.bool, 1]]("true")))
+    assert_false(Bool(from_json[SIMD[DType.bool, 1]]("false")))
 
     # ...and a JSON *number* is no longer silently accepted for it.
-    assert_false(Bool(try_deserialize[SIMD[DType.bool, 1]]("1")))
+    assert_false(Bool(try_from_json[SIMD[DType.bool, 1]]("1")))
 
     # The plain `Bool` path is unchanged.
-    assert_true(deserialize[Bool]("true"))
+    assert_true(from_json[Bool]("true"))
 
 
 def test_simd_bool_round_trips_through_json() raises:
     var v = SIMD[DType.bool, 1](True)
-    assert_equal(serialize(v), String("true"))
-    assert_equal(deserialize[SIMD[DType.bool, 1]](serialize(v)), v)
+    assert_equal(to_json(v), String("true"))
+    assert_equal(from_json[SIMD[DType.bool, 1]](to_json(v)), v)
 
 
 def main() raises:

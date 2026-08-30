@@ -1,5 +1,5 @@
 from std.testing import TestSuite, assert_equal
-from emberjson import serialize
+from emberjson import to_json, to_json_pretty
 from std.collections import Set, Array as StdArray
 from std.memory import ArcPointer, OwnedPointer
 from emberjson import Value, Object, Array, Null
@@ -57,7 +57,7 @@ def test_serialize() raises:
     )
 
     assert_equal(
-        serialize(f),
+        to_json(f),
         (
             '{"f":1,"s":"something","o":10,"bar":{"b":20},"i":23,"vec":[2.32,5.345],"l":[32,42,353],"arr":[false,true,true],"dic":{"a'
             ' key":1234},"il":45,"fl":7.43,"tup":[1,2,3],"set":[1,2,3],"arc_ptr":1234,"owned_ptr":4321,"v":{"variant":"test"},"v_obj":{"key":123},"v_arr":[1,2,"three"],"n":null}'
@@ -74,7 +74,7 @@ def test_serialize() raises:
 # error.
 def _ctime_serialize[T: AnyType, //](value: T) -> String:
     try:
-        return serialize(value)
+        return to_json(value)
     except:
         return String()
 
@@ -189,7 +189,7 @@ def test_nested_structs() raises:
     var p = Person("Homer", 39, addr^, tags^)
 
     assert_equal(
-        serialize(p^),
+        to_json(p^),
         (
             '{"name":"Homer","age":39,"address":{"street":"123 Main'
             ' St","city":"Springfield","zip":62704},"tags":["safety","inspector"]}'
@@ -226,17 +226,17 @@ def test_deep_hierarchy() raises:
         ' St","city":"Emp'
         ' City","zip":54321},"tags":["dev"]}]}},"founded_year":1990}'
     )
-    assert_equal(serialize(company^), expected)
+    assert_equal(to_json(company^), expected)
 
 
 def test_wrappers() raises:
     var w_int = IntWrapper(123, "an integer")
-    assert_equal(serialize(w_int^), '{"value":123,"description":"an integer"}')
+    assert_equal(to_json(w_int^), '{"value":123,"description":"an integer"}')
 
     var addr = Address("Row", "London", 123)
     var w_addr = AddressWrapper(addr^, "an address")
     assert_equal(
-        serialize(w_addr^),
+        to_json(w_addr^),
         (
             '{"value":{"street":"Row","city":"London","zip":123},"description":"an'
             ' address"}'
@@ -247,12 +247,12 @@ def test_wrappers() raises:
 def test_optional_fields() raises:
     var m1 = MaybeFields(10, String("foo"), Address("A", "B", 1))
     assert_equal(
-        serialize(m1^),
+        to_json(m1^),
         '{"f1":10,"f2":"foo","f3":{"street":"A","city":"B","zip":1}}',
     )
 
     var m2 = MaybeFields(None, None, None)
-    assert_equal(serialize(m2^), '{"f1":null,"f2":null,"f3":null}')
+    assert_equal(to_json(m2^), '{"f1":null,"f2":null,"f3":null}')
 
 
 def test_deep_recursion() raises:
@@ -266,7 +266,7 @@ def test_deep_recursion() raises:
     var n1 = DeepNode(1, c1^)
 
     assert_equal(
-        serialize(n1^),
+        to_json(n1^),
         '{"val":1,"children":[{"val":2,"children":[{"val":3,"children":[]}]}]}',
     )
 
@@ -294,7 +294,7 @@ def test_pretty_serialize() raises:
         Null(),
     )
 
-    var serialized = serialize[pretty=True](f)
+    var serialized = to_json_pretty(f)
 
     # BEHAVIOR CHANGE (Task 8). The `Value`/`Object`/`Array` fields used to
     # print COMPACT under `pretty=True` -- `"v": {"variant":"test"}` on one

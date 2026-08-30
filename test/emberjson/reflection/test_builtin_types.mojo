@@ -1,7 +1,7 @@
 from std.testing import TestSuite, assert_equal, assert_true, assert_false
 from emberjson import (
-    deserialize,
-    serialize,
+    from_json,
+    to_json,
     Value,
     Object,
     Array,
@@ -38,10 +38,10 @@ def test_builtin_reflection() raises:
     b.null_val = Null()
 
     # Serialize
-    var s = serialize(b)
+    var s = to_json(b)
 
     # Deserialize
-    var b2 = deserialize[BuiltinTypes](s)
+    var b2 = from_json[BuiltinTypes](s)
 
     # Verify
     assert_true(b2.value.is_object())

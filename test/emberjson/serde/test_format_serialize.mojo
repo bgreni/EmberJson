@@ -1,6 +1,6 @@
 from std.testing import assert_equal, TestSuite
 from emberjson._serde import to_json
-from emberjson import Value, Object, Array, Null, parse
+from emberjson import Value, Object, Array, Null, from_json
 from std.hashlib import Hasher
 
 
@@ -287,7 +287,7 @@ def test_composite_dict_key_is_escaped_to_valid_json() raises:
     m[CompositeKey(1)] = 2
     var got = to_json(m)
     assert_equal(got, String('{"{\\"a\\":1}":2}'))
-    _ = parse(got)
+    _ = from_json[Value](got)
 
 
 def main() raises:

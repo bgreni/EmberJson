@@ -173,7 +173,7 @@ def test_null_deserialize_rejects_non_null() raises:
 
 # ===========================================================================
 # Comma framing: the serde states must enforce JSON's separator grammar
-# exactly like `parse()` does (strict by default, trailing commas only
+# exactly like `from_json[Value]` does (strict by default, trailing commas only
 # under `ALLOW_TRAILING_COMMA`) -- regression coverage for the review
 # finding where commas were consume-if-present.
 # ===========================================================================
@@ -234,8 +234,8 @@ def test_object_duplicate_keys_last_write_wins_in_lenient_mode() raises:
 
 
 def test_field_names_honor_ignore_unicode() raises:
-    # `parse()` stores keys raw under `ignore_unicode`; field-name matching
-    # must agree, so an escaped key no longer binds.
+    # `from_json[Value]` stores keys raw under `ignore_unicode`; field-name
+    # matching must agree, so an escaped key no longer binds.
     comptime opts = ParseOptions(ignore_unicode=True)
     with assert_raises(contains="missing field"):
         _ = from_json[AB, opts]('{"\\u0061b":1}')

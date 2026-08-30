@@ -30,12 +30,10 @@ from std.testing import (
     TestSuite,
 )
 from emberjson import (
-    parse,
-    try_parse,
-    deserialize,
-    try_deserialize,
-    serialize,
-    to_string,
+    from_json,
+    try_from_json,
+    to_json,
+    to_json_pretty,
     Value,
     DeserializationError,
     SerializationError,
@@ -44,7 +42,7 @@ from emberjson import (
     StrictOptions,
 )
 from emberserde import DenyUnknownFields
-from emberjson._serde import from_json
+from emberjson._serde import from_json as _serde_from_json
 
 
 @fieldwise_init
@@ -121,7 +119,7 @@ def test_parse_raises_typed_error() raises:
     # typed-raises unification rule described above.
     var kind = String("")
     try:
-        _ = parse("{")
+        _ = from_json[Value]("{")
     except e:
         kind = String(e.kind)
     assert_true(kind != String(""))
@@ -130,7 +128,7 @@ def test_parse_raises_typed_error() raises:
 def test_parse_malformed_json_reports_invalid_value_kind() raises:
     var kind = DerErrorKind.Custom
     try:
-        _ = parse("{")
+        _ = from_json[Value]("{")
     except e:
         kind = e.kind
     assert_equal(kind, DerErrorKind.InvalidValue)
@@ -142,7 +140,7 @@ def test_parse_invalid_utf8_reports_exact_message_and_kind() raises:
     var kind = DerErrorKind.Custom
     var message = String("")
     try:
-        _ = parse(_invalid_utf8_string())
+        _ = from_json[Value](_invalid_utf8_string())
     except e:
         kind = e.kind
         message = e.message
@@ -151,15 +149,15 @@ def test_parse_invalid_utf8_reports_exact_message_and_kind() raises:
 
 
 def test_try_parse_returns_none_on_malformed_json() raises:
-    assert_false(Bool(try_parse("{")))
+    assert_false(Bool(try_from_json[Value]("{")))
 
 
 def test_try_parse_returns_none_on_invalid_utf8() raises:
-    assert_false(Bool(try_parse(_invalid_utf8_string())))
+    assert_false(Bool(try_from_json[Value](_invalid_utf8_string())))
 
 
 def test_try_parse_returns_value_on_valid_json() raises:
-    var result = try_parse('{"a":1}')
+    var result = try_from_json[Value]('{"a":1}')
     assert_true(Bool(result))
     assert_equal(result.value()["a"].int(), 1)
 
@@ -172,7 +170,7 @@ def test_try_parse_returns_value_on_valid_json() raises:
 def test_deserialize_missing_field_reports_missing_field_kind() raises:
     var kind = DerErrorKind.Custom
     try:
-        _ = deserialize[Point]('{"x":1}')
+        _ = from_json[Point]('{"x":1}')
     except e:
         kind = e.kind
     assert_equal(kind, DerErrorKind.MissingField)
@@ -181,7 +179,7 @@ def test_deserialize_missing_field_reports_missing_field_kind() raises:
 def test_deserialize_type_mismatch_reports_type_mismatch_kind() raises:
     var kind = DerErrorKind.Custom
     try:
-        _ = deserialize[Point]('{"x":"nope","y":2}')
+        _ = from_json[Point]('{"x":"nope","y":2}')
     except e:
         kind = e.kind
     assert_equal(kind, DerErrorKind.TypeMismatch)
@@ -190,7 +188,7 @@ def test_deserialize_type_mismatch_reports_type_mismatch_kind() raises:
 def test_deserialize_duplicate_field_reports_duplicate_field_kind() raises:
     var kind = DerErrorKind.Custom
     try:
-        _ = deserialize[Point]('{"x":1,"x":2,"y":3}')
+        _ = from_json[Point]('{"x":1,"x":2,"y":3}')
     except e:
         kind = e.kind
     assert_equal(kind, DerErrorKind.DuplicateField)
@@ -205,7 +203,7 @@ def test_deserialize_ignores_unknown_field_by_default() raises:
     # unbound key instead, and only rejects it when the target type opts in
     # by conforming to `DenyUnknownFields` -- see the next test. This pins
     # the new default rather than leaving it implicit.
-    var p = deserialize[Point]('{"x":1,"y":2,"z":3}')
+    var p = from_json[Point]('{"x":1,"y":2,"z":3}')
     assert_equal(p.x, 1)
     assert_equal(p.y, 2)
 
@@ -217,7 +215,7 @@ def test_deserialize_unknown_field_reports_unknown_field_kind() raises:
     # text.
     var kind = DerErrorKind.Custom
     try:
-        _ = deserialize[StrictPoint]('{"x":1,"y":2,"z":3}')
+        _ = from_json[StrictPoint]('{"x":1,"y":2,"z":3}')
     except e:
         kind = e.kind
     assert_equal(kind, DerErrorKind.UnknownField)
@@ -227,7 +225,7 @@ def test_deserialize_invalid_utf8_reports_invalid_value_kind() raises:
     var kind = DerErrorKind.Custom
     var message = String("")
     try:
-        _ = deserialize[Point](_invalid_utf8_string())
+        _ = from_json[Point](_invalid_utf8_string())
     except e:
         kind = e.kind
         message = e.message
@@ -246,7 +244,7 @@ def test_deserialize_populates_path_for_nested_failure() raises:
     var path = String("unset")
     var kind = DerErrorKind.Custom
     try:
-        _ = deserialize[Outer]('{"label":"a","inner":{"x":1}}')
+        _ = from_json[Outer]('{"label":"a","inner":{"x":1}}')
     except e:
         path = e.path
         kind = e.kind
@@ -260,7 +258,7 @@ def test_deserialize_path_reaches_through_two_levels() raises:
     # a leaf-only implementation could also produce.
     var path = String("unset")
     try:
-        _ = deserialize[Nested](
+        _ = from_json[Nested](
             '{"tag":"t","middle":{"label":"a","inner":{"x":1}}}'
         )
     except e:
@@ -269,15 +267,15 @@ def test_deserialize_path_reaches_through_two_levels() raises:
 
 
 def test_try_deserialize_returns_none_on_missing_field() raises:
-    assert_false(Bool(try_deserialize[Point]('{"x":1}')))
+    assert_false(Bool(try_from_json[Point]('{"x":1}')))
 
 
 def test_try_deserialize_returns_none_on_invalid_utf8() raises:
-    assert_false(Bool(try_deserialize[Point](_invalid_utf8_string())))
+    assert_false(Bool(try_from_json[Point](_invalid_utf8_string())))
 
 
 def test_try_deserialize_returns_value_on_valid_input() raises:
-    var result = try_deserialize[Point]('{"x":1,"y":2}')
+    var result = try_from_json[Point]('{"x":1,"y":2}')
     assert_true(Bool(result))
     assert_equal(result.value().x, 1)
     assert_equal(result.value().y, 2)
@@ -290,12 +288,12 @@ def test_try_deserialize_returns_value_on_valid_input() raises:
 
 def test_serialize_round_trips() raises:
     var p = Point(1, 2)
-    assert_equal(serialize(p), '{"x":1,"y":2}')
+    assert_equal(to_json(p), '{"x":1,"y":2}')
 
 
 def test_to_string_round_trips() raises:
-    var v = parse('{"a":1}')
-    assert_equal(to_string(v), '{"a":1}')
+    var v = from_json[Value]('{"a":1}')
+    assert_equal(to_json(v), '{"a":1}')
 
 
 # ===========================================================================
@@ -332,14 +330,14 @@ def _invalid_utf8_doc() -> String:
 def test_deserialize_decodes_unicode_escapes_by_default() raises:
     # The control for the next test: without an options channel the two
     # would be indistinguishable.
-    var v = deserialize[Value]('{"a": "\\u0041"}')
+    var v = from_json[Value]('{"a": "\\u0041"}')
     assert_equal(v["a"].string(), "A")
     assert_equal(v["a"].string().byte_length(), 1)
 
 
 def test_deserialize_ignore_unicode_option_reaches_the_parser() raises:
     comptime opts = ParseOptions(ignore_unicode=True)
-    var v = deserialize[Value, opts]('{"a": "\\u0041"}')
+    var v = from_json[Value, opts]('{"a": "\\u0041"}')
     # Undecoded: the six raw bytes of the escape, not the one byte "A".
     assert_equal(v["a"].string(), "\\u0041")
     assert_equal(v["a"].string().byte_length(), 6)
@@ -347,10 +345,10 @@ def test_deserialize_ignore_unicode_option_reaches_the_parser() raises:
 
 def test_deserialize_strict_mode_option_reaches_the_parser() raises:
     with assert_raises(contains="trailing comma"):
-        _ = deserialize[Value]("[1,2,]")
+        _ = from_json[Value]("[1,2,]")
 
     comptime lenient = ParseOptions(strict_mode=StrictOptions.LENIENT)
-    var v = deserialize[Value, lenient]("[1,2,]")
+    var v = from_json[Value, lenient]("[1,2,]")
     assert_equal(len(v.array()), 2)
     assert_equal(v[0].int(), 1)
     assert_equal(v[1].int(), 2)
@@ -359,20 +357,20 @@ def test_deserialize_strict_mode_option_reaches_the_parser() raises:
 def test_deserialize_validate_utf8_option_can_be_turned_off() raises:
     var bad = _invalid_utf8_doc()
     with assert_raises(contains="Invalid UTF-8 in input"):
-        _ = deserialize[Point](bad)
+        _ = from_json[Point](bad)
 
     comptime unchecked = ParseOptions(validate_utf8=False)
-    var p = deserialize[Point, unchecked](bad)
+    var p = from_json[Point, unchecked](bad)
     assert_equal(p.x, 1)
     assert_equal(p.y, 2)
 
 
 def test_try_deserialize_threads_options_too() raises:
     var bad = _invalid_utf8_doc()
-    assert_false(Bool(try_deserialize[Point](bad)))
+    assert_false(Bool(try_from_json[Point](bad)))
 
     comptime unchecked = ParseOptions(validate_utf8=False)
-    var p = try_deserialize[Point, unchecked](bad)
+    var p = try_from_json[Point, unchecked](bad)
     assert_true(Bool(p))
     assert_equal(p.value().x, 1)
 
@@ -381,8 +379,8 @@ def test_options_default_matches_the_no_options_spelling() raises:
     # Naming the default explicitly must not change anything: guards
     # against the default drifting away from `parse`'s.
     comptime defaults = ParseOptions()
-    var a = deserialize[Point]('{"x":1,"y":2}')
-    var b = deserialize[Point, defaults]('{"x":1,"y":2}')
+    var a = from_json[Point]('{"x":1,"y":2}')
+    var b = from_json[Point, defaults]('{"x":1,"y":2}')
     assert_equal(a.x, b.x)
     assert_equal(a.y, b.y)
 
@@ -396,7 +394,7 @@ def test_parse_accepts_invalid_utf8_when_validation_is_off() raises:
     # Proves the rejection above comes from the gate and not from the
     # parser stumbling over the bytes on its own.
     comptime unchecked = ParseOptions(validate_utf8=False)
-    var v = parse[unchecked](_invalid_utf8_doc())
+    var v = from_json[Value, unchecked](_invalid_utf8_doc())
     assert_equal(v["x"].int(), 1)
 
 
@@ -407,20 +405,20 @@ def test_the_private_format_layer_does_not_validate_utf8() raises:
     # from `emberjson` -- two public spellings of "deserialize" with
     # different safety properties is a trap.
     var bad = _invalid_utf8_doc()
-    var p = from_json[Point](bad)
+    var p = _serde_from_json[Point](bad)
     assert_equal(p.x, 1)
     assert_equal(p.y, 2)
 
     with assert_raises(contains="Invalid UTF-8 in input"):
-        _ = deserialize[Point](bad)
+        _ = from_json[Point](bad)
 
 
 def test_valid_multibyte_input_passes_every_public_entry_point() raises:
     var good = String('{"label": "héllo \U0001f525", "inner": {"x":1,"y":2}}')
-    var w = deserialize[Wrapper](good)
+    var w = from_json[Wrapper](good)
     assert_equal(w.label, "héllo \U0001f525")
     assert_equal(w.inner.x, 1)
-    assert_equal(parse(good)["label"].string(), "héllo \U0001f525")
+    assert_equal(from_json[Value](good)["label"].string(), "héllo \U0001f525")
 
 
 # ===============================================
@@ -429,23 +427,23 @@ def test_valid_multibyte_input_passes_every_public_entry_point() raises:
 
 
 def test_serialize_pretty_through_the_facade() raises:
-    var s = serialize[pretty=True](Point(1, 2))
+    var s = to_json_pretty(Point(1, 2))
     assert_equal(s, '{\n    "x": 1,\n    "y": 2\n}')
 
 
 def test_to_string_pretty_through_the_facade() raises:
-    var v = parse('{"a":[1,2]}')
+    var v = from_json[Value]('{"a":[1,2]}')
     assert_equal(
-        to_string[pretty=True](v),
+        to_json_pretty(v),
         '{\n    "a": [\n        1,\n        2\n    ]\n}',
     )
 
 
 def test_serialize_empty_containers_through_the_facade() raises:
-    var v = parse('{"o":{},"a":[]}')
-    assert_equal(to_string(v), '{"o":{},"a":[]}')
+    var v = from_json[Value]('{"o":{},"a":[]}')
+    assert_equal(to_json(v), '{"o":{},"a":[]}')
     assert_equal(
-        to_string[pretty=True](v),
+        to_json_pretty(v),
         '{\n    "o": {\n    },\n    "a": [\n    ]\n}',
     )
 
@@ -455,14 +453,12 @@ def test_serialize_bytes_honors_pretty() raises:
     # used to hand-write its brackets and so was the one container that
     # ignored `pretty`.
     var data: List[Byte] = [1, 2, 3]
-    assert_equal(serialize(Span(data)), "[1,2,3]")
-    assert_equal(
-        serialize[pretty=True](Span(data)), "[\n    1,\n    2,\n    3\n]"
-    )
+    assert_equal(to_json(Span(data)), "[1,2,3]")
+    assert_equal(to_json_pretty(Span(data)), "[\n    1,\n    2,\n    3\n]")
 
     var empty: List[Byte] = []
-    assert_equal(serialize(Span(empty)), "[]")
-    assert_equal(serialize[pretty=True](Span(empty)), "[\n]")
+    assert_equal(to_json(Span(empty)), "[]")
+    assert_equal(to_json_pretty(Span(empty)), "[\n]")
 
 
 def main() raises:

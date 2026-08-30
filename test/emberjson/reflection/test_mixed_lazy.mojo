@@ -1,7 +1,7 @@
 from emberjson import (
-    deserialize,
-    try_deserialize,
-    serialize,
+    from_json,
+    try_from_json,
+    to_json,
     LazyValue,
     LazyString,
     LazyInt,
@@ -34,7 +34,7 @@ comptime DOC = (
 
 def test_mixed_lazy_fields() raises:
     var s = String(DOC)
-    var m = deserialize[Mixed[origin_of(s)]](s)
+    var m = from_json[Mixed[origin_of(s)]](s)
 
     # Eager fields are materialized during deserialize.
     assert_equal(m.id, 7)
@@ -46,7 +46,7 @@ def test_mixed_lazy_fields() raises:
     assert_equal(m.note.get(), "hello")
 
     # Reflection serialization re-emits the captured bytes verbatim.
-    var out = serialize(m)
+    var out = to_json(m)
     assert_true("deep" in out)
     assert_true('"id":7' in out)
 
@@ -58,12 +58,12 @@ def test_lazy_subtree_validated_at_capture() raises:
     var bad = String(
         '{"id": 1, "flag": false, "heavy": {"a": nope}, "note": "x"}'
     )
-    assert_false(Bool(try_deserialize[Mixed[origin_of(bad)]](bad)))
+    assert_false(Bool(try_from_json[Mixed[origin_of(bad)]](bad)))
 
 
 def test_field_order_independent() raises:
     var s = String('{"note": "n", "heavy": [1], "flag": false, "id": -3}')
-    var m = deserialize[Mixed[origin_of(s)]](s)
+    var m = from_json[Mixed[origin_of(s)]](s)
     assert_equal(m.id, -3)
     assert_equal(m.note.get(), "n")
     assert_equal(m.heavy.get()[0].int(), 1)
@@ -73,7 +73,7 @@ def test_escaped_field_keys_still_match() raises:
     # Keys spelled with JSON escapes match their decoded field names
     # (exercises the span-matcher's decode fallback).
     var s = String(r'{"\u0069d": 5, "flag": true, "heavy": 1, "note": "x"}')
-    var m = deserialize[Mixed[origin_of(s)]](s)
+    var m = from_json[Mixed[origin_of(s)]](s)
     assert_equal(m.id, 5)
 
 
