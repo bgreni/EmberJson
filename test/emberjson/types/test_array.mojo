@@ -1,7 +1,7 @@
 from emberjson.array import Array
 from emberjson import Object
 from emberjson.value import Null, Value
-from emberjson import parse
+from emberjson import from_json
 from std.testing import (
     assert_equal,
     assert_true,
@@ -117,7 +117,7 @@ def test_list_literal() raises:
 
 def test_parse_simple_array() raises:
     var s = "[123, 345]"
-    var json = parse(s)
+    var json = from_json[Value](s)
     assert_true(json.is_array())
     assert_equal(json.array()[0].int(), 123)
     assert_equal(json.array()[1].int(), 345)
@@ -127,7 +127,7 @@ def test_parse_simple_array() raises:
 
     assert_equal(len(json), 2)
 
-    json = parse("[1, 2, 3]")
+    json = from_json[Value]("[1, 2, 3]")
     assert_true(json.is_array())
     assert_equal(json.array()[0], 1)
     assert_equal(json.array()[1], 2)
@@ -135,14 +135,14 @@ def test_parse_simple_array() raises:
 
 
 def test_setter_array_generic() raises:
-    var arr = parse('[123, "foo"]')
+    var arr = from_json[Value]('[123, "foo"]')
     arr.array()[0] = Null()
     assert_true(arr.array()[0].is_null())
     assert_equal(arr.array()[1], "foo")
 
 
 def test_stringify_array_generic() raises:
-    var arr = parse('[123,"foo",false,null]')
+    var arr = from_json[Value]('[123,"foo",false,null]')
     assert_equal(String(arr), '[123,"foo",false,null]')
 
 

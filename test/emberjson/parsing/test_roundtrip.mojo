@@ -1,4 +1,4 @@
-from emberjson import parse
+from emberjson import from_json, Value
 from std.testing import assert_equal, TestSuite
 from std.sys import is_defined
 
@@ -13,7 +13,7 @@ def round_trip_test(filename: String) raises:
         var d = String("./bench_data/data/roundtrip/")
         with open(String(d, filename, ".json"), "r") as f:
             var src = f.read()
-            var json = parse(src)
+            var json = from_json[Value](src)
             assert_equal(String(json), src)
 
 

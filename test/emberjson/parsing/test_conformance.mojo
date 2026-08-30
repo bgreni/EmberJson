@@ -1,4 +1,4 @@
-from emberjson import parse
+from emberjson import from_json, Value
 from std.testing import assert_raises, TestSuite
 from std.sys import is_defined
 
@@ -15,14 +15,14 @@ def expect_fail(datafile: String) raises:
     comptime if files_enabled():
         with open(String(dir, datafile, ".json"), "r") as f:
             with assert_raises():
-                var v = parse(f.read())
+                var v = from_json[Value](f.read())
                 print(v)
 
 
 def expect_pass(datafile: String) raises:
     comptime if files_enabled():
         with open(String(dir, datafile, ".json"), "r") as f:
-            _ = parse(f.read())
+            _ = from_json[Value](f.read())
 
 
 def test_fail02() raises:
