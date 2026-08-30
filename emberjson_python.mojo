@@ -1,4 +1,4 @@
-from emberjson import Value, minify as minify_mojo, parse as parse_mojo
+from emberjson import Value, minify as minify_mojo, from_json
 from std.python import PythonObject, Python
 from std.python.bindings import PythonModuleBuilder
 import std.math as math
@@ -76,7 +76,7 @@ def PyInit_emberjson_python() -> PythonObject:
 
 
 def parse(obj: PythonObject) raises -> PythonObject:
-    return PythonObject(alloc=parse_mojo(String(obj)))
+    return PythonObject(alloc=from_json[Value](String(obj)))
 
 
 def minify(obj: PythonObject) raises -> PythonObject:

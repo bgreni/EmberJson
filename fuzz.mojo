@@ -1,7 +1,6 @@
 from emberjson import (
-    parse,
-    parse_document,
-    to_string,
+    from_json,
+    to_json,
     Array,
     Object,
     Value,
@@ -125,7 +124,7 @@ def check_engines_agree(s: StringSlice) raises:
     var out_walk = String()
     try:
         var d = _tape_doc[False](s)
-        out_walk = to_string(d)
+        out_walk = to_json(d)
         ok_walk = True
     except:
         ok_walk = False
@@ -134,7 +133,7 @@ def check_engines_agree(s: StringSlice) raises:
     var out_idx = String()
     try:
         var d = _tape_doc[True](s)
-        out_idx = to_string(d)
+        out_idx = to_json(d)
         ok_idx = True
     except:
         ok_idx = False
@@ -190,7 +189,7 @@ def test_parse(var s: String) raises:
         var end = rng.rand_int(min=start, max=s.byte_length())
         var corrupted = s[byte=start:end]
         try:
-            j = parse(corrupted)
+            j = from_json[Value](corrupted)
         except:
             # Main thing is we don't want this to crash.
             # But don't enforce failure on the off chance this slicing happens to
@@ -203,7 +202,7 @@ def test_parse(var s: String) raises:
         var mutated = _mutate(s, rng)
         check_engines_agree(StringSlice(unsafe_from_utf8=Span(mutated)))
     else:
-        j = parse(s)
+        j = from_json[Value](s)
         assert_equal(String(j), s)
         check_engines_agree(s)
     keep(j)

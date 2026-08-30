@@ -12,7 +12,7 @@ Expected runtimes (optimised build):
 """
 
 from emberjson.teju import write_float
-from emberjson import Value, deserialize
+from emberjson import Value, from_json
 from std.utils.numerics import isinf, isnan
 from std.memory.unsafe import bitcast
 from std.testing import assert_equal
@@ -31,7 +31,7 @@ def _check_f16(bits: UInt16) raises:
         return
     var sw = String()
     write_float[DType.float16](f, sw)
-    var parsed = deserialize[Float16](sw)
+    var parsed = from_json[Float16](sw)
     if bitcast[DType.uint16](parsed) != bits:
         raise Error(
             "Float16 round-trip failed for bits="
@@ -52,7 +52,7 @@ def _check_f32(bits: UInt32) raises:
         return
     var sw = String()
     write_float[DType.float32](f, sw)
-    var parsed = deserialize[Float32](sw)
+    var parsed = from_json[Float32](sw)
     if bitcast[DType.uint32](parsed) != bits:
         raise Error(
             "Float32 round-trip failed for bits="
@@ -73,7 +73,7 @@ def _check_f64(bits: UInt64) raises:
         return
     var sw = String()
     write_float[DType.float64](f, sw)
-    var parsed = deserialize[Float64](sw)
+    var parsed = from_json[Float64](sw)
     if bitcast[DType.uint64](parsed) != bits:
         raise Error(
             "Float64 round-trip failed for bits="

@@ -1,16 +1,14 @@
 from emberjson import (
-    parse,
-    parse_document,
+    from_json,
     parse_pointer,
     is_valid_utf8,
-    to_string,
-    write_pretty,
+    to_json,
+    to_json_pretty,
     Value,
+    Document,
     Parser,
     minify,
     ParseOptions,
-    deserialize,
-    serialize,
     read_lines,
     StrictOptions,
     Lazy,
@@ -26,7 +24,7 @@ from std.benchmark import (
 )
 from emberjson._index import structural_index
 from emberjson.utils import PaddedBuffer
-from emberjson._serde import from_json
+from emberjson._serde import from_json as _from_json
 from std.python import Python, PythonObject
 from std.sys import argv
 from std.pathlib import Path
@@ -342,7 +340,7 @@ def run[
         BenchId(name),
         data,
         [
-            get_gbs_measure(serialize(data)),
+            get_gbs_measure(to_json(data)),
         ],
     )
 
@@ -378,7 +376,7 @@ def make_corpus(v: Value) raises -> List[String]:
     # Split a JSON array into one standalone document per element.
     var docs = List[String]()
     for item in v.array():
-        docs.append(to_string(item))
+        docs.append(to_json(item))
     return docs^
 
 
@@ -461,8 +459,8 @@ def run_benchchecks(mut m: Bench) raises:
     # overhead (buffer setup, allocations) dominates.
     # Statuses: ~100 docs of ~4.7KB (rich API responses).
     # Users: ~1000 docs of ~310B (tiny microservice responses).
-    var statuses = make_corpus(parse(twitter)["statuses"])
-    var users = make_corpus(parse(data))
+    var statuses = make_corpus(from_json[Value](twitter)["statuses"])
+    var users = make_corpus(from_json[Value](data))
     run_batch["ParseStatusBatch"](m, benchmark_batch_parse, statuses)
     run_batch["ParseStatusBatchDoc"](
         m, benchmark_batch_document_parse, statuses
@@ -473,23 +471,35 @@ def run_benchchecks(mut m: Bench) raises:
         m, benchmark_batch_deserialize[User], users
     )
 
-    run["StringifyCanada"](m, benchmark_value_stringify, parse(canada))
-    run["StringifyCanadaWithReflection"](
-        m, benchmark_reflection_serialize[Canada], deserialize[Canada](canada)
+    run["StringifyCanada"](
+        m, benchmark_value_stringify, from_json[Value](canada)
     )
-    run["StringifyTwitter"](m, benchmark_value_stringify, parse(twitter))
+    run["StringifyCanadaWithReflection"](
+        m, benchmark_reflection_serialize[Canada], from_json[Canada](canada)
+    )
+    run["StringifyTwitter"](
+        m, benchmark_value_stringify, from_json[Value](twitter)
+    )
 
     run["StringifyCitmCatalogWithReflection"](
         m,
         benchmark_reflection_serialize[CatalogData],
-        deserialize[CatalogData](catalog),
+        from_json[CatalogData](catalog),
     )
-    run["StringifyCitmCatalog"](m, benchmark_value_stringify, parse(catalog))
+    run["StringifyCitmCatalog"](
+        m, benchmark_value_stringify, from_json[Value](catalog)
+    )
 
     run["MinifyCitmCatalog"](m, benchmark_minify, catalog)
-    run["WritePrettyCitmCatalog"](m, benchmark_pretty_print, parse(catalog))
-    run["WritePrettyTwitter"](m, benchmark_pretty_print, parse(twitter))
-    run["WritePrettyCanada"](m, benchmark_pretty_print, parse(canada))
+    run["WritePrettyCitmCatalog"](
+        m, benchmark_pretty_print, from_json[Value](catalog)
+    )
+    run["WritePrettyTwitter"](
+        m, benchmark_pretty_print, from_json[Value](twitter)
+    )
+    run["WritePrettyCanada"](
+        m, benchmark_pretty_print, from_json[Value](canada)
+    )
 
     run_benchmarks(m)
 
@@ -529,7 +539,7 @@ def benchmark_minify(mut b: Bencher, s: String) raises:
 def benchmark_reflection_serialize[T: Movable](mut b: Bencher, data: T) raises:
     @always_inline
     def do() raises {imm data}:
-        var a = serialize(data)
+        var a = to_json(data)
         keep(a)
 
     b.iter(do)
@@ -539,7 +549,7 @@ def benchmark_reflection_serialize[T: Movable](mut b: Bencher, data: T) raises:
 def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     @always_inline
     def do() raises {imm s}:
-        var a = write_pretty(s)
+        var a = to_json_pretty(s)
         keep(a)
 
     b.iter(do)
@@ -585,7 +595,7 @@ def benchmark_stage1(mut b: Bencher, s: String) raises:
 def benchmark_document_parse(mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
-        var d = parse_document(s)
+        var d = from_json[Document](s)
         keep(d)
 
     b.iter(do)
@@ -596,7 +606,7 @@ def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
     def do() raises {imm docs}:
         for doc in docs:
-            var v = parse(doc)
+            var v = from_json[Value](doc)
             keep(v)
 
     b.iter(do)
@@ -607,7 +617,7 @@ def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
     def do() raises {imm docs}:
         for doc in docs:
-            var d = parse_document(doc)
+            var d = from_json[Document](doc)
             keep(d)
 
     b.iter(do)
@@ -620,7 +630,7 @@ def benchmark_batch_deserialize[
     @always_inline
     def do() raises {imm docs}:
         for doc in docs:
-            var a = from_json[T](doc)
+            var a = _from_json[T](doc)
             keep(a)
 
     b.iter(do)
@@ -630,10 +640,11 @@ def benchmark_batch_deserialize[
 def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
-        var a = parse[
+        var a = from_json[
+            Value,
             ParseOptions(
                 strict_mode=StrictOptions.STRICT if strict else StrictOptions.LENIENT
-            )
+            ),
         ](s)
         keep(a)
 
@@ -644,7 +655,7 @@ def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
 def benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
     def do() raises {imm v}:
-        var a = to_string(v)
+        var a = to_json(v)
         keep(a)
 
     b.iter(do)
@@ -819,7 +830,7 @@ def benchmark_deserialize_with_reflection[
 ](mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
-        var a = from_json[T](s)
+        var a = _from_json[T](s)
         keep(a)
 
     b.iter(do)
