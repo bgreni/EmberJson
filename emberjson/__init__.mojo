@@ -442,3 +442,80 @@ def write_pretty[
         `SerializationError` if `value` cannot be serialized.
     """
     output = _to_json[pretty=True, indent=indent](value)
+
+
+# ===============================================
+# `to_json` / `to_json_pretty`
+# ===============================================
+#
+# The unified serialization entry points. `Document` writes straight off
+# its tape; everything else (`Value`, `Array`, `Object`, and reflected
+# structs) rides emberserde's `Serializable` framework via
+# `emberjson._serde.to_json`.
+
+
+def to_json[
+    T: AnyType, //, pretty: Bool = False, indent: String = DefaultIndent
+](value: T, out output: String) raises SerializationError:
+    """Serializes `value` to JSON text.
+
+    The single serialization entry point. `Document` is written straight
+    off its tape; everything else rides emberserde's reflection
+    framework, which already covers `Value`, `Array` and `Object` through
+    their own `Serializable` implementations.
+
+    Parameters:
+        T: The type to serialize.
+        pretty: Pretty-prints the output if True, else uses a condensed
+            representation.
+        indent: The string one nesting level costs when `pretty`.
+
+    Args:
+        value: The value to serialize.
+
+    Returns:
+        The JSON text representation of `value`.
+
+    Raises:
+        `SerializationError` if `value` cannot be serialized.
+    """
+    comptime if T == Document:
+        # `Document` writes straight off the tape and has only a
+        # condensed writer -- there is no indented tape walk to call.
+        # Deliberately a compile-time failure rather than a silent
+        # fallback to condensed output. Parse into a `Value` if you need
+        # indented output from tape input.
+        comptime assert not pretty, (
+            "Document has no pretty-print path; parse into a Value if you"
+            " need indented output"
+        )
+        output = rebind[Document](value).to_string()
+    else:
+        output = _to_json[pretty=pretty, indent=indent](value)
+
+
+def to_json_pretty[
+    T: AnyType, //, indent: String = DefaultIndent
+](value: T, out output: String) raises SerializationError:
+    """Serializes `value` to indented JSON text.
+
+    A wrapper rather than a parameter-bound alias on purpose: binding a
+    parameter on an alias leaves it a generator type, so
+    `to_json_pretty(v)` would not call and every use would need
+    `to_json_pretty[](v)`.
+
+    Parameters:
+        T: The type to serialize.
+        indent: The string one nesting level costs. A comptime parameter,
+            so `to_json_pretty[indent="\\t"](v)` picks tabs.
+
+    Args:
+        value: The value to serialize.
+
+    Returns:
+        The indented JSON text representation of `value`.
+
+    Raises:
+        `SerializationError` if `value` cannot be serialized.
+    """
+    output = to_json[pretty=True, indent=indent](value)

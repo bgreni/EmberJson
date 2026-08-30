@@ -12,10 +12,11 @@ from emberjson import (
     Value,
     from_json,
     try_from_json,
+    to_json,
+    to_json_pretty,
     PAD_INPUT_THRESHOLD,
 )
 from emberjson.lazy import LazyString
-from emberjson._serde import to_json
 
 
 @fieldwise_init
@@ -180,6 +181,34 @@ def test_from_json_does_not_relocate_a_literal_backed_string() raises:
     assert_true(addr >= before)
     assert_true(addr < before + wire.byte_length())
     assert_equal(lz.get(), "SENTINEL_LITERAL_BACKED_STRING_VALUE")
+
+
+def test_to_json_value() raises:
+    assert_equal(to_json(from_json[Value](SAMPLE)), SAMPLE)
+
+
+def test_to_json_document() raises:
+    assert_equal(to_json(from_json[Document](SAMPLE)), SAMPLE)
+
+
+def test_to_json_reflected_struct() raises:
+    assert_equal(to_json(Point(3, 4)), '{"x":3,"y":4}')
+
+
+def test_to_json_pretty_indents() raises:
+    var out = to_json_pretty(from_json[Value]('{"key":123}'))
+    assert_equal(out, '{\n    "key": 123\n}')
+
+
+def test_to_json_pretty_custom_indent() raises:
+    var out = to_json_pretty[indent="\t"](from_json[Value]('{"key":123}'))
+    assert_true("\t" in out)
+    assert_equal(out, '{\n\t"key": 123\n}')
+
+
+def test_to_json_pretty_matches_pretty_parameter() raises:
+    var v = from_json[Value](SAMPLE)
+    assert_equal(to_json_pretty(v), to_json[pretty=True](v))
 
 
 def main() raises:
