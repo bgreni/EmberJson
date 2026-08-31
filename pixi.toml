@@ -5,7 +5,7 @@ preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
-version = "0.3.4"
+version = "0.4.0"
 license = "Apache-2.0"
 license-file = "LICENSE"
 homepage = "https://github.com/bgreni/EmberJson"
@@ -33,13 +33,13 @@ float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 mojo = ">=1.1.0.dev2026082905,<2"
 # Local source dependency while the emberserde port is in flight; swap for the
 # git spec once the API settles.
-emberserde = { path = "../emberserde" }
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
 
 
 
 [package]
 name = "emberjson"
-version = "0.3.4"
+version = "0.4.0"
 
 [package.build]
 backend = { name = "pixi-build-mojo", version = ">=0.2.6,<0.3" }
@@ -54,8 +54,8 @@ mojo-compiler = ">=1.1.0.dev2026082905,<2"
 # tasks. Keep all three in sync (swap them for the git spec together).
 [package.build-dependencies]
 mojo-compiler = ">=1.1.0.dev2026082905,<2"
-emberserde = { path = "../emberserde" }
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
 
 [package.run-dependencies]
 mojo-compiler = ">=1.1.0.dev2026082905,<2"
-emberserde = { path = "../emberserde" }
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
