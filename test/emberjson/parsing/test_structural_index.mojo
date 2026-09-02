@@ -287,5 +287,124 @@ def test_classify_matches_portable_on_random_blocks() raises:
         assert_equal(block.whitespace, want_ws, "ws mask")
 
 
+# --- Comptime-interpreter coverage for the stage-1 SIMD kernels -------------
+#
+# `comptime x = try_parse(...)` is a supported emberjson feature, so every
+# SIMD fast path in `simd_ops`/`classifier` is wrapped in
+# `if not __is_run_in_comptime_interpreter` and must fall through to a
+# portable branch the interpreter can evaluate. Nothing else in the suite
+# exercises that: the `Value` parser does not go through `structural_index`.
+#
+# These helpers are called twice -- once bound to a `comptime` local, which
+# *forces* interpretation (if the portable branch stopped being
+# interpretable the file would fail to compile, not silently pass), and once
+# at runtime, which on a shuffle target takes the SIMD branch instead. The
+# two must agree bit-for-bit, so the assertions cross-validate the portable
+# implementation against the vectorized one.
+
+
+def _stage1_probe_block() -> Array[Byte, 64]:
+    """One 64-byte block hitting every classifier bucket, both 32-byte
+    halves, and both ends of the chunk."""
+    var b = Array[Byte, 64](fill=Byte(0x41))  # 'A': unclassified
+    b[0] = Byte(0x7B)  # {
+    b[5] = Byte(0x5B)  # [
+    b[11] = Byte(0x3A)  # :
+    b[17] = Byte(0x2C)  # ,
+    b[29] = Byte(0x5D)  # ]
+    b[31] = Byte(0x7D)  # }
+    b[32] = Byte(0x20)  # space
+    b[33] = Byte(0x09)  # tab
+    b[47] = Byte(0x0A)  # lf
+    b[48] = Byte(0x0D)  # cr
+    b[62] = Byte(0x00)  # NUL: <= 0x20 but not whitespace
+    b[63] = Byte(0x22)  # "
+    return b^
+
+
+def _stage1_op() -> UInt64:
+    from emberjson._index.classifier import classify
+    from emberjson._index.simd_ops import SimdInput
+
+    var b = _stage1_probe_block()
+    return classify(SimdInput.load(b.unsafe_ptr())).op
+
+
+def _stage1_ws() -> UInt64:
+    from emberjson._index.classifier import classify
+    from emberjson._index.simd_ops import SimdInput
+
+    var b = _stage1_probe_block()
+    return classify(SimdInput.load(b.unsafe_ptr())).whitespace
+
+
+def _stage1_eq() -> UInt64:
+    from emberjson._index.simd_ops import SimdInput
+
+    var b = _stage1_probe_block()
+    return SimdInput.load(b.unsafe_ptr()).eq(Byte(0x41))
+
+
+def _stage1_lteq() -> UInt64:
+    from emberjson._index.simd_ops import SimdInput
+
+    var b = _stage1_probe_block()
+    return SimdInput.load(b.unsafe_ptr()).lteq(Byte(0x20))
+
+
+def test_stage1_kernels_evaluate_in_comptime_interpreter() raises:
+    """`SimdInput.load`/`eq`/`lteq` and `classify` must interpret at
+    compile time and agree bit-for-bit with the runtime SIMD path.
+
+    Binding to a `comptime` local is what forces interpretation: these
+    four values are folded by the comptime interpreter, which only ever
+    evaluates the portable branch of each `__is_run_in_comptime_interpreter`
+    guard. Comparing them against the runtime results -- which on a
+    shuffle target take the vectorized branch -- checks both halves at
+    once, and against the scalar expectations below, absolutely.
+    """
+    comptime CT_OP = _stage1_op()
+    comptime CT_WS = _stage1_ws()
+    comptime CT_EQ = _stage1_eq()
+    comptime CT_LTEQ = _stage1_lteq()
+
+    # Scalar ground truth, computed independently of both SIMD paths.
+    var block = _stage1_probe_block()
+    var want_op: UInt64 = 0
+    var want_ws: UInt64 = 0
+    var want_eq: UInt64 = 0
+    var want_lteq: UInt64 = 0
+    for lane in range(64):
+        var v = Int(block[lane])
+        var bit = UInt64(1) << UInt64(lane)
+        if (
+            v == 0x7B
+            or v == 0x7D
+            or v == 0x5B
+            or v == 0x5D
+            or v == 0x3A
+            or v == 0x2C
+        ):
+            want_op |= bit
+        if v == 0x20 or v == 0x09 or v == 0x0A or v == 0x0D:
+            want_ws |= bit
+        if v == 0x41:
+            want_eq |= bit
+        if v <= 0x20:
+            want_lteq |= bit
+
+    # The comptime (portable) results must be correct...
+    assert_equal(CT_OP, want_op, "comptime classify op")
+    assert_equal(CT_WS, want_ws, "comptime classify whitespace")
+    assert_equal(CT_EQ, want_eq, "comptime SimdInput.eq")
+    assert_equal(CT_LTEQ, want_lteq, "comptime SimdInput.lteq")
+
+    # ...and identical to the runtime (SIMD) results.
+    assert_equal(CT_OP, _stage1_op(), "comptime vs runtime classify op")
+    assert_equal(CT_WS, _stage1_ws(), "comptime vs runtime classify ws")
+    assert_equal(CT_EQ, _stage1_eq(), "comptime vs runtime SimdInput.eq")
+    assert_equal(CT_LTEQ, _stage1_lteq(), "comptime vs runtime SimdInput.lteq")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

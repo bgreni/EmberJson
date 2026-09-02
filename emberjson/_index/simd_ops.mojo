@@ -35,7 +35,7 @@ from std.memory import pack_bits
 from std.memory.unsafe import bitcast
 from std.sys.info import CompilationTarget
 from std.sys.intrinsics import llvm_intrinsic
-from emberjson.simd import HAS_BYTE_SHUFFLE, KERNEL_WIDTH
+from emberjson.simd import KERNEL_WIDTH
 from .portable import prefix_xor_portable
 
 comptime _NEON = CompilationTarget.has_neon()
