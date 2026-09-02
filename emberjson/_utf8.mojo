@@ -41,6 +41,7 @@ from emberjson.simd import (
 )
 from std.memory import unsafe_memcpy
 from std.collections import Array
+from std.sys.intrinsics import llvm_intrinsic
 
 comptime _C16 = SIMD[DType.uint8, 16]
 
@@ -115,12 +116,23 @@ def _make_max_value[W: Int]() -> SIMD8[W]:
 def _satsub[W: Int](a: SIMD8[W], b: SIMD8[W]) -> SIMD8[W]:
     """Saturating unsigned subtract: `a - b`, clamped at zero.
 
-    The arithmetic spelling rather than `llvm.usub.sat.v16i8`: it selects
-    the same instruction on every target and width (UQSUB on aarch64,
-    PSUBUSB / VPSUBUSB on x86, verified from --emit=asm), it is
-    width-generic, and unlike the intrinsic it interprets at comptime.
+    Do NOT "simplify" this to the arithmetic spelling
+    `a - a.lt(b).select(a, b)`. That form looks equivalent and even
+    *measures* equivalent statically -- both compile to a byte-identical
+    151-instruction kernel with 5 `uqsub` on aarch64 -- but in situ it
+    times at roughly half the throughput (9.5 GB/s against 18.7 GB/s on
+    twitter.json, M3 Pro). Instruction counting is blind to this; only
+    timing catches it. The intrinsic is the shipped form.
+
+    The intrinsic name is built from `W`, so this stays width-generic:
+    UQSUB on aarch64, PSUBUSB / VPSUBUSB on x86, at every width.
+
+    Not comptime-interpretable, and that costs nothing: `_satsub` is
+    reachable only from `_check_chunk` and `_is_valid_utf8_simd`, both of
+    which sit behind `if not __is_run_in_comptime_interpreter`. Compile-
+    time evaluation takes `_is_valid_utf8_scalar` and never reaches here.
     """
-    return a - a.lt(b).select(a, b)
+    return llvm_intrinsic["llvm.usub.sat.v" + String(W) + "i8", SIMD8[W]](a, b)
 
 
 @always_inline("nodebug")

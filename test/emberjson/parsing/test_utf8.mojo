@@ -198,6 +198,47 @@ def _utf8_corpus() -> List[List[Byte]]:
                 buf.append(Byte(ord("a")) if i != off else Byte(b))
             out.append(buf^)
 
+    # Lengths that are exact multiples of 64, so the driver's
+    # "input ended on a chunk boundary" branch (`error |= prev_incomplete`,
+    # the only consumer of `_make_max_value[W]` at the end of input) is
+    # reached at W=16, 32 AND 64 -- the 200-byte cases above always take
+    # the partial-tail path at 32 and 64.
+    var seqs = List[List[Byte]]()
+    seqs.append([Byte(0xC3), Byte(0xA9)])
+    seqs.append([Byte(0xE2), Byte(0x82), Byte(0xAC)])
+    seqs.append([Byte(0xF0), Byte(0x9F), Byte(0x94), Byte(0xA5)])
+
+    for L in [64, 128, 192]:
+        # Pure ASCII: must be accepted.
+        var ascii_buf = List[Byte]()
+        for _ in range(L):
+            ascii_buf.append(Byte(ord("a")))
+        out.append(ascii_buf^)
+
+        for si in range(len(seqs)):
+            ref seq = seqs[si]
+            # A complete multi-byte sequence ending exactly on the
+            # boundary: accepted.
+            var ok = List[Byte]()
+            for _ in range(L - len(seq)):
+                ok.append(Byte(ord("a")))
+            for k in range(len(seq)):
+                ok.append(seq[k])
+            out.append(ok^)
+
+            # The same sequence truncated, padded back to L with leading
+            # ASCII, so the lead dangles at the true end of input with no
+            # continuation after it: must be rejected. This is what
+            # `prev_incomplete` exists to catch on the boundary branch.
+            for cut in range(1, len(seq)):
+                var kept = len(seq) - cut
+                var bad = List[Byte]()
+                for _ in range(L - kept):
+                    bad.append(Byte(ord("a")))
+                for k in range(kept):
+                    bad.append(seq[k])
+                out.append(bad^)
+
     # Every prefix of real multi-byte text, so each truncation of each
     # sequence is covered.
     var samples = List[String]()
