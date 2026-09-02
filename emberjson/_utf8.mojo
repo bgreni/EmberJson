@@ -4,25 +4,41 @@ Two layers, following the pattern of `_index/simd_ops.mojo`:
 
   * A scalar range-check validator that interprets cleanly at compile
     time and doubles as the differential-test reference.
-  * A SIMD path, taken at runtime on every target, implementing the
-    Keiser-Lemire lookup algorithm ("Validating UTF-8 In Less Than One
+  * A SIMD lookup path, taken at runtime only on targets that have a
+    byte-shuffle instruction (`HAS_BYTE_SHUFFLE`), implementing the
+    Keiser-Lemire algorithm ("Validating UTF-8 In Less Than One
     Instruction Per Byte", the simdjson `utf8_validation` kernel): three
     nibble-table lookups on a byte and its predecessor (TBL1 on NEON,
-    PSHUFB on x86, via `simd_ops.lookup16`) classify every illegal
+    PSHUFB/VPSHUFB on x86, via `simd.lookup`) classify every illegal
     sequence class (overlongs, surrogates, out-of-range, wrong
     continuation counts), with a saturating-subtract check pairing
     3/4-byte leads with their required continuations. Guarded by
     `__is_run_in_comptime_interpreter` so comptime evaluation takes the
     scalar path.
+  * A no-shuffle path for every other target (baseline SSE2, generic
+    builds). A shuffle emulated on such a target is not slow, it is a
+    byte-by-byte gather -- ~695 instructions per chunk -- so the lookup
+    kernel is never instantiated there. Instead the ASCII prefix is
+    vector-scanned (compare + movemask, which baseline SSE2 has) and the
+    remainder handed to the scalar validator, so a pure-ASCII document
+    never touches a scalar loop.
+
+The kernel is width-generic: it runs at `KERNEL_WIDTH`, the width at
+which the target actually has a byte shuffle, which is not the same
+quantity as the register width (see `emberjson/simd.mojo`).
 
 The `error` accumulator is only reduced at the end: the whole input is
-processed branch-free except for an all-ASCII fast path per 16-byte
-chunk (where only a dangling-lead check from the previous chunk is
-needed).
+processed branch-free except for an all-ASCII fast path per chunk (where
+only a dangling-lead check from the previous chunk is needed).
 """
 
-from emberjson._index.simd_ops import lookup16
-from emberjson.simd import SIMD8
+from emberjson.simd import (
+    HAS_BYTE_SHUFFLE,
+    KERNEL_WIDTH,
+    lookup,
+    SIMD8,
+    SIMD8_WIDTH,
+)
 from std.memory import unsafe_memcpy
 from std.collections import Array
 
@@ -75,16 +91,24 @@ comptime _BYTE_2_HIGH = _C16(
     TOO_LONG | OVERLONG_2 | TWO_CONTS | SURROGATE | TOO_LARGE,
     TOO_SHORT, TOO_SHORT, TOO_SHORT, TOO_SHORT,
 )
-# A byte is an "incomplete" sequence starter if a required continuation
-# would fall past the end of the chunk: only the last three lanes can
-# dangle (4-byte lead in the last 3, 3-byte lead in the last 2, any lead
-# in the last 1).
-comptime _MAX_VALUE = _C16(
-    255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255,
-    0xF0 - 1, 0xE0 - 1, 0xC0 - 1,
-)
 # fmt: on
+
+
+@always_inline
+def _make_max_value[W: Int]() -> SIMD8[W]:
+    """255 everywhere except the last three lanes, which encode 'a lead
+    byte here has no room for its continuations': a 4-byte lead can
+    dangle in the last 3, a 3-byte lead in the last 2, any lead in the
+    last 1.
+
+    Built by per-lane assignment: `SIMD.insert` lowers to
+    llvm.vector.insert, which the comptime interpreter cannot fold.
+    """
+    var out = SIMD8[W](255)
+    out[W - 3] = 0xF0 - 1
+    out[W - 2] = 0xE0 - 1
+    out[W - 1] = 0xC0 - 1
+    return out
 
 
 @always_inline("nodebug")
@@ -100,32 +124,33 @@ def _satsub[W: Int](a: SIMD8[W], b: SIMD8[W]) -> SIMD8[W]:
 
 
 @always_inline("nodebug")
-def _prev[n: Int](prev_chunk: _C16, cur: _C16) -> _C16:
+def _prev[n: Int, W: Int](prev_chunk: SIMD8[W], cur: SIMD8[W]) -> SIMD8[W]:
     """The chunk shifted back by `n` bytes, pulling from `prev_chunk`
     (NEON EXT / x86 palignr shape)."""
-    return prev_chunk.join(cur).slice[16, offset=16 - n]()
+    return prev_chunk.join(cur).slice[W, offset=W - n]()
 
 
 @always_inline("nodebug")
-def _check_chunk(cur: _C16, prev_chunk: _C16, mut error: _C16):
-    var prev1 = _prev[1](prev_chunk, cur)
+def _check_chunk[
+    W: Int
+](cur: SIMD8[W], prev_chunk: SIMD8[W], mut error: SIMD8[W]):
+    var prev1 = _prev[1, W](prev_chunk, cur)
     var sc = (
-        lookup16(_BYTE_1_HIGH, prev1 >> 4)
-        & lookup16(_BYTE_1_LOW, prev1 & 0xF)
-        & lookup16(_BYTE_2_HIGH, cur >> 4)
+        lookup[W](_BYTE_1_HIGH, prev1 >> 4)
+        & lookup[W](_BYTE_1_LOW, prev1 & SIMD8[W](0xF))
+        & lookup[W](_BYTE_2_HIGH, cur >> 4)
     )
-    var prev2 = _prev[2](prev_chunk, cur)
-    var prev3 = _prev[3](prev_chunk, cur)
+    var prev2 = _prev[2, W](prev_chunk, cur)
+    var prev3 = _prev[3, W](prev_chunk, cur)
     # High bit set exactly for 3-byte (>= 0xE0) / 4-byte (>= 0xF0) leads.
-    var must23 = _satsub[16](prev2, _C16(0xE0 - 0x80)) | _satsub[16](
-        prev3, _C16(0xF0 - 0x80)
+    var must23 = _satsub[W](prev2, SIMD8[W](0xE0 - 0x80)) | _satsub[W](
+        prev3, SIMD8[W](0xF0 - 0x80)
     )
-    var must23_80 = must23 & 0x80
-    error |= must23_80 ^ sc
+    error |= (must23 & SIMD8[W](0x80)) ^ sc
 
 
 @always_inline("nodebug")
-def _all_ascii(cur: _C16) -> Bool:
+def _all_ascii[W: Int](cur: SIMD8[W]) -> Bool:
     """Whether no byte has its high bit set.
 
     `reduce_or` is the one formulation LLVM lowers optimally on both
@@ -133,43 +158,80 @@ def _all_ascii(cur: _C16) -> Bool:
     same CMLT+ADDP sequence on aarch64 that `reduce_max` or a pack_bits
     sign-mask would produce (a naive horizontal max on x86 is a 20-insn
     shuffle tree, so don't switch this back to `reduce_max`)."""
-    return (cur & 0x80).reduce_or() == 0
+    return (cur & SIMD8[W](0x80)).reduce_or() == 0
 
 
-def _is_valid_utf8_simd(ptr: Pointer[UInt8, _], n: Int) -> Bool:
-    var error = _C16(0)
-    var prev_chunk = _C16(0)
-    var prev_incomplete = _C16(0)
+def _is_valid_utf8_simd[W: Int](ptr: Pointer[UInt8, _], n: Int) -> Bool:
+    comptime MAX_VALUE = _make_max_value[W]()
+    var error = SIMD8[W](0)
+    var prev_chunk = SIMD8[W](0)
+    var prev_incomplete = SIMD8[W](0)
 
     var i = 0
-    while i + 16 <= n:
-        var cur = (ptr.unsafe_offset(i)).unsafe_load[width=16]()
-        if _all_ascii(cur):
+    while i + W <= n:
+        var cur = (ptr.unsafe_offset(i)).unsafe_load[width=W]()
+        if _all_ascii[W](cur):
             # All-ASCII chunk: only a dangling multi-byte sequence from
             # the previous chunk can be wrong.
             error |= prev_incomplete
         else:
-            _check_chunk(cur, prev_chunk, error)
-        prev_incomplete = _satsub[16](cur, _MAX_VALUE)
+            _check_chunk[W](cur, prev_chunk, error)
+        prev_incomplete = _satsub[W](cur, MAX_VALUE)
         prev_chunk = cur
-        i += 16
+        i += W
 
     if i < n:
         # Final partial chunk, staged through a zeroed buffer: the NUL
         # padding is ASCII, so any sequence left dangling at the true end
         # of input fails its continuation checks here.
-        var tail = Array[Byte, 16](fill=0)
+        var tail = Array[Byte, W](fill=0)
         unsafe_memcpy(
             dest=tail.unsafe_ptr(), src=ptr.unsafe_offset(i), count=n - i
         )
-        var cur = tail.unsafe_ptr().unsafe_load[width=16]()
-        _check_chunk(cur, prev_chunk, error)
+        var cur = tail.unsafe_ptr().unsafe_load[width=W]()
+        _check_chunk[W](cur, prev_chunk, error)
     else:
         # Input ended exactly on a chunk boundary: a trailing lead byte
         # has no continuation to fail against, so check it directly.
         error |= prev_incomplete
 
     return error.reduce_max() == 0
+
+
+def _first_non_ascii[W: Int](ptr: Pointer[UInt8, _], n: Int) -> Int:
+    """Index of the first byte >= 0x80, or `n` if there is none.
+
+    The vector scan needs no byte shuffle -- `reduce_or` lowers to
+    PMOVMSKB, which baseline SSE2 has -- so this stays fast on targets
+    that have no table lookup.
+    """
+    var i = 0
+    while i + W <= n:
+        var cur = (ptr.unsafe_offset(i)).unsafe_load[width=W]()
+        if not _all_ascii[W](cur):
+            for k in range(i, i + W):
+                if ptr[unsafe_offset=k] >= 0x80:
+                    return k
+        i += W
+    while i < n:
+        if ptr[unsafe_offset=i] >= 0x80:
+            return i
+        i += 1
+    return n
+
+
+def _is_valid_utf8_no_shuffle(ptr: Pointer[UInt8, _], n: Int) -> Bool:
+    """Validator for targets with no byte-shuffle instruction.
+
+    Vector-scans the ASCII prefix and hands the rest to the scalar
+    range-checker. A pure-ASCII document never reaches the scalar path,
+    and the handoff point is always a valid resync point because every
+    byte before it is ASCII.
+    """
+    var k = _first_non_ascii[SIMD8_WIDTH](ptr, n)
+    if k == n:
+        return True
+    return _is_valid_utf8_scalar(ptr.unsafe_offset(k), n - k)
 
 
 def _is_valid_utf8_scalar(ptr: Pointer[UInt8, _], n: Int) -> Bool:
@@ -223,7 +285,10 @@ def is_valid_utf8(s: Span[Byte, _]) -> Bool:
     """Whether `s` is valid UTF-8 (RFC 3629: no overlongs, no surrogates,
     nothing above U+10FFFF, no truncated sequences)."""
     if not __is_run_in_comptime_interpreter:
-        return _is_valid_utf8_simd(s.unsafe_ptr(), len(s))
+        comptime if HAS_BYTE_SHUFFLE:
+            return _is_valid_utf8_simd[KERNEL_WIDTH](s.unsafe_ptr(), len(s))
+        else:
+            return _is_valid_utf8_no_shuffle(s.unsafe_ptr(), len(s))
     return _is_valid_utf8_scalar(s.unsafe_ptr(), len(s))
 
 

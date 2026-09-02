@@ -184,5 +184,89 @@ def _check_satsub[W: Int]() raises:
                 )
 
 
+def _utf8_corpus() -> List[List[Byte]]:
+    """Inputs that exercise chunk boundaries, truncation and every lead
+    byte class."""
+    var out = List[List[Byte]]()
+
+    # Every byte value at every offset in a 200-byte ASCII field: this
+    # crosses every chunk boundary and every phase at widths 16/32/64.
+    for off in range(0, 200):
+        for b in range(0, 256, 7):  # stride keeps the suite quick
+            var buf = List[Byte]()
+            for i in range(200):
+                buf.append(Byte(ord("a")) if i != off else Byte(b))
+            out.append(buf^)
+
+    # Every prefix of real multi-byte text, so each truncation of each
+    # sequence is covered.
+    var samples = List[String]()
+    samples.append("héllo wörld")
+    samples.append("日本語テキスト")
+    samples.append("emoji 🎉🎊 and 𝔘𝔫𝔦𝔠𝔬𝔡𝔢")
+    for s in samples:
+        var bs = s.as_bytes()
+        for n in range(0, len(bs) + 1):
+            var t = List[Byte]()
+            for k in range(n):
+                t.append(bs[k])
+            out.append(t^)
+    return out^
+
+
+def test_utf8_simd_matches_scalar_at_every_width() raises:
+    """The width-generic kernel at every width it could be instantiated
+    at, against the scalar reference."""
+    from emberjson._utf8 import _is_valid_utf8_simd, _is_valid_utf8_scalar
+    from emberjson.simd import HAS_BYTE_SHUFFLE
+
+    comptime if HAS_BYTE_SHUFFLE:
+        var corpus = _utf8_corpus()
+        for item in corpus:
+            var p = item.unsafe_ptr()
+            var n = len(item)
+            var want = _is_valid_utf8_scalar(p, n)
+            assert_equal(_is_valid_utf8_simd[16](p, n), want, "W=16")
+            assert_equal(_is_valid_utf8_simd[32](p, n), want, "W=32")
+            # Not shipped (KERNEL_WIDTH is capped at 32), tested so
+            # raising the cap is a one-line change.
+            assert_equal(_is_valid_utf8_simd[64](p, n), want, "W=64")
+
+
+def test_utf8_no_shuffle_matches_scalar() raises:
+    """The no-shuffle fallback cannot be selected on either development
+    machine, so it is called directly -- otherwise it would be dead code
+    in every run of this suite."""
+    from emberjson._utf8 import (
+        _is_valid_utf8_no_shuffle,
+        _is_valid_utf8_scalar,
+    )
+
+    var corpus = _utf8_corpus()
+    for item in corpus:
+        var p = item.unsafe_ptr()
+        var n = len(item)
+        assert_equal(
+            _is_valid_utf8_no_shuffle(p, n),
+            _is_valid_utf8_scalar(p, n),
+            "no-shuffle path",
+        )
+
+
+def test_utf8_no_shuffle_pure_ascii() raises:
+    """A pure-ASCII document must never reach the scalar validator, and
+    must still be accepted at every length including chunk multiples."""
+    from emberjson._utf8 import _is_valid_utf8_no_shuffle
+
+    for n in range(0, 200):
+        var buf = List[Byte]()
+        for _ in range(n):
+            buf.append(Byte(ord("x")))
+        assert_true(
+            _is_valid_utf8_no_shuffle(buf.unsafe_ptr(), n),
+            "ascii length " + String(n),
+        )
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

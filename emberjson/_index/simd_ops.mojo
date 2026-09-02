@@ -40,7 +40,8 @@ from .portable import prefix_xor_portable
 
 comptime _NEON = CompilationTarget.has_neon()
 # Every AVX2 CPU (Haswell+/Zen+) also has SSSE3 PSHUFB, so this flag
-# gates the shuffle and movemask fast paths.
+# gates the movemask fast path (and, via `simd.HAS_BYTE_SHUFFLE`, the
+# byte-table lookups that now live in `emberjson/simd.mojo`).
 comptime _AVX2 = CompilationTarget.has_avx2()
 
 # The carryless-multiply intrinsics need their own gates: PMULL64 lives
@@ -67,19 +68,6 @@ comptime _CW = KERNEL_WIDTH
 comptime _N_CHUNKS = 64 // _CW
 comptime _Chunk = SIMD[DType.uint8, _CW]
 comptime _BoolC = SIMD[DType.bool, _CW]
-
-
-@always_inline("nodebug")
-def lookup16(table: _Chunk16, idx: _Chunk16) -> _Chunk16:
-    """16-entry byte shuffle-table lookup; every idx lane must be < 16.
-
-    `_dynamic_shuffle` lowers to one TBL1 on NEON and one PSHUFB on x86
-    (verified against the raw intrinsics), and carries its own fallback
-    on targets with neither, so this is safe to call at runtime on any
-    target. Not comptime-interpretable — callers keep their
-    `__is_run_in_comptime_interpreter` guards.
-    """
-    return table._dynamic_shuffle(idx)
 
 
 @always_inline("nodebug")
