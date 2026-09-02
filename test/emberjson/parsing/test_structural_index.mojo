@@ -211,5 +211,81 @@ def test_classifier_exhaustive() raises:
             )
 
 
+def test_classify_desc_all_widths() raises:
+    """The width-dependent half of the classifier -- the two table
+    lookups and their AND -- at every width the kernel could be
+    instantiated at. The mask assembly is covered at the shipped width
+    by test_classifier_exhaustive."""
+    from emberjson._index.classifier import _classify_desc
+    from emberjson.simd import HAS_BYTE_SHUFFLE, SIMD8
+    from emberjson._index.portable import (
+        CLASSIFY_LOW_NIBBLE,
+        CLASSIFY_HIGH_NIBBLE,
+    )
+
+    comptime if HAS_BYTE_SHUFFLE:
+        _check_desc_width[16]()
+        _check_desc_width[32]()
+        _check_desc_width[64]()
+
+
+def _check_desc_width[W: Int]() raises:
+    from emberjson._index.classifier import _classify_desc
+    from emberjson.simd import SIMD8
+    from emberjson._index.portable import (
+        CLASSIFY_LOW_NIBBLE,
+        CLASSIFY_HIGH_NIBBLE,
+    )
+
+    # Every byte value 0..255 in every lane position, swept by rotation.
+    for rot in range(256):
+        var v = SIMD8[W](0)
+        for lane in range(W):
+            v[lane] = Byte((lane + rot) % 256)
+        var got = _classify_desc[W](v)
+        for lane in range(W):
+            var b = Int(v[lane])
+            var want = (
+                CLASSIFY_LOW_NIBBLE[b & 0xF] & CLASSIFY_HIGH_NIBBLE[b >> 4]
+            )
+            assert_equal(
+                got[lane],
+                want,
+                "W=" + String(W) + " byte=" + String(b),
+            )
+
+
+def test_classify_matches_portable_on_random_blocks() raises:
+    """The active classify path and the scalar predicates must agree on
+    random data, not just on the ordered 0..255 sweep."""
+    from emberjson._index.classifier import classify
+    from emberjson._index.simd_ops import SimdInput
+    from std.random import seed, random_ui64
+
+    seed(20260902)
+    var bytes = Array[Byte, 64](fill=Byte(0))
+    for _ in range(2000):
+        for k in range(64):
+            bytes[k] = Byte(random_ui64(0, 255))
+        var block = classify(SimdInput.load(bytes.unsafe_ptr()))
+        var want_op: UInt64 = 0
+        var want_ws: UInt64 = 0
+        for lane in range(64):
+            var b = Int(bytes[lane])
+            if (
+                b == 0x7B
+                or b == 0x7D
+                or b == 0x5B
+                or b == 0x5D
+                or b == 0x3A
+                or b == 0x2C
+            ):
+                want_op |= UInt64(1) << UInt64(lane)
+            if b == 0x20 or b == 0x09 or b == 0x0A or b == 0x0D:
+                want_ws |= UInt64(1) << UInt64(lane)
+        assert_equal(block.op, want_op, "op mask")
+        assert_equal(block.whitespace, want_ws, "ws mask")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

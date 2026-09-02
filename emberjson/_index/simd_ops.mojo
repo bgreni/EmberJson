@@ -15,18 +15,18 @@ Lemire, arXiv:1902.08318). Two layers:
     aarch64 kernel formulations).
   * An x86 fast layer (`has_avx2()` targets, which implies SSSE3) with
     the same guard: PCLMULQDQ replaces the shift-XOR scan (simdjson's
-    westmere/haswell formulation) and the 64-byte chunk ops recombine
-    the four 16-byte registers into two 32-byte vectors so compares and
-    movemasks run at AVX2 width (VPCMPEQB + VPMOVMSKB, simdjson's
-    haswell kernel shape).
+    westmere/haswell formulation).
 
   Each layer is gated on the target feature its instructions actually
   require, which is not always the arch-family flag — see `_PMULL` and
   `_PCLMUL` below.
 
-  * `SimdInput` wraps the 64-byte logical chunk, abstracting the hardware
-    SIMD width, and exposes `load`, `eq`, and `lteq` that produce 64-bit
-    per-byte masks.
+  * `SimdInput` holds the 64-byte logical chunk as `_N_CHUNKS` vectors of
+    `KERNEL_WIDTH` bytes -- four 16-byte registers on NEON, two 32-byte
+    ones on AVX2 -- and exposes `load`, `eq`, and `lteq` that produce
+    64-bit per-byte masks. Compares and movemasks therefore run at the
+    target's kernel width with no hand-written recombine (on x86,
+    VPCMPEQB + VPMOVMSKB, simdjson's haswell kernel shape).
   * `prefix_xor` is the inclusive XOR-scan of a 64-bit mask, used to
     propagate in-string state across a quote mask.
 """
@@ -35,6 +35,7 @@ from std.memory import pack_bits
 from std.memory.unsafe import bitcast
 from std.sys.info import CompilationTarget
 from std.sys.intrinsics import llvm_intrinsic
+from emberjson.simd import HAS_BYTE_SHUFFLE, KERNEL_WIDTH
 from .portable import prefix_xor_portable
 
 comptime _NEON = CompilationTarget.has_neon()
@@ -59,7 +60,13 @@ comptime _PCLMUL = _AVX2 and CompilationTarget._has_feature["pclmul"]()
 
 comptime _Chunk16 = SIMD[DType.uint8, 16]
 comptime _Bool16 = SIMD[DType.bool, 16]
-comptime _Chunk32 = SIMD[DType.uint8, 32]
+
+# The stage-1 kernel width. 16 on NEON, 32 on AVX2; a 64-byte logical
+# chunk is _N_CHUNKS of these regardless.
+comptime _CW = KERNEL_WIDTH
+comptime _N_CHUNKS = 64 // _CW
+comptime _Chunk = SIMD[DType.uint8, _CW]
+comptime _BoolC = SIMD[DType.bool, _CW]
 
 
 @always_inline("nodebug")
@@ -73,14 +80,6 @@ def lookup16(table: _Chunk16, idx: _Chunk16) -> _Chunk16:
     `__is_run_in_comptime_interpreter` guards.
     """
     return table._dynamic_shuffle(idx)
-
-
-@always_inline("nodebug")
-def lookup16_x2(table: _Chunk16, idx: _Chunk32) -> _Chunk32:
-    """`lookup16` at 32-byte width. Duplicating the 16-entry table into
-    both halves makes the full 32-entry lookup per-128-bit-lane safe, so
-    on AVX2 this compiles to a single VPSHUFB YMM (verified)."""
-    return table.join(table)._dynamic_shuffle(idx)
 
 
 @always_inline("nodebug")
@@ -127,11 +126,11 @@ def _addp(a: _Chunk16, b: _Chunk16) -> _Chunk16:
 
 
 @always_inline("nodebug")
-def movemask64(a: _Bool16, b: _Bool16, c: _Bool16, d: _Bool16) -> UInt64:
-    """Packs four 16-lane bool vectors into one 64-bit mask (bit i = lane i).
+def movemask64(m: Array[_BoolC, _N_CHUNKS]) -> UInt64:
+    """Packs the chunk's lane predicates into one 64-bit mask (bit i = byte i).
 
     NEON path: per-lane bit weights + a three-level ADDP pairwise-add tree
-    (simdjson's `neon::to_bitmask`) — much cheaper than `pack_bits`'s
+    (simdjson's `neon::to_bitmask`) -- much cheaper than `pack_bits`'s
     horizontal reduction on aarch64 (verified from --emit=asm: 19 insns
     for the whole compare+mask kernel vs 34 via pack_bits).
     Portable/comptime path: `pack_bits` (on x86 it lowers to PMOVMSKB
@@ -139,85 +138,66 @@ def movemask64(a: _Bool16, b: _Bool16, c: _Bool16, d: _Bool16) -> UInt64:
     """
     comptime if _NEON:
         if not __is_run_in_comptime_interpreter:
+            # The ADDP tree is structurally four 16-byte vectors. That
+            # holds because SIMD8_WIDTH is 16 on every NEON target
+            # measured (apple-m1, apple-m3, generic aarch64) -- an
+            # observation, not a guarantee. An SVE target reporting wider
+            # must fail the build here rather than silently run a
+            # 16-byte reduction over vectors that are not 16 bytes.
+            comptime assert _N_CHUNKS == 4, (
+                "NEON movemask assumes four 16-byte chunks; this target"
+                " reports a different KERNEL_WIDTH"
+            )
             comptime BITS = _Chunk16(
                 1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128
             )
             comptime ZERO = _Chunk16(0)
+            var a = rebind[_Bool16](m[0])
+            var b = rebind[_Bool16](m[1])
+            var c = rebind[_Bool16](m[2])
+            var d = rebind[_Bool16](m[3])
             var s0 = _addp(a.select(BITS, ZERO), b.select(BITS, ZERO))
             var s1 = _addp(c.select(BITS, ZERO), d.select(BITS, ZERO))
             var s2 = _addp(s0, s1)
             var s3 = _addp(s2, s2)
             return bitcast[DType.uint64, 2](s3)[0]
-    var m0 = UInt64(pack_bits(a))
-    var m1 = UInt64(pack_bits(b))
-    var m2 = UInt64(pack_bits(c))
-    var m3 = UInt64(pack_bits(d))
-    return m0 | m1 << 16 | m2 << 32 | m3 << 48
+    var out: UInt64 = 0
+    comptime for i in range(_N_CHUNKS):
+        out |= UInt64(pack_bits(m[i])) << UInt64(i * _CW)
+    return out
 
 
 @fieldwise_init
 struct SimdInput(Copyable, Movable):
-    """64 bytes loaded into four 16-byte registers, abstracting SIMD width."""
+    """64 bytes held as `_N_CHUNKS` vectors, abstracting SIMD width."""
 
-    var chunks: Array[_Chunk16, 4]
+    var chunks: Array[_Chunk, _N_CHUNKS]
 
     @always_inline("nodebug")
     @staticmethod
     def load(ptr: Pointer[UInt8, _]) -> SimdInput:
         """Loads 64 bytes from ptr (unaligned)."""
-        var result = SimdInput(chunks=Array[_Chunk16, 4](fill=_Chunk16(0)))
-        result.chunks[0] = ptr.unsafe_load[width=16]()
-        result.chunks[1] = (ptr.unsafe_offset(16)).unsafe_load[width=16]()
-        result.chunks[2] = (ptr.unsafe_offset(32)).unsafe_load[width=16]()
-        result.chunks[3] = (ptr.unsafe_offset(48)).unsafe_load[width=16]()
+        var result = SimdInput(chunks=Array[_Chunk, _N_CHUNKS](fill=_Chunk(0)))
+        comptime for i in range(_N_CHUNKS):
+            result.chunks[i] = (ptr.unsafe_offset(i * _CW)).unsafe_load[
+                width=_CW
+            ]()
         return result^
 
     @always_inline("nodebug")
-    def lo32(self) -> _Chunk32:
-        """Bytes 0-31 as one 32-byte vector (x86: a VINSERTI128 the
-        backend usually folds into a single 32-byte load)."""
-        return self.chunks[0].join(self.chunks[1])
-
-    @always_inline("nodebug")
-    def hi32(self) -> _Chunk32:
-        """Bytes 32-63 as one 32-byte vector."""
-        return self.chunks[2].join(self.chunks[3])
-
-    @always_inline("nodebug")
     def eq(self, target: UInt8) -> UInt64:
-        """Returns a 64-bit mask: bit i set if byte i == target.
-
-        The AVX2 recombine is not redundant: LLVM does not auto-fuse
-        four 16-byte compare+pack_bits into ymm ops (verified from
-        --emit=asm: 15 insns stay xmm-width vs 9 via explicit 32-byte
-        vectors)."""
-        comptime if _AVX2:
-            if not __is_run_in_comptime_interpreter:
-                var splat = _Chunk32(target)
-                var m0 = UInt64(pack_bits(self.lo32().eq(splat)))
-                var m1 = UInt64(pack_bits(self.hi32().eq(splat)))
-                return m0 | m1 << 32
-        var splat = _Chunk16(target)
-        return movemask64(
-            self.chunks[0].eq(splat),
-            self.chunks[1].eq(splat),
-            self.chunks[2].eq(splat),
-            self.chunks[3].eq(splat),
-        )
+        """Returns a 64-bit mask: bit i set if byte i == target."""
+        var splat = _Chunk(target)
+        var m = Array[_BoolC, _N_CHUNKS](fill=_BoolC(fill=False))
+        comptime for i in range(_N_CHUNKS):
+            m[i] = self.chunks[i].eq(splat)
+        return movemask64(m)
 
     @always_inline("nodebug")
     def lteq(self, target: UInt8) -> UInt64:
         """Returns a 64-bit mask: bit i set if byte i <= target (unsigned)."""
-        comptime if _AVX2:
-            if not __is_run_in_comptime_interpreter:
-                var splat = _Chunk32(target)
-                var m0 = UInt64(pack_bits(self.lo32().le(splat)))
-                var m1 = UInt64(pack_bits(self.hi32().le(splat)))
-                return m0 | m1 << 32
-        var splat = _Chunk16(target)
-        return movemask64(
-            self.chunks[0].le(splat),
-            self.chunks[1].le(splat),
-            self.chunks[2].le(splat),
-            self.chunks[3].le(splat),
-        )
+        var splat = _Chunk(target)
+        var m = Array[_BoolC, _N_CHUNKS](fill=_BoolC(fill=False))
+        comptime for i in range(_N_CHUNKS):
+            m[i] = self.chunks[i].le(splat)
+        return movemask64(m)
