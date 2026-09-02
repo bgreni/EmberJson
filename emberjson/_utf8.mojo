@@ -22,8 +22,8 @@ needed).
 """
 
 from emberjson._index.simd_ops import lookup16
+from emberjson.simd import SIMD8
 from std.memory import unsafe_memcpy
-from std.sys.intrinsics import llvm_intrinsic
 from std.collections import Array
 
 comptime _C16 = SIMD[DType.uint8, 16]
@@ -88,8 +88,15 @@ comptime _MAX_VALUE = _C16(
 
 
 @always_inline("nodebug")
-def _satsub(a: _C16, b: _C16) -> _C16:
-    return llvm_intrinsic["llvm.usub.sat.v16i8", _C16](a, b)
+def _satsub[W: Int](a: SIMD8[W], b: SIMD8[W]) -> SIMD8[W]:
+    """Saturating unsigned subtract: `a - b`, clamped at zero.
+
+    The arithmetic spelling rather than `llvm.usub.sat.v16i8`: it selects
+    the same instruction on every target and width (UQSUB on aarch64,
+    PSUBUSB / VPSUBUSB on x86, verified from --emit=asm), it is
+    width-generic, and unlike the intrinsic it interprets at comptime.
+    """
+    return a - a.lt(b).select(a, b)
 
 
 @always_inline("nodebug")
@@ -110,7 +117,7 @@ def _check_chunk(cur: _C16, prev_chunk: _C16, mut error: _C16):
     var prev2 = _prev[2](prev_chunk, cur)
     var prev3 = _prev[3](prev_chunk, cur)
     # High bit set exactly for 3-byte (>= 0xE0) / 4-byte (>= 0xF0) leads.
-    var must23 = _satsub(prev2, _C16(0xE0 - 0x80)) | _satsub(
+    var must23 = _satsub[16](prev2, _C16(0xE0 - 0x80)) | _satsub[16](
         prev3, _C16(0xF0 - 0x80)
     )
     var must23_80 = must23 & 0x80
@@ -143,7 +150,7 @@ def _is_valid_utf8_simd(ptr: Pointer[UInt8, _], n: Int) -> Bool:
             error |= prev_incomplete
         else:
             _check_chunk(cur, prev_chunk, error)
-        prev_incomplete = _satsub(cur, _MAX_VALUE)
+        prev_incomplete = _satsub[16](cur, _MAX_VALUE)
         prev_chunk = cur
         i += 16
 

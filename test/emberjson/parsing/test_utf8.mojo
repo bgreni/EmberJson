@@ -146,5 +146,43 @@ def test_utf8_validation_default_on() raises:
     assert_equal(parse_pointer(good, "/a").string(), "héllo 🔥")
 
 
+def test_satsub_exhaustive() raises:
+    """Saturating unsigned subtract over every byte pair, at every width
+    the UTF-8 kernel could be instantiated at."""
+    from emberjson._utf8 import _satsub
+    from emberjson.simd import SIMD8
+
+    _check_satsub[16]()
+    _check_satsub[32]()
+
+
+def _check_satsub[W: Int]() raises:
+    from emberjson._utf8 import _satsub
+    from emberjson.simd import SIMD8
+
+    for x in range(256):
+        var a = SIMD8[W](Byte(x))
+        # Sweep b across all 256 values, W lanes at a time.
+        for base in range(0, 256, W):
+            var b = SIMD8[W](0)
+            for lane in range(W):
+                b[lane] = Byte((base + lane) % 256)
+            var got = _satsub[W](a, b)
+            for lane in range(W):
+                var want = Byte(0) if Int(b[lane]) > x else Byte(
+                    x - Int(b[lane])
+                )
+                assert_equal(
+                    got[lane],
+                    want,
+                    "satsub W="
+                    + String(W)
+                    + " a="
+                    + String(x)
+                    + " b="
+                    + String(Int(b[lane])),
+                )
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
