@@ -146,5 +146,165 @@ def test_utf8_validation_default_on() raises:
     assert_equal(parse_pointer(good, "/a").string(), "héllo 🔥")
 
 
+def test_satsub_exhaustive() raises:
+    """Saturating unsigned subtract over every byte pair, at every width
+    the UTF-8 kernel could be instantiated at."""
+    _check_satsub[16]()
+    _check_satsub[32]()
+
+
+def _check_satsub[W: Int]() raises:
+    from emberjson._utf8 import _satsub
+    from emberjson.simd import SIMD8
+
+    for x in range(256):
+        var a = SIMD8[W](Byte(x))
+        # Sweep b across all 256 values, W lanes at a time.
+        for base in range(0, 256, W):
+            var b = SIMD8[W](0)
+            for lane in range(W):
+                b[lane] = Byte((base + lane) % 256)
+            var got = _satsub[W](a, b)
+            for lane in range(W):
+                var want = Byte(0) if Int(b[lane]) > x else Byte(
+                    x - Int(b[lane])
+                )
+                assert_equal(
+                    got[lane],
+                    want,
+                    "satsub W="
+                    + String(W)
+                    + " a="
+                    + String(x)
+                    + " b="
+                    + String(Int(b[lane])),
+                )
+
+
+def _utf8_corpus() -> List[List[Byte]]:
+    """Inputs that exercise chunk boundaries, truncation and every lead
+    byte class."""
+    var out = List[List[Byte]]()
+
+    # Every byte value at every offset in a 200-byte ASCII field: this
+    # crosses every chunk boundary and every phase at widths 16/32/64.
+    for off in range(0, 200):
+        for b in range(0, 256, 7):  # stride keeps the suite quick
+            var buf = List[Byte]()
+            for i in range(200):
+                buf.append(Byte(ord("a")) if i != off else Byte(b))
+            out.append(buf^)
+
+    # Lengths that are exact multiples of 64, so the driver's
+    # "input ended on a chunk boundary" branch (`error |= prev_incomplete`,
+    # the only consumer of `_make_max_value[W]` at the end of input) is
+    # reached at W=16, 32 AND 64 -- the 200-byte cases above always take
+    # the partial-tail path at 32 and 64.
+    var seqs = List[List[Byte]]()
+    seqs.append([Byte(0xC3), Byte(0xA9)])
+    seqs.append([Byte(0xE2), Byte(0x82), Byte(0xAC)])
+    seqs.append([Byte(0xF0), Byte(0x9F), Byte(0x94), Byte(0xA5)])
+
+    for L in [64, 128, 192]:
+        # Pure ASCII: must be accepted.
+        var ascii_buf = List[Byte]()
+        for _ in range(L):
+            ascii_buf.append(Byte(ord("a")))
+        out.append(ascii_buf^)
+
+        for si in range(len(seqs)):
+            ref seq = seqs[si]
+            # A complete multi-byte sequence ending exactly on the
+            # boundary: accepted.
+            var ok = List[Byte]()
+            for _ in range(L - len(seq)):
+                ok.append(Byte(ord("a")))
+            for k in range(len(seq)):
+                ok.append(seq[k])
+            out.append(ok^)
+
+            # The same sequence truncated, padded back to L with leading
+            # ASCII, so the lead dangles at the true end of input with no
+            # continuation after it: must be rejected. This is what
+            # `prev_incomplete` exists to catch on the boundary branch.
+            for cut in range(1, len(seq)):
+                var kept = len(seq) - cut
+                var bad = List[Byte]()
+                for _ in range(L - kept):
+                    bad.append(Byte(ord("a")))
+                for k in range(kept):
+                    bad.append(seq[k])
+                out.append(bad^)
+
+    # Every prefix of real multi-byte text, so each truncation of each
+    # sequence is covered.
+    var samples = List[String]()
+    samples.append("héllo wörld")
+    samples.append("日本語テキスト")
+    samples.append("emoji 🎉🎊 and 𝔘𝔫𝔦𝔠𝔬𝔡𝔢")
+    for s in samples:
+        var bs = s.as_bytes()
+        for n in range(0, len(bs) + 1):
+            var t = List[Byte]()
+            for k in range(n):
+                t.append(bs[k])
+            out.append(t^)
+    return out^
+
+
+def test_utf8_simd_matches_scalar_at_every_width() raises:
+    """The width-generic kernel at every width it could be instantiated
+    at, against the scalar reference."""
+    from emberjson._utf8 import _is_valid_utf8_simd, _is_valid_utf8_scalar
+    from emberjson.simd import HAS_BYTE_SHUFFLE
+
+    comptime if HAS_BYTE_SHUFFLE:
+        var corpus = _utf8_corpus()
+        for item in corpus:
+            var p = item.unsafe_ptr()
+            var n = len(item)
+            var want = _is_valid_utf8_scalar(p, n)
+            assert_equal(_is_valid_utf8_simd[16](p, n), want, "W=16")
+            assert_equal(_is_valid_utf8_simd[32](p, n), want, "W=32")
+            # Not shipped (KERNEL_WIDTH is capped at 32), tested so
+            # raising the cap is a one-line change.
+            assert_equal(_is_valid_utf8_simd[64](p, n), want, "W=64")
+
+
+def test_utf8_no_shuffle_matches_scalar() raises:
+    """The no-shuffle fallback cannot be selected on either development
+    machine, so it is called directly -- otherwise it would be dead code
+    in every run of this suite."""
+    from emberjson._utf8 import (
+        _is_valid_utf8_no_shuffle,
+        _is_valid_utf8_scalar,
+    )
+
+    var corpus = _utf8_corpus()
+    for item in corpus:
+        var p = item.unsafe_ptr()
+        var n = len(item)
+        assert_equal(
+            _is_valid_utf8_no_shuffle(p, n),
+            _is_valid_utf8_scalar(p, n),
+            "no-shuffle path",
+        )
+
+
+def test_utf8_no_shuffle_pure_ascii() raises:
+    """A pure-ASCII document must never reach the scalar validator, and
+    must still be accepted at every length including chunk multiples."""
+    from emberjson._utf8 import _is_valid_utf8_no_shuffle
+
+    for n in range(0, 200):
+        var buf = List[Byte]()
+        for _ in range(n):
+            buf.append(Byte(ord("x")))
+        assert_true(
+            _is_valid_utf8_no_shuffle(buf.unsafe_ptr(), n),
+            "ascii length " + String(n),
+        )
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

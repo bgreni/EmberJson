@@ -3,12 +3,14 @@
 Ported from simdjson. `classify` turns one 64-byte `SimdInput`
 chunk into a `CharacterBlock` of two 64-bit masks — one bit per byte.
 
-NEON / x86 paths (guarded by `__is_run_in_comptime_interpreter`):
-simdjson's low/high-nibble shuffle-table intersection — two table
-lookups (TBL1 / VPSHUFB) and an AND give every byte a class descriptor
-in one pass, then one movemask per class. On AVX2 the four 16-byte
-chunks recombine into two 32-byte vectors first, halving the shuffle
-and movemask count. Class bits: comma=1, colon=2, brackets/braces=4
+Byte-shuffle path (`HAS_BYTE_SHUFFLE` targets, guarded by
+`__is_run_in_comptime_interpreter`): simdjson's low/high-nibble
+shuffle-table intersection — two table lookups (TBL1 / VPSHUFB) and an
+AND give every byte a class descriptor in one pass, then one movemask
+per class. One kernel serves NEON and AVX2: it runs over `SimdInput`'s
+`_N_CHUNKS` vectors of `KERNEL_WIDTH` bytes, so the wider target does
+half as many shuffles and movemasks without a separate code path.
+Class bits: comma=1, colon=2, brackets/braces=4
 (operator = desc & 0x7), space=8, tab/lf/cr=16 (whitespace =
 desc & 0x18). The tables are constructed so `low[b & 15] & high[b >> 4]`
 is non-zero for exactly the ten classified bytes;
@@ -19,19 +21,14 @@ whitespace), which interpret cleanly at compile time. No per-byte
 branching in either path.
 """
 
-from std.memory import pack_bits
-
-from .portable import CLASSIFY_LOW_NIBBLE, CLASSIFY_HIGH_NIBBLE
-from .simd_ops import (
-    SimdInput,
-    movemask64,
-    lookup16,
-    lookup16_x2,
-    _NEON,
-    _AVX2,
-    _Chunk16,
-    _Chunk32,
+from emberjson.simd import HAS_BYTE_SHUFFLE, lookup, SIMD8
+from .portable import (
+    CLASSIFY_LOW_NIBBLE,
+    CLASSIFY_HIGH_NIBBLE,
+    CLASS_OP_BITS,
+    CLASS_WS_BITS,
 )
+from .simd_ops import SimdInput, movemask64, _CW, _N_CHUNKS, _Chunk, _BoolC
 
 
 @fieldwise_init
@@ -42,86 +39,47 @@ struct CharacterBlock(Copyable, Movable):
     var op: UInt64
 
 
-# Class-bit tables (see `portable.mojo`),
-# indexed by a byte's low/high nibble. A byte's class descriptor is
-# LOW[b & 0xF] & HIGH[b >> 4]:
+# Class-bit tables live in `portable.mojo`, indexed by a byte's low/high
+# nibble. A byte's class descriptor is LOW[b & 0xF] & HIGH[b >> 4]:
 #   ','  0x2C -> 1     ':'  0x3A -> 2     '[' ']' '{' '}' -> 4
 #   ' '  0x20 -> 8     '\t' '\n' '\r'     -> 16
-comptime _LOW_NIBBLE = CLASSIFY_LOW_NIBBLE
-comptime _HIGH_NIBBLE = CLASSIFY_HIGH_NIBBLE
 
 
 @always_inline("nodebug")
-def _classify_avx2(input: SimdInput) -> CharacterBlock:
-    comptime LOW_MASK = _Chunk32(0xF)
-    comptime ZERO = _Chunk32(0)
-    comptime OP_BITS = _Chunk32(0x7)
-    comptime WS_BITS = _Chunk32(0x18)
+def _classify_desc[W: Int](v: SIMD8[W]) -> SIMD8[W]:
+    """Each byte's class descriptor: LOW[b & 0xF] & HIGH[b >> 4].
 
-    var lo = input.lo32()
-    var hi = input.hi32()
-    var d0 = lookup16_x2(_LOW_NIBBLE, lo & LOW_MASK) & lookup16_x2(
-        _HIGH_NIBBLE, lo >> 4
+    Non-zero for exactly the ten classified bytes; `& CLASS_OP_BITS`
+    selects operators and `& CLASS_WS_BITS` selects whitespace.
+    Parameterized on width so it can be tested at widths other than the
+    one this build ships.
+    """
+    return lookup[W](CLASSIFY_LOW_NIBBLE, v & SIMD8[W](0xF)) & lookup[W](
+        CLASSIFY_HIGH_NIBBLE, v >> 4
     )
-    var d1 = lookup16_x2(_LOW_NIBBLE, hi & LOW_MASK) & lookup16_x2(
-        _HIGH_NIBBLE, hi >> 4
-    )
-
-    var op = (
-        UInt64(pack_bits((d0 & OP_BITS).ne(ZERO)))
-        | UInt64(pack_bits((d1 & OP_BITS).ne(ZERO))) << 32
-    )
-    var ws = (
-        UInt64(pack_bits((d0 & WS_BITS).ne(ZERO)))
-        | UInt64(pack_bits((d1 & WS_BITS).ne(ZERO))) << 32
-    )
-    return CharacterBlock(whitespace=ws, op=op)
 
 
 @always_inline("nodebug")
-def _classify_neon(input: SimdInput) -> CharacterBlock:
-    comptime LOW_MASK = _Chunk16(0xF)
-    comptime ZERO = _Chunk16(0)
-    comptime OP_BITS = _Chunk16(0x7)
-    comptime WS_BITS = _Chunk16(0x18)
+def _classify_shuffle(input: SimdInput) -> CharacterBlock:
+    comptime ZERO = _Chunk(0)
+    comptime OP_BITS = _Chunk(CLASS_OP_BITS)
+    comptime WS_BITS = _Chunk(CLASS_WS_BITS)
 
-    var d0 = lookup16(_LOW_NIBBLE, input.chunks[0] & LOW_MASK) & lookup16(
-        _HIGH_NIBBLE, input.chunks[0] >> 4
-    )
-    var d1 = lookup16(_LOW_NIBBLE, input.chunks[1] & LOW_MASK) & lookup16(
-        _HIGH_NIBBLE, input.chunks[1] >> 4
-    )
-    var d2 = lookup16(_LOW_NIBBLE, input.chunks[2] & LOW_MASK) & lookup16(
-        _HIGH_NIBBLE, input.chunks[2] >> 4
-    )
-    var d3 = lookup16(_LOW_NIBBLE, input.chunks[3] & LOW_MASK) & lookup16(
-        _HIGH_NIBBLE, input.chunks[3] >> 4
-    )
-
-    var op = movemask64(
-        (d0 & OP_BITS).ne(ZERO),
-        (d1 & OP_BITS).ne(ZERO),
-        (d2 & OP_BITS).ne(ZERO),
-        (d3 & OP_BITS).ne(ZERO),
-    )
-    var ws = movemask64(
-        (d0 & WS_BITS).ne(ZERO),
-        (d1 & WS_BITS).ne(ZERO),
-        (d2 & WS_BITS).ne(ZERO),
-        (d3 & WS_BITS).ne(ZERO),
-    )
-    return CharacterBlock(whitespace=ws, op=op)
+    var ops = Array[_BoolC, _N_CHUNKS](fill=_BoolC(fill=False))
+    var wss = Array[_BoolC, _N_CHUNKS](fill=_BoolC(fill=False))
+    comptime for i in range(_N_CHUNKS):
+        var d = _classify_desc[_CW](input.chunks[i])
+        ops[i] = (d & OP_BITS).ne(ZERO)
+        wss[i] = (d & WS_BITS).ne(ZERO)
+    return CharacterBlock(whitespace=movemask64(wss), op=movemask64(ops))
 
 
 @always_inline("nodebug")
 def classify(input: SimdInput) -> CharacterBlock:
     """Classifies 64 bytes into whitespace and structural-operator masks."""
-    comptime if _NEON:
+    comptime if HAS_BYTE_SHUFFLE:
         if not __is_run_in_comptime_interpreter:
-            return _classify_neon(input)
-    comptime if _AVX2:
-        if not __is_run_in_comptime_interpreter:
-            return _classify_avx2(input)
+            return _classify_shuffle(input)
 
     var op_brace_open = input.eq(UInt8(0x7B))  # {
     var op_brace_close = input.eq(UInt8(0x7D))  # }
