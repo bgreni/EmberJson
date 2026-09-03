@@ -149,9 +149,6 @@ def test_utf8_validation_default_on() raises:
 def test_satsub_exhaustive() raises:
     """Saturating unsigned subtract over every byte pair, at every width
     the UTF-8 kernel could be instantiated at."""
-    from emberjson._utf8 import _satsub
-    from emberjson.simd import SIMD8
-
     _check_satsub[16]()
     _check_satsub[32]()
 

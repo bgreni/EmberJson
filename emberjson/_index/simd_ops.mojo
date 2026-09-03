@@ -39,9 +39,12 @@ from emberjson.simd import KERNEL_WIDTH
 from .portable import prefix_xor_portable
 
 comptime _NEON = CompilationTarget.has_neon()
-# Every AVX2 CPU (Haswell+/Zen+) also has SSSE3 PSHUFB, so this flag
-# gates the movemask fast path (and, via `simd.HAS_BYTE_SHUFFLE`, the
-# byte-table lookups that now live in `emberjson/simd.mojo`).
+# Every AVX2 CPU (Haswell+/Zen+) also has SSSE3 PSHUFB. `movemask64`
+# itself only branches on `_NEON` (x86 reaches `pack_bits` via the
+# portable path, which needs no help); `_AVX2` now only gates `_PCLMUL`
+# below. The byte-table lookups live in `emberjson/simd.mojo` and are
+# gated there by their own `HAS_BYTE_SHUFFLE`, which folds in
+# `has_avx2()` independently of this flag.
 comptime _AVX2 = CompilationTarget.has_avx2()
 
 # The carryless-multiply intrinsics need their own gates: PMULL64 lives
@@ -64,6 +67,15 @@ comptime _Bool16 = SIMD[DType.bool, 16]
 
 # The stage-1 kernel width. 16 on NEON, 32 on AVX2; a 64-byte logical
 # chunk is _N_CHUNKS of these regardless.
+#
+# Deliberately `KERNEL_WIDTH`, not `SIMD8_WIDTH` -- do NOT substitute
+# `SIMD8_WIDTH` here even though `emberjson/simd.mojo` documents it as
+# "correct for loads and compares" in general. `SimdInput.chunks` also
+# feeds `lookup` (via `movemask64`/the classifier), and widening it past
+# `KERNEL_WIDTH` forces `lookup` to scalarize into a byte-by-byte gather
+# (see `lookup`'s docstring in `emberjson/simd.mojo`). On AVX-512 that
+# means `SIMD8_WIDTH` is 64 while `KERNEL_WIDTH` stays capped at 32; use
+# the latter here.
 comptime _CW = KERNEL_WIDTH
 comptime _N_CHUNKS = 64 // _CW
 comptime _Chunk = SIMD[DType.uint8, _CW]
@@ -124,18 +136,16 @@ def movemask64(m: Array[_BoolC, _N_CHUNKS]) -> UInt64:
     Portable/comptime path: `pack_bits` (on x86 it lowers to PMOVMSKB
     and needs no help).
     """
-    comptime if _NEON:
+    # The ADDP tree below is structurally four 16-byte vectors. That
+    # holds because SIMD8_WIDTH is 16 on every NEON target measured
+    # (apple-m1, apple-m3, generic aarch64) -- an observation, not a
+    # guarantee. Guarding on `_N_CHUNKS == 4` here (rather than failing
+    # the build) means a future SVE2 target that reports a wider
+    # KERNEL_WIDTH just falls through to the portable `pack_bits` path
+    # below, which is already correct for any width, instead of hard
+    # failing the whole library's build over a target no one has yet.
+    comptime if _NEON and _N_CHUNKS == 4:
         if not __is_run_in_comptime_interpreter:
-            # The ADDP tree is structurally four 16-byte vectors. That
-            # holds because SIMD8_WIDTH is 16 on every NEON target
-            # measured (apple-m1, apple-m3, generic aarch64) -- an
-            # observation, not a guarantee. An SVE target reporting wider
-            # must fail the build here rather than silently run a
-            # 16-byte reduction over vectors that are not 16 bytes.
-            comptime assert _N_CHUNKS == 4, (
-                "NEON movemask assumes four 16-byte chunks; this target"
-                " reports a different KERNEL_WIDTH"
-            )
             comptime BITS = _Chunk16(
                 1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128
             )

@@ -216,12 +216,7 @@ def test_classify_desc_all_widths() raises:
     lookups and their AND -- at every width the kernel could be
     instantiated at. The mask assembly is covered at the shipped width
     by test_classifier_exhaustive."""
-    from emberjson._index.classifier import _classify_desc
-    from emberjson.simd import HAS_BYTE_SHUFFLE, SIMD8
-    from emberjson._index.portable import (
-        CLASSIFY_LOW_NIBBLE,
-        CLASSIFY_HIGH_NIBBLE,
-    )
+    from emberjson.simd import HAS_BYTE_SHUFFLE
 
     comptime if HAS_BYTE_SHUFFLE:
         _check_desc_width[16]()

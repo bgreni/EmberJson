@@ -4,7 +4,13 @@ Two different widths matter here and confusing them is the bug this
 module exists to prevent:
 
   * `SIMD8_WIDTH` is the *vector register* width. Correct for loads and
-    compares, which every target can do at its register width.
+    compares, which every target can do at its register width -- with
+    one exception: a load whose result also feeds `lookup` (as
+    `SimdInput.load`/`eq`/`lteq` in `_index/simd_ops.mojo` do, since the
+    same `chunks` array backs both movemasks and table lookups) must use
+    `KERNEL_WIDTH`, not `SIMD8_WIDTH`, for the load and any compare over
+    it. Widening those past `KERNEL_WIDTH` doesn't just skip a gain, it
+    scalarizes `lookup` (see the note by `_CW` in `_index/simd_ops.mojo`).
   * `KERNEL_WIDTH` is the width the byte-table-lookup kernels run at.
     Table lookups are governed by the width at which the target has a
     byte-shuffle instruction, which is a different quantity: AVX-512
@@ -78,8 +84,8 @@ def lookup[W: Int](table: SIMD8[16], idx: SIMD8[W]) -> SIMD8[W]:
         " `comptime if HAS_BYTE_SHUFFLE` and provide a portable path"
     )
     comptime assert (
-        W >= 16 and W % 16 == 0
-    ), "lookup width must be 16 or a multiple of it"
+        W >= 16 and W % 16 == 0 and (W & (W - 1)) == 0
+    ), "lookup width must be a power of two, >= 16"
     comptime if W == 16:
         return rebind[SIMD8[W]](table._dynamic_shuffle(rebind[SIMD8[16]](idx)))
     comptime H = W // 2

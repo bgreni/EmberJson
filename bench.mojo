@@ -504,7 +504,6 @@ def run_benchchecks(mut m: Bench) raises:
     run_benchmarks(m)
 
 
-@__parameter
 def benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
     @always_inline
     def do() raises {imm p}:
@@ -514,7 +513,6 @@ def benchmark_jsonl_parse(mut b: Bencher, p: Path) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
@@ -525,7 +523,6 @@ def benchmark_ignore_unicode(mut b: Bencher, s: String) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_minify(mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
@@ -535,7 +532,6 @@ def benchmark_minify(mut b: Bencher, s: String) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_reflection_serialize[T: Movable](mut b: Bencher, data: T) raises:
     @always_inline
     def do() raises {imm data}:
@@ -545,7 +541,6 @@ def benchmark_reflection_serialize[T: Movable](mut b: Bencher, data: T) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     @always_inline
     def do() raises {imm s}:
@@ -555,7 +550,6 @@ def benchmark_pretty_print(mut b: Bencher, s: Value) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_utf8_validate(mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
@@ -564,7 +558,6 @@ def benchmark_utf8_validate(mut b: Bencher, s: String) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_parse_pointer[
     path: StringLiteral
 ](mut b: Bencher, s: String) raises:
@@ -576,7 +569,6 @@ def benchmark_parse_pointer[
     b.iter(do)
 
 
-@__parameter
 def benchmark_stage1(mut b: Bencher, s: String) raises:
     # End-to-end stage-1 structural indexing: pad-copy + index, fresh
     # buffers per iteration (matching the Parse* rows' methodology).
@@ -591,7 +583,6 @@ def benchmark_stage1(mut b: Bencher, s: String) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_document_parse(mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
@@ -601,7 +592,6 @@ def benchmark_document_parse(mut b: Bencher, s: String) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
     def do() raises {imm docs}:
@@ -612,7 +602,6 @@ def benchmark_batch_parse(mut b: Bencher, docs: List[String]) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
     @always_inline
     def do() raises {imm docs}:
@@ -623,7 +612,6 @@ def benchmark_batch_document_parse(mut b: Bencher, docs: List[String]) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_batch_deserialize[
     T: Movable & Deinitable
 ](mut b: Bencher, docs: List[String]) raises:
@@ -636,7 +624,6 @@ def benchmark_batch_deserialize[
     b.iter(do)
 
 
-@__parameter
 def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
@@ -651,7 +638,6 @@ def benchmark_json_parse[strict: Bool = True](mut b: Bencher, s: String) raises:
     b.iter(do)
 
 
-@__parameter
 def benchmark_value_stringify(mut b: Bencher, v: Value) raises:
     @always_inline
     def do() raises {imm v}:
