@@ -2,7 +2,9 @@
 # fuzz, bench harness) against the newest Mojo nightly every day.
 # When that fails, hand the failure to Claude Code, which works on a
 # `nightly-fix/<version>` branch and opens a pull request for review.
-# Nothing in this workflow pushes to main.
+# At most one nightly-fix PR is open at a time: while one is open, the
+# canary runs on that PR's branch and Claude amends it instead of opening
+# another. Nothing in this workflow pushes to main.
 #
 # Secrets the fix job needs (Settings -> Secrets and variables -> Actions):
 #   CLAUDE_CODE_OAUTH_TOKEN  from `claude setup-token`; bills the Claude subscription
@@ -28,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: nightly-canary
@@ -42,9 +45,31 @@ jobs:
       failed: ${{ steps.run.outputs.failed }}
       failed_stages: ${{ steps.run.outputs.failed_stages }}
       mojo_version: ${{ steps.run.outputs.mojo_version }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      pr_branch: ${{ steps.pr.outputs.pr_branch }}
     steps:
+      - name: Find an open nightly-fix PR to keep working on
+        id: pr
+        # Scheduled and manual runs follow an open PR; a pull_request run
+        # tests its own code.
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          found="$(gh pr list --state open --json number,headRefName \
+            --jq 'first(.[] | select(.headRefName | startswith("nightly-fix/"))) | "\(.number) \(.headRefName)"')"
+          echo "pr_number=${found%% *}" >> "$GITHUB_OUTPUT"
+          echo "pr_branch=${found#* }" >> "$GITHUB_OUTPUT"
+          if [ -n "$found" ]; then
+            echo "::notice::Open nightly-fix PR #${found%% *} found; the canary runs on its branch ${found#* } and any fix amends that PR."
+          fi
+
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # Empty when no nightly-fix PR is open, which means the triggering ref.
+          ref: ${{ steps.pr.outputs.pr_branch }}
 
       - name: Install pixi
         run: |
@@ -55,6 +80,8 @@ jobs:
         id: run
         env:
           SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          PR_BRANCH: ${{ steps.pr.outputs.pr_branch }}
         run: |
           set -o pipefail
           # Only the Mojo toolchain moves; emberserde stays at its locked commit
@@ -64,6 +91,10 @@ jobs:
           echo "mojo_version=$version" >> "$GITHUB_OUTPUT"
           {
             echo "## Nightly canary: Mojo $version"
+            if [ -n "$PR_NUMBER" ]; then
+              echo
+              echo "Running on the branch of open nightly-fix PR #$PR_NUMBER (\`$PR_BRANCH\`); main stays red until it merges."
+            fi
             echo
             echo "| Stage | Result |"
             echo "|---|---|"
@@ -132,44 +163,30 @@ jobs:
     env:
       MOJO_VERSION: ${{ needs.canary.outputs.mojo_version }}
       FAILED_STAGES: ${{ needs.canary.outputs.failed_stages }}
-      FIX_BRANCH: nightly-fix/${{ needs.canary.outputs.mojo_version }}
+      # An open nightly-fix PR is amended on its own branch; otherwise a new
+      # branch is named after the nightly.
+      PR_NUMBER: ${{ needs.canary.outputs.pr_number }}
+      FIX_BRANCH: ${{ needs.canary.outputs.pr_branch || format('nightly-fix/{0}', needs.canary.outputs.mojo_version) }}
     steps:
-      - name: Skip when a nightly-fix PR is already open
-        id: dedupe
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          open="$(gh pr list --state open --json headRefName \
-            --jq '[.[] | select(.headRefName | startswith("nightly-fix/"))] | length')"
-          echo "open=$open" >> "$GITHUB_OUTPUT"
-          if [ "$open" != "0" ]; then
-            echo "::notice::A nightly-fix PR is already open; not asking Claude again until it is merged or closed."
-            echo "Skipped: a nightly-fix PR is already open." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
       - name: Checkout repo
-        if: steps.dedupe.outputs.open == '0'
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.canary.outputs.pr_branch }}
           token: ${{ secrets.NIGHTLY_FIX_PAT }}
           fetch-depth: 0
 
       - name: Install pixi
-        if: steps.dedupe.outputs.open == '0'
         run: |
           curl -fsSL https://pixi.sh/install.sh | sh
           echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
 
       - name: Download the canary's log and lockfile
-        if: steps.dedupe.outputs.open == '0'
         uses: actions/download-artifact@v4
         with:
           name: nightly-canary
           path: .canary
 
       - name: Stage the failing state for Claude
-        if: steps.dedupe.outputs.open == '0'
         run: |
           # `.canary/` holds the evidence; keep it out of git without touching
           # the committed .gitignore.
@@ -181,16 +198,64 @@ jobs:
             | awk '!seen[$0]++' > .canary/errors.txt || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # A closed-but-unmerged PR can leave its branch behind; don't collide with it.
-          if git ls-remote --exit-code --heads origin "$FIX_BRANCH" >/dev/null 2>&1; then
-            FIX_BRANCH="$FIX_BRANCH-$GITHUB_RUN_ID"
-            echo "FIX_BRANCH=$FIX_BRANCH" >> "$GITHUB_ENV"
+          if [ -n "$PR_NUMBER" ]; then
+            # Continue on the open PR's branch; its earlier commits stay.
+            git checkout "$FIX_BRANCH"
+          else
+            # A closed-but-unmerged PR can leave its branch behind; don't collide with it.
+            if git ls-remote --exit-code --heads origin "$FIX_BRANCH" >/dev/null 2>&1; then
+              FIX_BRANCH="$FIX_BRANCH-$GITHUB_RUN_ID"
+              echo "FIX_BRANCH=$FIX_BRANCH" >> "$GITHUB_ENV"
+            fi
+            git checkout -b "$FIX_BRANCH"
           fi
-          git checkout -b "$FIX_BRANCH"
           pixi install
 
+      - name: Compose the delivery instructions for Claude
+        id: delivery
+        run: |
+          # Unquoted heredocs so $VARS expand; backticks are escaped so they
+          # reach the prompt as literal Markdown code marks.
+          if [ -n "$PR_NUMBER" ]; then
+            delivery="$(cat <<EOF
+          6. You are on the branch \`$FIX_BRANCH\`, the head of the open pull request
+             #$PR_NUMBER, which already fixes an older nightly. Keep its commits and
+             build on them. Commit your changes on this branch and push them with
+             \`git push origin $FIX_BRANCH\`. Do not open a new PR. Then update the PR
+             with \`gh pr edit $PR_NUMBER\`: retitle it
+             \`Fix build against Mojo nightly $MOJO_VERSION\`, and append a section
+             for $MOJO_VERSION to the existing body (read it first with
+             \`gh pr view $PR_NUMBER --json body --jq .body\`) saying what broke,
+             what you changed and why, and anything you are unsure about. If the
+             PR is a draft and every stage is now green, mark it ready with
+             \`gh pr ready $PR_NUMBER\`.
+          7. If you cannot get every stage green within your budget, still push
+             what you have, make sure the PR is a draft
+             (\`gh pr ready --undo $PR_NUMBER\`), and add a section titled
+             "Needs a human" to the body that lists the remaining failures.
+          EOF
+            )"
+          else
+            delivery="$(cat <<EOF
+          6. You are on the new branch \`$FIX_BRANCH\`. Commit there, push it with
+             \`git push -u origin $FIX_BRANCH\`, and open a PR against \`main\` with
+             \`gh pr create\`. Title it
+             \`Fix build against Mojo nightly $MOJO_VERSION\`. The body must say
+             what broke, what you changed and why, and anything you are unsure
+             about.
+          7. If you cannot get every stage green within your budget, still push
+             what you have and open the PR as a draft with \`--draft\`, with a
+             section titled "Needs a human" that lists the remaining failures.
+          EOF
+            )"
+          fi
+          {
+            echo "DELIVERY<<__DELIVERY__"
+            printf '%s\n' "$delivery"
+            echo "__DELIVERY__"
+          } >> "$GITHUB_ENV"
+
       - name: Run Claude Code
-        if: steps.dedupe.outputs.open == '0'
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.NIGHTLY_FIX_PAT }}
@@ -245,14 +310,6 @@ jobs:
             5. Before committing, run `pixi run format`, then confirm all five stages
                pass: `pixi run test`, `pixi run build`, `pixi run test_python_compat`,
                `pixi run fuzz`, and `pixi run bench`.
-            6. You are already on the branch `${{ env.FIX_BRANCH }}`. Commit there,
-               push it with `git push -u origin ${{ env.FIX_BRANCH }}`, and open a PR
-               against `main` with `gh pr create`. Title it
-               `Fix build against Mojo nightly ${{ env.MOJO_VERSION }}`. The body must
-               say what broke, what you changed and why, and anything you are unsure
-               about.
-            7. If you cannot get the suite green within your budget, still push what
-               you have and open the PR as a draft with `--draft`, with a section
-               titled "Needs a human" that lists the remaining failures.
+            ${{ env.DELIVERY }}
 
             Never push to main.
