@@ -1,0 +1,315 @@
+# Nightly canary: run the full check suite (tests, build, Python compat,
+# fuzz, bench harness) against the newest Mojo nightly every day.
+# When that fails, hand the failure to Claude Code, which works on a
+# `nightly-fix/<version>` branch and opens a pull request for review.
+# At most one nightly-fix PR is open at a time: while one is open, the
+# canary runs on that PR's branch and Claude amends it instead of opening
+# another. Nothing in this workflow pushes to main.
+#
+# Secrets the fix job needs (Settings -> Secrets and variables -> Actions):
+#   CLAUDE_CODE_OAUTH_TOKEN  from `claude setup-token`; bills the Claude subscription
+#   NIGHTLY_FIX_PAT          fine-grained PAT scoped to this repo with
+#                            Contents: read/write and Pull requests: read/write,
+#                            so the PR it opens triggers the normal PR checks
+
+name: Nightly canary
+
+on:
+  schedule:
+    # Modular publishes nightlies around 05:30 UTC; give them a few hours.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: "Mark the canary as failed even if it passes, to exercise the fix job end to end"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/nightly-canary.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: nightly-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Build and test on the newest nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      failed: ${{ steps.run.outputs.failed }}
+      failed_stages: ${{ steps.run.outputs.failed_stages }}
+      mojo_version: ${{ steps.run.outputs.mojo_version }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      pr_branch: ${{ steps.pr.outputs.pr_branch }}
+    steps:
+      - name: Find an open nightly-fix PR to keep working on
+        id: pr
+        # Scheduled and manual runs follow an open PR; a pull_request run
+        # tests its own code.
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          found="$(gh pr list --state open --json number,headRefName \
+            --jq 'first(.[] | select(.headRefName | startswith("nightly-fix/"))) | "\(.number) \(.headRefName)"')"
+          echo "pr_number=${found%% *}" >> "$GITHUB_OUTPUT"
+          echo "pr_branch=${found#* }" >> "$GITHUB_OUTPUT"
+          if [ -n "$found" ]; then
+            echo "::notice::Open nightly-fix PR #${found%% *} found; the canary runs on its branch ${found#* } and any fix amends that PR."
+          fi
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # Empty when no nightly-fix PR is open, which means the triggering ref.
+          ref: ${{ steps.pr.outputs.pr_branch }}
+
+      - name: Install pixi
+        run: |
+          curl -fsSL https://pixi.sh/install.sh | sh
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+
+      - name: Move the lockfile to the newest nightly, then run every stage
+        id: run
+        env:
+          SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          PR_BRANCH: ${{ steps.pr.outputs.pr_branch }}
+        run: |
+          set -o pipefail
+          # Only the Mojo toolchain moves; emberserde stays at its locked commit
+          # so the nightly is the single variable under test.
+          pixi update mojo
+          version="$(pixi run mojo --version | awk '{print $2}')"
+          echo "mojo_version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Nightly canary: Mojo $version"
+            if [ -n "$PR_NUMBER" ]; then
+              echo
+              echo "Running on the branch of open nightly-fix PR #$PR_NUMBER (\`$PR_BRANCH\`); main stays red until it merges."
+            fi
+            echo
+            echo "| Stage | Result |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Every stage runs even after an earlier one fails, so one log shows
+          # the whole breakage surface. Stage names are the pixi task names.
+          # Bench numbers from a shared runner are noise; that stage only checks
+          # that the harness still compiles and runs.
+          failed_stages=""
+          for stage in test build test_python_compat fuzz bench; do
+            echo "::group::stage $stage"
+            echo "=== stage $stage: START ===" | tee -a canary.log
+            if pixi run "$stage" 2>&1 | tee -a canary.log; then
+              result=PASS
+            else
+              result=FAIL
+              failed_stages="$failed_stages $stage"
+            fi
+            echo "=== stage $stage: $result ===" | tee -a canary.log
+            echo "| $stage | $result |" >> "$GITHUB_STEP_SUMMARY"
+            echo "::endgroup::"
+          done
+          if [ "$SIMULATE_FAILURE" = "true" ]; then
+            echo "SIMULATED FAILURE: forced by the simulate_failure workflow input" | tee -a canary.log
+            failed_stages="$failed_stages simulated"
+          fi
+          failed_stages="${failed_stages# }"
+          echo "failed_stages=$failed_stages" >> "$GITHUB_OUTPUT"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$failed_stages" ]; then
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            echo "Canary FAILED on Mojo $version (stages: $failed_stages); the fix job will run." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "failed=false" >> "$GITHUB_OUTPUT"
+          echo "Canary passed on Mojo $version." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the log and the moved lockfile for the fix job
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-canary
+          path: |
+            canary.log
+            pixi.lock
+          retention-days: 14
+
+  # Runs only from the schedule or a manual dispatch on main, so it always
+  # works on main's own code with main's own workflow file; PR-triggered runs
+  # never reach it and forks never get the secrets.
+  fix:
+    name: Ask Claude for a fix
+    needs: canary
+    if: >-
+      ${{ !cancelled()
+          && needs.canary.outputs.failed == 'true'
+          && github.event_name != 'pull_request'
+          && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    env:
+      MOJO_VERSION: ${{ needs.canary.outputs.mojo_version }}
+      FAILED_STAGES: ${{ needs.canary.outputs.failed_stages }}
+      # An open nightly-fix PR is amended on its own branch; otherwise a new
+      # branch is named after the nightly.
+      PR_NUMBER: ${{ needs.canary.outputs.pr_number }}
+      FIX_BRANCH: ${{ needs.canary.outputs.pr_branch || format('nightly-fix/{0}', needs.canary.outputs.mojo_version) }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.canary.outputs.pr_branch }}
+          token: ${{ secrets.NIGHTLY_FIX_PAT }}
+          fetch-depth: 0
+
+      - name: Install pixi
+        run: |
+          curl -fsSL https://pixi.sh/install.sh | sh
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+
+      - name: Download the canary's log and lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-canary
+          path: .canary
+
+      - name: Stage the failing state for Claude
+        run: |
+          # `.canary/` holds the evidence; keep it out of git without touching
+          # the committed .gitignore.
+          echo "/.canary/" >> .git/info/exclude
+          cp .canary/pixi.lock pixi.lock
+          # Error lines only, first occurrence of each: stages that share a root
+          # cause repeat the same compiler errors.
+          grep -E 'error|Error|Failed|FAIL|Traceback|Unhandled|=== stage' .canary/canary.log \
+            | awk '!seen[$0]++' > .canary/errors.txt || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$PR_NUMBER" ]; then
+            # Continue on the open PR's branch; its earlier commits stay.
+            git checkout "$FIX_BRANCH"
+          else
+            # A closed-but-unmerged PR can leave its branch behind; don't collide with it.
+            if git ls-remote --exit-code --heads origin "$FIX_BRANCH" >/dev/null 2>&1; then
+              FIX_BRANCH="$FIX_BRANCH-$GITHUB_RUN_ID"
+              echo "FIX_BRANCH=$FIX_BRANCH" >> "$GITHUB_ENV"
+            fi
+            git checkout -b "$FIX_BRANCH"
+          fi
+          pixi install
+
+      - name: Compose the delivery instructions for Claude
+        id: delivery
+        run: |
+          # Unquoted heredocs so $VARS expand; backticks are escaped so they
+          # reach the prompt as literal Markdown code marks.
+          if [ -n "$PR_NUMBER" ]; then
+            delivery="$(cat <<EOF
+          6. You are on the branch \`$FIX_BRANCH\`, the head of the open pull request
+             #$PR_NUMBER, which already fixes an older nightly. Keep its commits and
+             build on them. Commit your changes on this branch and push them with
+             \`git push origin $FIX_BRANCH\`. Do not open a new PR. Then update the PR
+             with \`gh pr edit $PR_NUMBER\`: retitle it
+             \`Fix build against Mojo nightly $MOJO_VERSION\`, and append a section
+             for $MOJO_VERSION to the existing body (read it first with
+             \`gh pr view $PR_NUMBER --json body --jq .body\`) saying what broke,
+             what you changed and why, and anything you are unsure about. If the
+             PR is a draft and every stage is now green, mark it ready with
+             \`gh pr ready $PR_NUMBER\`.
+          7. If you cannot get every stage green within your budget, still push
+             what you have, make sure the PR is a draft
+             (\`gh pr ready --undo $PR_NUMBER\`), and add a section titled
+             "Needs a human" to the body that lists the remaining failures.
+          EOF
+            )"
+          else
+            delivery="$(cat <<EOF
+          6. You are on the new branch \`$FIX_BRANCH\`. Commit there, push it with
+             \`git push -u origin $FIX_BRANCH\`, and open a PR against \`main\` with
+             \`gh pr create\`. Title it
+             \`Fix build against Mojo nightly $MOJO_VERSION\`. The body must say
+             what broke, what you changed and why, and anything you are unsure
+             about.
+          7. If you cannot get every stage green within your budget, still push
+             what you have and open the PR as a draft with \`--draft\`, with a
+             section titled "Needs a human" that lists the remaining failures.
+          EOF
+            )"
+          fi
+          {
+            echo "DELIVERY<<__DELIVERY__"
+            printf '%s\n' "$delivery"
+            echo "__DELIVERY__"
+          } >> "$GITHUB_ENV"
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.NIGHTLY_FIX_PAT }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.NIGHTLY_FIX_PAT }}
+          claude_args: |
+            --model claude-opus-5
+            --max-turns 60
+            --allowedTools "Bash(pixi:*),Bash(git:*),Bash(gh:*),Read,Edit,Write,MultiEdit,Glob,Grep"
+          prompt: |
+            The EmberJson nightly canary failed against Mojo nightly ${{ env.MOJO_VERSION }}.
+            The committed lockfile was moved to that nightly and these stages then
+            failed: ${{ env.FAILED_STAGES }}. Get every stage passing on that nightly
+            and open a pull request for a human to review.
+
+            The canary runs five pixi tasks in order, and each is a stage:
+            `test` (the unit tests), `build` (`mojo precompile` of the library),
+            `test_python_compat` (imports the Mojo Python extension in
+            `emberjson_python.mojo` through `mojo.importer` and parses a file),
+            `fuzz` (the property tests in `fuzz.mojo`), and `bench` (compiles and
+            runs the `bench.mojo` harness). Benchmark numbers from a CI runner are
+            noise, so `bench` only checks that the harness compiles and runs; never
+            edit `bench_result.txt`. A stage named `simulated` means this run is a
+            drill started by hand: reproduce, confirm everything is green, and stop.
+
+            What you have:
+            - `.canary/canary.log` is the full output of the failing run, with each
+              stage bracketed by `=== stage <name>: START ===` and
+              `=== stage <name>: PASS|FAIL ===` lines; `.canary/errors.txt` is just
+              the error lines. `.canary/` is excluded from git; never commit it.
+            - `pixi.lock` in this checkout is already at ${{ env.MOJO_VERSION }}. Keep
+              that change in the PR.
+            - `CLAUDE.md` describes the repo layout, the commands, and the Mojo pin
+              convention.
+
+            How to work:
+            1. Reproduce first by running each failed stage's pixi task, for example
+               `pixi run test`. If they all pass on this runner the failure was
+               transient: print a short explanation, do not open a PR, and stop.
+            2. Diagnose from the error lines. Nightlies usually break this repo through
+               stdlib renames, removed or moved APIs, and changed language rules.
+               Make the smallest change that follows the new API. Do not delete,
+               skip, or weaken tests to get green.
+            3. The pin `>=1.1.0.dev...,<2` appears three times in `pixi.toml`. Raise
+               the floor to ${{ env.MOJO_VERSION }} in all three places only if the fix
+               depends on the new nightly, which is the usual case after an API
+               rename; otherwise leave `pixi.toml` alone.
+            4. If the errors point into emberserde, the git dependency built from
+               source, do not patch around them in this repo. Describe the emberserde
+               failure in the PR body instead.
+            5. Before committing, run `pixi run format`, then confirm all five stages
+               pass: `pixi run test`, `pixi run build`, `pixi run test_python_compat`,
+               `pixi run fuzz`, and `pixi run bench`.
+            ${{ env.DELIVERY }}
+
+            Never push to main.
