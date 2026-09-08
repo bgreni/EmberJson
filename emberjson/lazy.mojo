@@ -106,7 +106,7 @@ struct Lazy[
 
     def __hash__(self, mut h: Some[Hasher]):
         comptime assert conforms_to(Self.T, Hashable)
-        h.update(StringSlice(unsafe_from_utf8=self._data))
+        h.update(self._data)
 
     def unsafe_as_string_slice(
         self,

@@ -19,7 +19,7 @@ from ._deserialize.tape import (
     _Arena,
 )
 from .teju import write_float
-from std.format._utils import _WriteBufferStack
+from std.format._utils import _FlushingWriteBuffer
 from std.memory import unsafe_memcmp
 from std.memory.unsafe import bitcast
 from std.sys.intrinsics import unlikely, likely
@@ -78,7 +78,7 @@ struct Document(Movable, Writable):
 
     def to_string(self, out s: String):
         s = String()
-        var writer = _WriteBufferStack(s)
+        var writer = _FlushingWriteBuffer(s)
         self.write_to(writer)
         writer.flush()
 

@@ -10,14 +10,14 @@ from emberserde.serialize import (
 from emberserde.error import SerializationError
 from emberjson.teju import write_float
 from emberjson.utils import write_escaped_string
-from std.format._utils import _WriteBufferStack
+from std.format._utils import _FlushingWriteBuffer
 
 # JSON `Serializer` format over an arbitrary `Writer`, ported to sit on top
 # of emberserde's format-agnostic traits (`emberserde/emberserde/serialize/
 # __init__.mojo`). Structurally this is `emberserde/test/_json_format.mojo`'s
 # `JsonSerializer`, generalized two ways:
 #   - generic over the writer type `W` (instead of hardcoding `String`), so a
-#     future caller can hand it EmberJson's `_WriteBufferStack` and keep that
+#     future caller can hand it EmberJson's `_FlushingWriteBuffer` and keep that
 #     writer's speed;
 #   - comptime-branching on `pretty` (and on the `indent` string) to drive
 #     `write_pretty`, which used to be a hand-written printer over a
@@ -382,7 +382,7 @@ def to_json[
     # Matches the pattern used by `emberjson.utils.write`.
     # Must `flush()` before returning `buf` or the trailing buffered bytes
     # are silently dropped.
-    var w = _WriteBufferStack(buf)
+    var w = _FlushingWriteBuffer(buf)
     var s = EmberJsonSerializer[type_of(w), origin_of(w), pretty, indent](
         out=Pointer(to=w), depth=0
     )

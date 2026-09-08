@@ -276,7 +276,7 @@ struct CompositeKey(Copyable, Equatable, Hashable, Movable):
         return self.a != other.a
 
     def __hash__(self, mut h: Some[Hasher]):
-        h.update(self.a)
+        self.a.__hash__(h)
 
 
 def test_composite_dict_key_is_escaped_to_valid_json() raises:

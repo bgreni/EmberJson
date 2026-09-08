@@ -9,7 +9,7 @@ from std.memory import (
     unsafe_memcpy,
     unsafe_memset,
 )
-from std.format._utils import _WriteBufferStack
+from std.format._utils import _FlushingWriteBuffer
 from .traits import JsonValue
 from .object import Object
 from .array import Array
@@ -199,7 +199,7 @@ def will_overflow(i: UInt64) -> Bool:
 
 def write(out s: String, v: Some[JsonValue]):
     s = String()  # FIXME(modular/#4573): once it is optimized, return String(v)
-    var writer = _WriteBufferStack(s)
+    var writer = _FlushingWriteBuffer(s)
     v.write_to(writer)
     writer.flush()
 
