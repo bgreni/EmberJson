@@ -30,7 +30,7 @@ gen_large = "python tools/gen_large_datasets.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=1.1.0.dev2026082905,<2"
+mojo = ">=1.1.0.dev2026090905,<2"
 # Local source dependency while the emberserde port is in flight; swap for the
 # git spec once the API settles.
 emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
@@ -45,7 +45,7 @@ version = "0.4.0"
 backend = { name = "pixi-build-mojo", version = ">=0.2.6,<0.3" }
 
 [package.host-dependencies]
-mojo-compiler = ">=1.1.0.dev2026082905,<2"
+mojo-compiler = ">=1.1.0.dev2026090905,<2"
 
 # The library imports emberserde throughout (`__init__`, `value`, `object`,
 # `array`, `lazy`, `schema`, `traits`, `_serde/`), so `mojo precompile`
@@ -53,9 +53,9 @@ mojo-compiler = ">=1.1.0.dev2026082905,<2"
 # at run time -- the workspace [dependencies] entry above only covers dev
 # tasks. Keep all three in sync (swap them for the git spec together).
 [package.build-dependencies]
-mojo-compiler = ">=1.1.0.dev2026082905,<2"
+mojo-compiler = ">=1.1.0.dev2026090905,<2"
 emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
 
 [package.run-dependencies]
-mojo-compiler = ">=1.1.0.dev2026082905,<2"
+mojo-compiler = ">=1.1.0.dev2026090905,<2"
 emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }

@@ -43,9 +43,11 @@ __extension Value:
     ) raises -> PythonObject:
         ref self = Self._get_self(py_self)[]
 
-        if ind := _try_to_int(key):
+        var ind = _try_to_int(key)
+        if ind:
             return PythonObject(alloc=self[ind[]].copy())
-        if k := _try_to_str(key):
+        var k = _try_to_str(key)
+        if k:
             var s = k[]
             if not s.startswith("/"):
                 s = "/" + s
