@@ -3,6 +3,7 @@
 # Licensed under the Apache License, Version 2.0.
 from .tables import MINIVERSE
 from ..utils import lut, select
+from std.sys.intrinsics import likely
 from . import Fields
 
 comptime LOG10_POW2_MAX: Int32 = 112815
@@ -10,7 +11,19 @@ comptime LOG10_POW2_MIN: Int32 = -LOG10_POW2_MAX
 
 
 @always_inline
-def remove_trailing_zeros(var m: UInt64, var e: Int32) -> Fields:
+def remove_trailing_zeros(m: UInt64, e: Int32) -> Fields:
+    # Most shortest mantissas already end in a non-zero digit (none of
+    # canada.json's 111,080 do). The ladder lives in a separate non-inlined
+    # function on purpose: inlined, LLVM if-converts this test into a select
+    # and evaluates the whole ladder speculatively for every candidate
+    # result `teju` might return, which doubled the cost of the common path.
+    if likely(m % 10 != 0):
+        return Fields(m, e)
+    return _remove_trailing_zeros_slow(m, e)
+
+
+@no_inline
+def _remove_trailing_zeros_slow(var m: UInt64, e: Int32) -> Fields:
     # https://github.com/jk-jeon/rtz_benchmark
 
     var r = _rotr(m * 28999941890838049, 8)

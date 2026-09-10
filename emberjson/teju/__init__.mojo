@@ -1,4 +1,4 @@
-from std.utils.numerics import FPUtils, isinf, isnan
+from std.utils.numerics import FPUtils
 from std.memory.unsafe import bitcast
 from .helpers import (
     is_small_integer,
@@ -13,6 +13,13 @@ from .helpers import (
 )
 from .tables import MULTIPLIERS
 from ..utils import StackArray, lut, DIGIT_PAIRS
+from .digits import (
+    digit_count,
+    digits_word,
+    _store_word,
+    _store_with_point,
+    _write_digits,
+)
 from emberjson.constants import `-`, `0`, `.`, `e`
 from std.sys.intrinsics import unlikely
 
@@ -74,166 +81,183 @@ def _get_buffer_size[dtype: DType]() -> Int:
     return size
 
 
+comptime FORMAT_SPAN = 64
+"""Bytes `format_float` may touch at its destination."""
+
+comptime _ZEROS16 = SIMD[DType.uint8, 16](`0`)
+comptime _ZERO_POINT = SIMD[DType.uint8, 16](
+    `0`,
+    `.`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+    `0`,
+)
+comptime _NULL = SIMD[DType.uint8, 4](0x6E, 0x75, 0x6C, 0x6C)
+
+
+@always_inline
+def _teju_supports[dtype: DType]() -> Bool:
+    return (
+        dtype == DType.float64
+        or dtype == DType.float32
+        or dtype == DType.float16
+    )
+
+
 @always_inline
 def write_float[dtype: DType](d: Scalar[dtype], mut writer: Some[Writer]):
-    comptime if dtype != DType.float64 and dtype != DType.float32 and dtype != DType.float16:
+    comptime if not _teju_supports[dtype]():
         # Let stdlib handle exotic float types in case someone is bold enough to use
         # them in JSON.
         writer.write(d)
         return
-
-    if isinf(d) or isnan(d):
-        writer.write("null")
-        return
-
-    comptime buf_size = 64
-    var buffer = StackArray[Byte, buf_size](uninitialized=True)
-    var buf_idx = 0
-
-    if FPUtils[dtype].get_sign(d):
-        buffer.unsafe_get(buf_idx) = `-`
-        buf_idx += 1
-
-    if d == 0.0:
-        buffer.unsafe_get(buf_idx) = `0`
-        buf_idx += 1
-        buffer.unsafe_get(buf_idx) = `.`
-        buf_idx += 1
-        buffer.unsafe_get(buf_idx) = `0`
-        buf_idx += 1
-        var str_slice = StringSlice(
+    var buf = StackArray[Byte, FORMAT_SPAN](uninitialized=True)
+    var start = buf.unsafe_ptr()
+    var end = format_float(d, start)
+    writer.write_string(
+        StringSlice(
             unsafe_from_utf8=Span(
-                unsafe_ptr=buffer.unsafe_ptr(), length=buf_idx
+                unsafe_ptr=start, length=Int(end) - Int(start)
             )
         )
-        writer.write(str_slice)
-        return
+    )
 
-    var fields = teju[dtype](fp_to_binary(abs(d)))
 
+def format_float[
+    dtype: DType, o: MutOrigin
+](d: Scalar[dtype], dst: Pointer[Byte, o]) -> Pointer[Byte, o]:
+    """Writes the shortest round-trip text of `d` at `dst` and returns the
+    end of what was written.
+    """
+    comptime assert _teju_supports[dtype](), "unsupported float type"
+    # Classify from the raw fields rather than with float compares.
+    comptime mantissa_width = FPUtils[dtype].mantissa_width()
+    comptime exp_mask = (1 << FPUtils[dtype].exponent_width()) - 1
+    comptime min_exponent = 1 - FPUtils[dtype].exponent_bias() - mantissa_width
+    var biased = FPUtils[dtype].get_exponent_biased(d)
+    var mantissa = UInt64(FPUtils[dtype].get_mantissa_uint(d))
+    var out = dst
+    if unlikely(biased == exp_mask):  # inf or nan
+        out.unsafe_store(0, _NULL)
+        return out.unsafe_offset(4)
+    if FPUtils[dtype].get_sign(d):
+        out[] = `-`
+        out = out.unsafe_offset(1)
+    if unlikely(biased == 0 and mantissa == 0):
+        out.unsafe_store(0, SIMD[DType.uint8, 4](`0`, `.`, `0`, 0))
+        return out.unsafe_offset(3)
+    # `fp_to_binary`, on fields already in hand.
+    if biased != 0:
+        biased -= 1
+        mantissa |= UInt64(1) << UInt64(mantissa_width)
+    var fields = teju[dtype](Fields(mantissa, Int32(biased + min_exponent)))
     var sig = fields.mantissa
-    var exp = fields.exponent
+    var exp = Int(fields.exponent)
+    var sig_len = digit_count(sig)
+    var digits_before = sig_len + exp
+    var leading_zeroes = -digits_before
+    var str_exp = digits_before - 1
 
-    var sig_len = 0
-    var temp_sig = sig
-
-    comptime for p in range(4, -1, -1):
-        comptime step = 1 << p
-        comptime pow10 = UInt64(10**step)
-        if temp_sig >= pow10:
-            temp_sig //= pow10
-            sig_len += step
-
-    sig_len += 1
-
-    var digit_start = buf_idx
-    var cur_idx = digit_start + sig_len
-
-    # Fast 2-digit extraction directly into buffer
-    while sig >= 100:
-        var q = sig // 100
-        var r = Int(sig - (q * 100))
-        var pair = lut[DIGIT_PAIRS](r)
-        cur_idx -= 2
-        buffer.unsafe_get(cur_idx) = pair[0]
-        buffer.unsafe_get(cur_idx + 1) = pair[1]
-        sig = q
-
-    if sig > 0:
-        if sig >= 10:
-            var pair = lut[DIGIT_PAIRS](Int(sig))
-            cur_idx -= 2
-            buffer.unsafe_get(cur_idx) = pair[0]
-            buffer.unsafe_get(cur_idx + 1) = pair[1]
+    if exp < 0 and UInt64(digits_before - 1) < 16:
+        # dd.ddd (1..16 digits before the point): the common shape, so it is
+        # tested first. The digits are produced as whole 8-digit words and
+        # the point is spliced into the word it falls in, which avoids a
+        # divide, a split and a third word. Every word store clobbers
+        # forward into bytes a later store rewrites, never backward.
+        comptime E8 = UInt64(100000000)
+        if sig_len <= 8:
+            _store_with_point(
+                out,
+                digits_word(UInt32(sig)) >> UInt64((8 - sig_len) * 8),
+                digits_before,
+            )
         else:
-            cur_idx -= 1
-            buffer.unsafe_get(cur_idx) = Byte(sig) + `0`
-
-    var leading_zeroes = -exp - Int32(sig_len)
-    var str_exp = exp + Int32(sig_len - 1)
-
-    if (exp < 0 and leading_zeroes > 3) or str_exp > 15:
-        # Scientific notation
+            # [top][hi word][lo word]: `top` only exists for 17 digits; its
+            # byte is written unconditionally and overwritten by the hi
+            # word when there are 16.
+            var hi = sig // E8
+            var lo = UInt32(sig - hi * E8)
+            var top = UInt32(hi // E8)
+            var hi8 = UInt32(hi - UInt64(top) * E8)
+            var off = Int(sig_len == 17)
+            out[] = Byte(top) + `0`
+            var hd = sig_len - 8 - off  # digits in the hi word, 1..8
+            var hw = digits_word(hi8) >> UInt64((8 - hd) * 8)
+            var k = digits_before - off  # point position past `top`
+            var hp = out.unsafe_offset(off)
+            if k < hd:
+                _store_with_point(hp, hw, k)
+                _store_word(hp.unsafe_offset(hd + 1), digits_word(lo))
+            elif k == hd:
+                _store_word(hp, hw)
+                hp[unsafe_offset=hd] = `.`
+                _store_word(hp.unsafe_offset(hd + 1), digits_word(lo))
+            else:
+                _store_word(hp, hw)
+                _store_with_point(hp.unsafe_offset(hd), digits_word(lo), k - hd)
+        out = out.unsafe_offset(sig_len + 1)
+    elif (exp < 0 and leading_zeroes > 3) or str_exp > 15:
+        # Scientific: d[.ddd]e[-]X[X[X]]
         if sig_len > 1:
-            for i in reversed(range(1, sig_len)):
-                buffer.unsafe_get(digit_start + i + 1) = buffer.unsafe_get(
-                    digit_start + i
-                )
-            buffer.unsafe_get(digit_start + 1) = `.`
-            buf_idx += sig_len + 1
+            # Digits go one past `out` to leave room for the point; the
+            # leading digit is copied down and the point written over it.
+            _write_digits(sig, out.unsafe_offset(sig_len + 1))
+            out[] = out[unsafe_offset=1]
+            out[unsafe_offset=1] = `.`
+            out = out.unsafe_offset(sig_len + 1)
         else:
-            buf_idx += 1
-
-        buffer.unsafe_get(buf_idx) = `e`
-        buf_idx += 1
-
-        var abs_e = Int(str_exp) if str_exp >= 0 else Int(-str_exp)
+            out[] = Byte(sig) + `0`
+            out = out.unsafe_offset(1)
+        out[] = `e`
+        out = out.unsafe_offset(1)
+        var abs_e = str_exp
         if str_exp < 0:
-            buffer.unsafe_get(buf_idx) = `-`
-            buf_idx += 1
-
+            abs_e = -str_exp
+            out[] = `-`
+            out = out.unsafe_offset(1)
         if abs_e < 10:
-            buffer.unsafe_get(buf_idx) = Byte(abs_e) + `0`
-            buf_idx += 1
+            out[] = Byte(abs_e) + `0`
+            out = out.unsafe_offset(1)
         elif abs_e < 100:
-            var pair = lut[DIGIT_PAIRS](abs_e)
-            buffer.unsafe_get(buf_idx) = pair[0]
-            buffer.unsafe_get(buf_idx + 1) = pair[1]
-            buf_idx += 2
+            out.unsafe_store(0, lut[DIGIT_PAIRS](abs_e))
+            out = out.unsafe_offset(2)
         else:
             var q = abs_e // 100
-            var r = Int(abs_e - (q * 100))
-            var pair = lut[DIGIT_PAIRS](r)
-            buffer.unsafe_get(buf_idx) = Byte(q) + `0`
-            buffer.unsafe_get(buf_idx + 1) = pair[0]
-            buffer.unsafe_get(buf_idx + 2) = pair[1]
-            buf_idx += 3
-
+            out[] = Byte(q) + `0`
+            out.unsafe_store(1, lut[DIGIT_PAIRS](abs_e - q * 100))
+            out = out.unsafe_offset(3)
     elif exp < 0 and leading_zeroes >= 0:
-        # Between 0.0001 and 0.9999
-        var shift_amount = 2 + Int(leading_zeroes)
-        for i in reversed(range(sig_len)):
-            buffer.unsafe_get(
-                digit_start + shift_amount + i
-            ) = buffer.unsafe_get(digit_start + i)
-
-        buffer.unsafe_get(digit_start) = `0`
-        buffer.unsafe_get(digit_start + 1) = `.`
-        for i in range(Int(leading_zeroes)):
-            buffer.unsafe_get(digit_start + 2 + i) = `0`
-
-        buf_idx += sig_len + shift_amount
-
+        # 0.[000]ddd  (at most three leading zeros)
+        out.unsafe_store(0, _ZERO_POINT)
+        out = out.unsafe_offset(2 + leading_zeroes)
+        _write_digits(sig, out.unsafe_offset(sig_len))
+        out = out.unsafe_offset(sig_len)
+    elif exp > 0:
+        # ddd[000].0  (exp <= 15 trailing zeros)
+        _write_digits(sig, out.unsafe_offset(sig_len))
+        out = out.unsafe_offset(sig_len)
+        out.unsafe_store(0, _ZEROS16)
+        out = out.unsafe_offset(exp)
+        out.unsafe_store(0, SIMD[DType.uint8, 2](`.`, `0`))
+        out = out.unsafe_offset(2)
     else:
-        var digits_before = Int(exp) + sig_len
-        var trailing = digits_before - sig_len
-        if trailing > 0:
-            buf_idx += sig_len
-            for _ in range(trailing):
-                buffer.unsafe_get(buf_idx) = `0`
-                buf_idx += 1
-            buffer.unsafe_get(buf_idx) = `.`
-            buf_idx += 1
-            buffer.unsafe_get(buf_idx) = `0`
-            buf_idx += 1
-        elif digits_before < sig_len:
-            for i in reversed(range(digits_before, sig_len)):
-                buffer.unsafe_get(digit_start + i + 1) = buffer.unsafe_get(
-                    digit_start + i
-                )
-            buffer.unsafe_get(digit_start + digits_before) = `.`
-            buf_idx += sig_len + 1
-        else:
-            buf_idx += sig_len
-            buffer.unsafe_get(buf_idx) = `.`
-            buf_idx += 1
-            buffer.unsafe_get(buf_idx) = `0`
-            buf_idx += 1
-
-    var str_slice = StringSlice(
-        unsafe_from_utf8=Span(unsafe_ptr=buffer.unsafe_ptr(), length=buf_idx)
-    )
-    writer.write(str_slice)
+        # ddd.0
+        _write_digits(sig, out.unsafe_offset(sig_len))
+        out = out.unsafe_offset(sig_len)
+        out.unsafe_store(0, SIMD[DType.uint8, 2](`.`, `0`))
+        out = out.unsafe_offset(2)
+    return out
 
 
 @fieldwise_init
@@ -268,30 +292,41 @@ def teju[dtype: DType](binary: Fields, out dec: Fields):
 
     var m_0: UInt64 = 1 << (mantissa_size - 1)
 
-    if m != m_0 or e == min_exponent:
-        var m_a = UInt64(2 * m - 1) << UInt64(r)
-        var a = mshift(m_a, u, l)
-        var m_b = UInt64(2 * m + 1) << UInt64(r)
-        var b = mshift(m_b, u, l)
-        var q = div10(b)
-        var s = 10 * q
+    if unlikely(m == m_0 and e != min_exponent):
+        # A mantissa that is exactly a power of two has an asymmetric
+        # rounding interval. Rare, and kept out of line so the compiler does
+        # not hoist its extra interval multiplications into the common path.
+        return _teju_uncentered[dtype](m_0, f, r, u, l)
 
-        if a < s:
-            if s < b or wins_tiebreak(m) or not is_tie(m_b, f):
-                return remove_trailing_zeros(q, f + 1)
-            elif s == a and wins_tiebreak(m) and is_tie(m_a, f):
-                return remove_trailing_zeros(q, f + 1)
+    var m_a = UInt64(2 * m - 1) << UInt64(r)
+    var a = mshift(m_a, u, l)
+    var m_b = UInt64(2 * m + 1) << UInt64(r)
+    var b = mshift(m_b, u, l)
+    var q = div10(b)
+    var s = 10 * q
 
-        if (a + b) & 1 == 1:
-            return Fields((a + b) // 2 + 1, f)
+    if a < s:
+        if s < b or wins_tiebreak(m) or not is_tie(m_b, f):
+            return remove_trailing_zeros(q, f + 1)
 
-        var m_c = UInt64(4) * m << UInt64(r)
-        var c_2 = mshift(m_c, u, l)
-        var c = c_2 // 2
+    if (a + b) & 1 == 1:
+        return Fields((a + b) // 2 + 1, f)
 
-        if wins_tiebreak(c_2) or (wins_tiebreak(c) and is_tie(c_2, -f)):
-            return Fields(c, f)
-        return Fields(c + 1, f)
+    var m_c = UInt64(4) * m << UInt64(r)
+    var c_2 = mshift(m_c, u, l)
+    var c = c_2 // 2
+
+    if wins_tiebreak(c_2) or (wins_tiebreak(c) and is_tie(c_2, -f)):
+        return Fields(c, f)
+    return Fields(c + 1, f)
+
+
+@no_inline
+def _teju_uncentered[
+    dtype: DType
+](m_0: UInt64, f: Int32, r: UInt32, u: UInt64, l: UInt64) -> Fields:
+    """The `m == m_0` case of `teju`, see the comment at its call site."""
+    comptime mantissa_size = UInt64(FPUtils[dtype].mantissa_width() + 1)
 
     var m_a = (4 * m_0 - 1) << UInt64(r)
     var a = mshift(m_a, u, l) // 2
