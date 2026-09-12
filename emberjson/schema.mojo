@@ -145,18 +145,11 @@ struct Validated[
         return self.value
 
 
-@always_inline
-def __is_in_range[
-    T: Comparable & _Base, min: T, max: T, exclusive: Bool
-](value: T,) -> Bool:
-    comptime if exclusive:
-        return value > materialize[min]() and value < materialize[max]()
-    else:
-        return value >= materialize[min]() and value <= materialize[max]()
-
-
 comptime Range[T: Comparable & _Base, min: T, max: T] = Validated[
-    T, __is_in_range[T, min, max, False], "Value out of range"
+    T,
+    lambda (value: T) -> Bool: value >= materialize[min]()
+    and value <= materialize[max](),
+    "Value out of range",
 ]
 """Validates a value to be within a given value range.
 
@@ -167,7 +160,10 @@ Parameters:
 """
 
 comptime ExclusiveRange[T: Comparable & _Base, min: T, max: T] = Validated[
-    T, __is_in_range[T, min, max, True], "Value out of range (exclusive)"
+    T,
+    lambda (value: T) -> Bool: value > materialize[min]()
+    and value < materialize[max](),
+    "Value out of range (exclusive)",
 ]
 """Validates a value to be strictly within a given range (exclusive bounds).
 
@@ -188,16 +184,10 @@ def _sized_len[T: _Base](value: T) -> Int:
         return rebind[downcast[T, Sized]](value).__len__()
 
 
-@always_inline
-def __is_in_size_range[
-    T: _Base, min: Int, max: Int
-](value: T,) -> Bool:
-    var n = _sized_len(value)
-    return n >= min and n <= max
-
-
 comptime Size[T: _Base, min: Int, max: Int] = Validated[
-    T, __is_in_size_range[T, min, max], "Value out of size range"
+    T,
+    lambda (value: T) -> Bool: min <= _sized_len(value) <= max,
+    "Value out of size range",
 ]
 """Validates a value to be within a given size range.
 
@@ -208,13 +198,10 @@ Parameters:
 """
 
 
-@always_inline
-def __is_non_empty[T: _Base](value: T) -> Bool:
-    return _sized_len(value) > 0
-
-
 comptime NonEmpty[T: _Base] = Validated[
-    T, __is_non_empty[T], "Value must not be empty"
+    T,
+    lambda (value: T) -> Bool: _sized_len(value) > 0,
+    "Value must not be empty",
 ]
 """Validates that a sized value is non-empty.
 
@@ -223,14 +210,9 @@ Parameters:
 """
 
 
-@always_inline
-def __starts_with[prefix: String](s: String) -> Bool:
-    return s.startswith(prefix)
-
-
 comptime StartsWith[prefix: String] = Validated[
     String,
-    __starts_with[prefix],
+    lambda (s: String) -> Bool: s.startswith(prefix),
     "Value does not start with expected prefix",
 ]
 """Validates that a string starts with a given prefix.
@@ -240,13 +222,10 @@ Parameters:
 """
 
 
-@always_inline
-def __ends_with[suffix: String](s: String) -> Bool:
-    return s.endswith(suffix)
-
-
 comptime EndsWith[suffix: String] = Validated[
-    String, __ends_with[suffix], "Value does not end with expected suffix"
+    String,
+    lambda (s: String) -> Bool: s.endswith(suffix),
+    "Value does not end with expected suffix",
 ]
 """Validates that a string ends with a given suffix.
 
@@ -301,13 +280,8 @@ Parameters:
 """
 
 
-@always_inline
-def __is_eq[T: Equatable & Deinitable, //, value: T](a: T) -> Bool:
-    return a == materialize[value]()
-
-
 comptime Eq[T: _Base & Equatable, //, value: T] = Validated[
-    T, __is_eq[value], "Value is not equal"
+    T, lambda (a: T) -> Bool: a == materialize[value](), "Value is not equal"
 ]
 """
 Validates a value to be equal to a given value.
@@ -517,16 +491,10 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
         return self.value
 
 
-@always_inline
-def __is_multiple_of[base: SIMD](v: type_of(base)) -> Bool:
-    comptime zeroes = type_of(base)(0)
-    return v % base == zeroes
-
-
 # TODO: Use some trait for this
 comptime MultipleOf[base: SIMD] = Validated[
     type_of(base),
-    __is_multiple_of[base],
+    lambda (v: type_of(base)) -> Bool: v % base == type_of(base)(0),
     "Value is not a multiple of " + String(base),
 ]
 """

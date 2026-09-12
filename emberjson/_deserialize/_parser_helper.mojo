@@ -76,11 +76,6 @@ def pack_into_integer(simd: SIMDBool) -> Bits_T:
 
 
 @always_inline
-def first_true(simd: SIMDBool) -> Bits_T:
-    return count_trailing_zeros(pack_into_integer(simd))
-
-
-@always_inline
 def ptr_dist(start: BytePtr, end: BytePtr) -> Int:
     return Int(end) - Int(start)
 
@@ -347,11 +342,6 @@ def copy_to_string[
 @always_inline
 def is_exp_char(char: Byte) -> Bool:
     return char == `e` or char == `E`
-
-
-@always_inline
-def is_sign_char(char: Byte) -> Bool:
-    return char == `+` or char == `-`
 
 
 @always_inline

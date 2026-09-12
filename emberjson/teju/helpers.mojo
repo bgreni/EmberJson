@@ -112,10 +112,5 @@ def is_tie_uncentered(m_a: UInt64, f: Int32) -> Bool:
 
 
 @always_inline
-def is_div_pow2(val: UInt64, e: Int32) -> Bool:
-    return val & UInt64((1 << e) - 1) == 0
-
-
-@always_inline
 def wins_tiebreak(val: UInt64) -> Bool:
     return val & 1 == 0
