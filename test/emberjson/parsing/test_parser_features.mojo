@@ -1,4 +1,4 @@
-from emberjson import from_json, try_from_json, ParseOptions, Value
+from emberjson import from_json, try_from_json, ParseOptions, Value, Document
 from std.testing import (
     assert_true,
     assert_false,
@@ -226,6 +226,75 @@ def test_utf8_validated_composes_with_padded() raises:
     comptime both = ParseOptions()._utf8_validated()._padded()
     assert_false(both.validate_utf8)
     assert_true(both._assume_padded)
+
+
+comptime _IGNORE_UNICODE = ParseOptions(ignore_unicode=True)
+
+
+def test_ignore_unicode_keeps_well_formed_escapes_raw() raises:
+    var v = from_json[Value, _IGNORE_UNICODE]('{"k":"\\u0041"}')
+    assert_equal(v.object()["k"].string().byte_length(), 6)
+    var pair = from_json[Value, _IGNORE_UNICODE]('{"k":"\\uD83D\\uDE00"}')
+    assert_equal(pair.object()["k"].string().byte_length(), 12)
+
+
+def test_ignore_unicode_does_not_validate_escapes() raises:
+    # Documented contract: the flag is a trusted-input speed knob. Malformed
+    # escapes are stored raw, never decoded, never rejected.
+    var v = from_json[Value, _IGNORE_UNICODE]('{"k":"\\u12G4"}')
+    assert_equal(v.object()["k"].string().byte_length(), 6)
+    var d = from_json[Document, _IGNORE_UNICODE]('{"k":"\\uD800"}')
+    _ = d
+
+
+def test_out_of_range_integers_fall_back_to_float_on_every_path() raises:
+    var big: List[String] = ["18446744073709551616", "-9223372036854775809"]
+    for s in big:
+        var v = from_json[Value](s)
+        assert_true(v.is_float())
+        var d = from_json[Document](s)
+        assert_true(d.root().is_float())
+        var l = from_json[List[Float64]]("[" + s + "]")
+        assert_equal(l[0], v.float())
+    assert_equal(
+        from_json[Value]("18446744073709551616").float(), 1.8446744073709552e19
+    )
+
+
+def test_float_overflow_raises_and_underflow_rounds_to_zero_everywhere() raises:
+    var nines = String()
+    for _ in range(400):
+        nines += "9"
+    for s in [String("1e400"), nines]:
+        with assert_raises():
+            _ = from_json[Value](s)
+        with assert_raises():
+            _ = from_json[Document](s)
+        with assert_raises():
+            _ = from_json[List[Float64]]("[" + s + "]")
+    assert_equal(from_json[Value]("1e-400").float(), 0.0)
+    assert_equal(from_json[List[Float64]]("[1e-400]")[0], 0.0)
+
+
+def test_integer_targets_still_reject_overflow() raises:
+    with assert_raises():
+        _ = from_json[Int64]("9223372036854775808")
+    with assert_raises():
+        _ = from_json[List[Int64]]("[18446744073709551616]")
+
+
+def test_int64_min_stays_signed_on_every_path() raises:
+    # Magnitude exceeds Int64.MAX by one; must not be misread as UInt64.
+    var s = String("-9223372036854775808")
+    var v = from_json[Value](s)
+    assert_true(v.is_int())
+    assert_equal(v.int(), Int64.MIN)
+    var d = from_json[Document](s)
+    assert_true(d.root().is_int())
+    assert_equal(d.root().int(), Int64.MIN)
+    assert_equal(from_json[List[Int64]]("[" + s + "]")[0], Int64.MIN)
+    # One past the boundary falls back to Float64 on the DOM paths
+    assert_true(from_json[Value]("-9223372036854775809").is_float())
 
 
 def main() raises:

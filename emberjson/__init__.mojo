@@ -25,6 +25,7 @@ from ._serde import (
     to_json as _to_json,
     DefaultIndent,
 )
+from ._serde.serializer import _is_json_whitespace
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
 from ._pointer import PointerIndex
@@ -108,24 +109,18 @@ def _parse_value_root[
     Safe because the returned `Value` owns all of its data. Tiny inputs
     skip the copy: the allocation would cost more than the parse.
 
-    `Parser.parse()` still raises a bare `Error`; every syntax failure it
-    can produce is a malformed-JSON condition, so it is translated to
-    `DeserializationError(..., DerErrorKind.InvalidValue)` here rather
-    than propagated untyped.
+    `Parser.parse()` raises `DeserializationError` itself, with the kind
+    chosen at the failure site (F16), so nothing is translated here: a
+    duplicate key arrives as `DuplicateField`, not flattened into
+    `InvalidValue` by a blanket re-wrap.
     """
     if s.byte_length() < PAD_INPUT_THRESHOLD:
         var p = Parser[options=options](s)
-        try:
-            j = p.parse()
-        except e:
-            raise DeserializationError(String(e), DerErrorKind.InvalidValue)
+        j = p.parse()
     else:
         var buf = PaddedBuffer(s.as_bytes())
         var p = Parser[options=options._padded()](padded=buf)
-        try:
-            j = p.parse()
-        except e:
-            raise DeserializationError(String(e), DerErrorKind.InvalidValue)
+        j = p.parse()
 
 
 def from_json[
@@ -174,12 +169,20 @@ def from_json[
     comptime if T == Value:
         result = _rebind_var[T](_parse_value_root[checked](s))
     elif T == Document:
-        # `_parse_document_root` still raises a bare `Error`; translate it
-        # so this entry point's contract is uniformly typed.
-        try:
-            result = _rebind_var[T](_parse_document_root[checked](s))
-        except e:
-            raise DeserializationError(String(e), DerErrorKind.InvalidValue)
+        comptime assert not (
+            StrictOptions.ALLOW_DUPLICATE_KEYS in options.strict_mode
+        ), (
+            "`Document` does not support `ALLOW_DUPLICATE_KEYS` (or `LENIENT`,"
+            " which includes it): the tape keeps every entry and would re-emit"
+            " text the strict parser rejects. Use `ALLOW_TRAILING_COMMA` alone,"
+            " or parse into `Value` for last-write-wins."
+        )
+        # `_parse_document_root` and the tape builders under it raise
+        # `DeserializationError` themselves (F16 fix round 1), so nothing
+        # is translated here: a duplicate key arrives as `DuplicateField`,
+        # exactly as it does on the `Value` path, and the message carries
+        # a single kind suffix instead of one per re-wrap.
+        result = _rebind_var[T](_parse_document_root[checked](s))
     else:
         # NOTE: the reflection branch must stay UNPADDED. `raw_bytes`
         # refuses `_assume_padded` because a `PaddedBuffer` is a local
@@ -250,6 +253,9 @@ def to_json[
     Raises:
         `SerializationError` if `value` cannot be serialized.
     """
+    comptime assert _is_json_whitespace(
+        indent
+    ), "`indent` must contain only JSON whitespace (space, tab, LF, CR)"
     comptime if T == Document:
         # `Document` writes straight off the tape and has only a
         # condensed writer -- there is no indented tape walk to call.
@@ -289,4 +295,7 @@ def to_json_pretty[
     Raises:
         `SerializationError` if `value` cannot be serialized.
     """
+    comptime assert _is_json_whitespace(
+        indent
+    ), "`indent` must contain only JSON whitespace (space, tab, LF, CR)"
     output = to_json[pretty=True, indent=indent](value)

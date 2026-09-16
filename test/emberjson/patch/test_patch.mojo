@@ -1,5 +1,5 @@
 from std.testing import assert_equal, assert_raises, TestSuite
-from emberjson import Value, Object, Array
+from emberjson import Value, Object, Array, from_json, to_json
 from emberjson.patch._patch import patch
 
 
@@ -149,6 +149,81 @@ def test_patch_from_string() raises:
 
     assert_equal(doc["foo"], "changed")
     assert_equal(doc["baz"], "qux")
+
+
+def test_non_string_op_path_from_are_rejected_and_leave_doc_unchanged() raises:
+    var doc = from_json[Value]('{"a": 1}')
+    var bad: List[String] = [
+        '[{"op": 1, "path": "/a", "value": 2}]',
+        '[{"op": null, "path": "/a", "value": 2}]',
+        '[{"op": true, "path": "/a", "value": 2}]',
+        '[{"op": [], "path": "/a", "value": 2}]',
+        '[{"op": {}, "path": "/a", "value": 2}]',
+        '[{"op": 1e308, "path": "/a", "value": 2}]',
+        '[{"op": "add", "path": 1, "value": 2}]',
+        '[{"op": "add", "path": null, "value": 2}]',
+        '[{"op": "add", "path": {}, "value": 2}]',
+        '[{"op": "add", "path": [], "value": 2}]',
+        '[{"op": "add", "path": true, "value": 2}]',
+        '[{"op": "add", "path": 9007199254740993, "value": 2}]',
+        '[{"op": "remove", "path": 1}]',
+        '[{"op": "replace", "path": 1e308, "value": 2}]',
+        '[{"op": "test", "path": false, "value": 2}]',
+        '[{"op": "move", "from": 1, "path": "/b"}]',
+        '[{"op": "copy", "from": {}, "path": "/b"}]',
+    ]
+    for s in bad:
+        with assert_raises():
+            patch(doc, s)
+        assert_equal(to_json(doc), '{"a":1}')
+
+
+def test_non_string_root_path_does_not_replace_document() raises:
+    var doc = from_json[Value]("{}")
+    with assert_raises():
+        patch(doc, '[{"op": "add", "path": {}, "value": 1}]')
+    assert_equal(to_json(doc), "{}")
+
+
+def test_op_test_uses_numeric_equality() raises:
+    var docs: List[String] = [
+        '{"a":1}',
+        '{"a":1.0}',
+        '{"a":100}',
+        '{"a":1e2}',
+        '{"a":3}',
+        '{"a":-0.0}',
+        '{"a":[1]}',
+        '{"a":{"x":1}}',
+    ]
+    var values: List[String] = [
+        "1.0",
+        "1",
+        "1e2",
+        "100",
+        "3e0",
+        "0",
+        "[1.0]",
+        '{"x":1.0}',
+    ]
+    for i in range(len(docs)):
+        var doc = from_json[Value](docs[i])
+        patch(doc, '[{"op":"test","path":"/a","value":' + values[i] + "}]")
+
+
+def test_op_test_still_distinguishes_types_and_values() raises:
+    var docs: List[String] = [
+        '{"a":"1"}',
+        '{"a":true}',
+        '{"a":false}',
+        '{"a":false}',
+        '{"a":2}',
+    ]
+    var values: List[String] = ["1", "1", "0", "null", "2.0000000000000004"]
+    for i in range(len(docs)):
+        var doc = from_json[Value](docs[i])
+        with assert_raises():
+            patch(doc, '[{"op":"test","path":"/a","value":' + values[i] + "}]")
 
 
 def main() raises:

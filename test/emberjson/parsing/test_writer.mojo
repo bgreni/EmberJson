@@ -35,12 +35,12 @@ def test_pretty_print_array() raises:
     assert_equal(expected, to_json_pretty(arr))
 
     expected = """[
-iamateapot123,
-iamateapot"foo",
-iamateapotfalse,
-iamateapotnull
+  123,
+  "foo",
+  false,
+  null
 ]"""
-    assert_equal(expected, to_json_pretty[indent="iamateapot"](arr))
+    assert_equal(expected, to_json_pretty[indent="  "](arr))
 
     arr = from_json[Value]('[123,"foo",false,{"key": null}]')
     expected = """[

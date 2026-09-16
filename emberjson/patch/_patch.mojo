@@ -15,6 +15,20 @@ def check_key(command: Object, key: String) raises:
         raise Error('invalid patch operation expect "', key, '" key')
 
 
+@always_inline
+def _string_member(command: Object, key: String) raises -> String:
+    """Returns the `key` member of a patch operation, which RFC 6902 §4
+    requires to be a string. `Value.string()` is an unchecked variant read,
+    so the arm must be tested first; a non-string member is an error, never
+    a reinterpretation."""
+    if key not in command:
+        raise Error('invalid patch operation expect "', key, '" key')
+    ref member = command[key]
+    if not member.is_string():
+        raise Error('invalid patch operation: "', key, '" must be a string')
+    return String(member.string())
+
+
 def parse_patches(s: String) raises -> Array:
     return Array(parse_string=s)
 
@@ -35,10 +49,7 @@ def patch(mut v: Value, commands: Array) raises:
 
 
 def _apply_op(mut v: Value, command: Object) raises:
-    check_key(command, "op")
-
-    ref op = command["op"]
-    ref op_str = op.string()
+    var op_str = _string_member(command, "op")
 
     if op_str == Add:
         _apply_add(v, command)
@@ -57,11 +68,10 @@ def _apply_op(mut v: Value, command: Object) raises:
 
 
 def _apply_add(mut v: Value, command: Object) raises:
-    check_key(command, "path")
     check_key(command, "value")
 
     ref value = command["value"]
-    ref path_str = command["path"].string()
+    var path_str = _string_member(command, "path")
 
     if path_str == "":
         v = value.copy()
@@ -87,9 +97,8 @@ def _apply_add(mut v: Value, command: Object) raises:
 
 
 def _apply_remove(mut v: Value, command: Object) raises:
-    check_key(command, "path")
+    var path_str = _string_member(command, "path")
 
-    ref path_str = command["path"].string()
     if path_str == "":
         raise Error("Cannot remove root")
 
@@ -110,10 +119,9 @@ def _apply_remove(mut v: Value, command: Object) raises:
 
 
 def _apply_replace(mut v: Value, command: Object) raises:
-    check_key(command, "path")
     check_key(command, "value")
 
-    var path_str = command["path"].string()
+    var path_str = _string_member(command, "path")
     ref value = command["value"]
 
     if path_str == "":
@@ -142,11 +150,8 @@ def _apply_replace(mut v: Value, command: Object) raises:
 
 
 def _apply_move(mut v: Value, command: Object) raises:
-    check_key(command, "from")
-    check_key(command, "path")
-
-    ref from_path = command["from"].string()
-    ref to_path = command["path"].string()
+    var from_path = _string_member(command, "from")
+    var to_path = _string_member(command, "path")
 
     if to_path.startswith(from_path + "/"):
         raise Error("Cannot move to child of from location")
@@ -169,11 +174,8 @@ def _apply_move(mut v: Value, command: Object) raises:
 
 
 def _apply_copy(mut v: Value, command: Object) raises:
-    check_key(command, "from")
-    check_key(command, "path")
-
-    ref from_path = command["from"].string()
-    ref to_path = command["path"].string()
+    var from_path = _string_member(command, "from")
+    var to_path = _string_member(command, "path")
 
     var val_to_copy = resolve_pointer(v, PointerIndex(from_path)).copy()
 
@@ -185,19 +187,60 @@ def _apply_copy(mut v: Value, command: Object) raises:
 
 
 def _apply_test(mut v: Value, command: Object) raises:
-    check_key(command, "path")
     check_key(command, "value")
 
-    ref path = command["path"].string()
+    var path = _string_member(command, "path")
     ref expected = command["value"]
 
     ref actual = resolve_pointer(v, PointerIndex(path))
 
-    if actual != expected:
+    if not _json_equal(actual, expected):
         raise Error("Test failed: values differ at " + path)
 
 
 # --- Helpers ---
+
+
+def _as_float(v: Value) -> Float64:
+    if v.is_float():
+        return v.float()
+    if v.is_int():
+        return Float64(v.int())
+    return Float64(v.uint())
+
+
+def _json_equal(a: Value, b: Value) raises -> Bool:
+    """RFC 6902 §4.6 equality. Numbers compare by value whichever arm holds
+    them (integers beyond 2^53 are compared through Float64, the documented
+    interop limit); arrays element-wise; objects by member set regardless of
+    order; everything else defers to `Value.__eq__`."""
+    var a_num = a.is_int() or a.is_uint() or a.is_float()
+    var b_num = b.is_int() or b.is_uint() or b.is_float()
+    if a_num and b_num:
+        if a.is_float() or b.is_float():
+            return _as_float(a) == _as_float(b)
+        return a == b
+    if a.is_array() and b.is_array():
+        ref x = a.array()
+        ref y = b.array()
+        if len(x) != len(y):
+            return False
+        for i in range(len(x)):
+            if not _json_equal(x[i], y[i]):
+                return False
+        return True
+    if a.is_object() and b.is_object():
+        ref x = a.object()
+        ref y = b.object()
+        if len(x) != len(y):
+            return False
+        for key in x.keys():
+            if key not in y:
+                return False
+            if not _json_equal(x[key], y[key]):
+                return False
+        return True
+    return a == b
 
 
 def _resolve_parent_ptr(

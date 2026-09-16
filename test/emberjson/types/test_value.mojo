@@ -1,5 +1,5 @@
 from emberjson.value import Value, Null
-from emberjson import Object, Array, to_json_pretty
+from emberjson import Object, Array, to_json, to_json_pretty
 from std.sys import size_of
 from std.testing import (
     assert_equal,
@@ -310,6 +310,16 @@ def test_value_size() raises:
     assert_equal(size_of[Value](), 32)
     assert_equal(size_of[Object](), 24)
     assert_equal(size_of[Array](), 24)
+
+
+def test_negative_int_literal_is_a_signed_value() raises:
+    assert_equal(to_json(Value(-1)), "-1")
+    assert_equal(to_json(Value(-5)), "-5")
+    assert_equal(to_json(Value(-100)), "-100")
+    assert_true(Value(-1).is_int())
+    assert_true(Value(-1) == Value(Int64(-1)))
+    # the unsigned range is still reached for large positive literals
+    assert_true(Value(18446744073709551615).is_uint())
 
 
 def main() raises:

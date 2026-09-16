@@ -46,6 +46,14 @@ def _write_indent[indent: String](mut out: Some[Writer], depth: Int):
         out.write(indent)
 
 
+def _is_json_whitespace(s: String) -> Bool:
+    """RFC 8259 §2: ws = *( %x20 / %x09 / %x0A / %x0D )."""
+    for b in s.as_bytes():
+        if b != 0x20 and b != 0x09 and b != 0x0A and b != 0x0D:
+            return False
+    return True
+
+
 @fieldwise_init
 struct EmberJsonSeqSer[
     W: Writer & Movable & Deinitable,

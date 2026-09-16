@@ -1,5 +1,5 @@
 from std.testing import assert_equal, TestSuite
-from emberjson import Value, Object, Array, Null
+from emberjson import Value, Object, Array, Null, from_json, to_json
 from emberjson.patch._merge import merge_patch
 
 
@@ -175,6 +175,40 @@ def test_merge_null_string() raises:
     var target = Value("foo")
     merge_patch(target, "null")
     assert_equal(target, Null())
+
+
+def test_merge_patch_strips_nulls_inside_newly_created_members() raises:
+    var cases: List[String] = [
+        "{}",
+        "{}",
+        '{"x":1}',
+        "{}",
+        '{"a":{"x":1}}',
+    ]
+    var patches: List[String] = [
+        '{"a":{"bb":{"ccc":null}}}',
+        '{"a":{"b":null}}',
+        '{"a":{"b":{"c":null,"d":2}}}',
+        '{"a":{"b":{"c":{"d":1,"e":null}}}}',
+        '{"a":{"bb":{"ccc":null}}}',
+    ]
+    var expected: List[String] = [
+        '{"a":{"bb":{}}}',
+        '{"a":{}}',
+        '{"x":1,"a":{"b":{"d":2}}}',
+        '{"a":{"b":{"c":{"d":1}}}}',
+        '{"a":{"x":1,"bb":{}}}',
+    ]
+    for i in range(len(cases)):
+        var target = from_json[Value](cases[i])
+        merge_patch(target, patches[i])
+        assert_equal(to_json(target), expected[i])
+
+
+def test_merge_patch_keeps_existing_target_nulls() raises:
+    var target = from_json[Value]('{"e":null}')
+    merge_patch(target, '{"a":1}')
+    assert_equal(to_json(target), '{"e":null,"a":1}')
 
 
 def main() raises:

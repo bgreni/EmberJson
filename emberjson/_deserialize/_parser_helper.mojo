@@ -33,6 +33,7 @@ from std.memory.unsafe import bitcast, pack_bits
 from std.bit import count_trailing_zeros
 from std.sys.info import bit_width_of
 from std.sys.intrinsics import likely, unlikely
+from emberserde.error import DeserializationError, DerErrorKind
 
 comptime smallest_power: Int64 = -342
 comptime largest_power: Int64 = 308
@@ -153,11 +154,13 @@ def is_hex_digits(c: ByteVec[4]) -> Bool:
 
 
 @always_inline
-def hex_to_u32(p: BytePtr) raises -> UInt32:
+def hex_to_u32(p: BytePtr) raises DeserializationError -> UInt32:
     var bytes = p.unsafe_load[width=4]()
 
     if unlikely(not is_hex_digits(bytes)):
-        raise Error("Invalid hex digit encountered")
+        raise DeserializationError(
+            "Invalid hex digit encountered", DerErrorKind.InvalidValue
+        )
 
     var v = bytes.cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
@@ -168,18 +171,22 @@ def hex_to_u32(p: BytePtr) raises -> UInt32:
 
 def handle_unicode_codepoint(
     mut p: BytePtr, mut dest: List[UInt8], end: BytePtr
-) raises:
+) raises DeserializationError:
     # TODO: is this check necessary or just being paranoid?
     # because theoretically no string can be built with "\u" only
     # But if this points to bytes received over the wire, it makes sense
     # unless we use _is_valid_utf8 at the beginning of where this is called
     if unlikely(p.unsafe_offset(3) >= end):
-        raise Error("Bad unicode codepoint")
+        raise DeserializationError(
+            "Bad unicode codepoint", DerErrorKind.InvalidValue
+        )
     var c1 = hex_to_u32(p)
     p = p.unsafe_offset(4)
 
     if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
-        raise Error("Invalid unicode: lone surrogate")
+        raise DeserializationError(
+            "Invalid unicode: lone surrogate", DerErrorKind.InvalidValue
+        )
     # NOTE: incredibly, this is part of the JSON standard (thanks javascript...)
     # ECMA-404 2nd Edition / December 2017. Section 9:
     # To escape a code point that is not in the Basic Multilingual Plane, the
@@ -192,21 +199,27 @@ def handle_unicode_codepoint(
     if c1 >= 0xD800 and c1 < 0xDC00:
         # TODO: same as the above TODO
         if unlikely(p.unsafe_offset(5) >= end):
-            raise Error("Bad unicode codepoint")
+            raise DeserializationError(
+                "Bad unicode codepoint", DerErrorKind.InvalidValue
+            )
         elif unlikely(not (p[] == `\\` and p[unsafe_offset=1] == `u`)):
-            raise Error("Bad unicode codepoint")
+            raise DeserializationError(
+                "Bad unicode codepoint", DerErrorKind.InvalidValue
+            )
 
         p = p.unsafe_offset(2)
         var c2 = hex_to_u32(p)
 
         if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
-            raise Error("Bad unicode codepoint")
+            raise DeserializationError(
+                "Bad unicode codepoint", DerErrorKind.InvalidValue
+            )
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
         p = p.unsafe_offset(4)
 
     if unlikely(c1 > 0x10FFFF):
-        raise Error("Invalid unicode")
+        raise DeserializationError("Invalid unicode", DerErrorKind.InvalidValue)
 
     if c1 < 0x80:
         dest.append(UInt8(c1))
@@ -251,7 +264,7 @@ def copy_to_string[
     end: BytePtr,
     found_escaped: Bool = True,
     first_escape: Int = 0,
-) raises -> String:
+) raises DeserializationError -> String:
     """Materializes the string bytes in [start, end) into a `String`.
 
     `first_escape` is the offset of the first backslash when the caller
@@ -262,7 +275,7 @@ def copy_to_string[
     var length = ptr_dist(start, end)
 
     @__parameter
-    def decode_escaped() raises -> String:
+    def decode_escaped() raises DeserializationError -> String:
         # This will usually slightly overallocate if the string contains
         # escaped unicode
         var dest = List[UInt8](capacity=length)
@@ -321,7 +334,10 @@ def copy_to_string[
                         dest.append(`\t`)
                         p = p.unsafe_offset(1)
                     else:
-                        raise Error("Invalid escape sequence")
+                        raise DeserializationError(
+                            "Invalid escape sequence",
+                            DerErrorKind.InvalidValue,
+                        )
         return String(unsafe_from_utf8=dest^)
 
     comptime if not ignore_unicode:

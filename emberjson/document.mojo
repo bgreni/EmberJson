@@ -8,6 +8,7 @@ from ._deserialize.tape import (
     TapeSink,
 )
 from ._deserialize.tape_indexed import parse_document_tape_indexed
+from emberserde.error import DeserializationError, DerErrorKind
 from ._deserialize.tape import (
     TapeTag,
     CLOSE_MASK,
@@ -543,7 +544,7 @@ def _write_tape_value(doc: Document, idx: Int, mut writer: Some[Writer]) -> Int:
 
 def _parse_document_root[
     o: ImmOrigin, //, options: ParseOptions
-](s: StringSlice[o]) raises -> Document:
+](s: StringSlice[o]) raises DeserializationError -> Document:
     """`parse_document`'s parse, with the UTF-8 pre-pass removed.
 
     Split out so `emberjson.from_json` can run the pre-pass once at the

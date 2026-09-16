@@ -15,6 +15,7 @@ from std.builtin.dtype import _uint_type_of_width
 from std.sys.info import bit_width_of
 from std.utils.numerics import FPUtils
 from std.sys.intrinsics import unlikely
+from emberserde.error import DeserializationError, DerErrorKind
 
 
 comptime MAX_DIGITS = 768
@@ -181,12 +182,16 @@ struct AdjustedMantissa(TrivialRegisterPassable):
 
 def from_chars_slow[
     dtype: DType
-](out value: Scalar[dtype], var first: CheckedPointer) raises:
+](
+    out value: Scalar[dtype], var first: CheckedPointer
+) raises DeserializationError:
     comptime mantissa_explicit_bits = FPUtils[dtype].mantissa_width()
     comptime uint_dtype = _uint_type_of_width[bit_width_of[dtype]()]()
 
     if unlikely(first[] == `+`):
-        raise Error('Expected digit of "-", found "+"')
+        raise DeserializationError(
+            'Expected digit of "-", found "+"', DerErrorKind.InvalidValue
+        )
 
     var negative = first[] == `-`
     first += Int(negative)
@@ -205,7 +210,7 @@ def from_chars_slow[
 
 def compute_float[
     dtype: DType
-](out answer: AdjustedMantissa, var d: Decimal) raises:
+](out answer: AdjustedMantissa, var d: Decimal) raises DeserializationError:
     comptime mantissa_explicit_bits = FPUtils[dtype].mantissa_width()
     comptime minimum_exponent = -FPUtils[dtype].exponent_bias()
     comptime infinite_power = (1 << FPUtils[dtype].exponent_width()) - 1
@@ -215,7 +220,7 @@ def compute_float[
         return
 
     if d.decimal_point >= 310:
-        raise Error("Infinite float")
+        raise DeserializationError("Infinite float", DerErrorKind.InvalidValue)
 
     comptime MAX_SHIFT = 60
     comptime NUM_POWERS = 19
@@ -250,7 +255,9 @@ def compute_float[
         d <<= shift
 
         if d.decimal_point > DECIMAL_POINT_RANGE:
-            raise Error("Infinite float")
+            raise DeserializationError(
+                "Infinite float", DerErrorKind.InvalidValue
+            )
 
         exp2 -= Int32(shift)
 
@@ -264,7 +271,7 @@ def compute_float[
         exp2 += Int32(n)
 
     if exp2 - Int32(minimum_exponent) >= Int32(infinite_power):
-        raise Error("Infinite float")
+        raise DeserializationError("Infinite float", DerErrorKind.InvalidValue)
 
     comptime mantissa_size_in_bits = mantissa_explicit_bits + 1
     d <<= UInt64(mantissa_size_in_bits)
@@ -276,7 +283,9 @@ def compute_float[
         exp2 += 1
         mantissa = d.round()
         if exp2 - Int32(minimum_exponent) >= Int32(infinite_power):
-            raise Error("Infinite float")
+            raise DeserializationError(
+                "Infinite float", DerErrorKind.InvalidValue
+            )
 
     answer.power2 = Int(exp2 - Int32(minimum_exponent))
     if mantissa < (UInt64(1) << UInt64(mantissa_explicit_bits)):
@@ -287,14 +296,16 @@ def compute_float[
     )
 
 
-def parse_decimal(out answer: Decimal, mut p: CheckedPointer) raises:
+def parse_decimal(
+    out answer: Decimal, mut p: CheckedPointer
+) raises DeserializationError:
     answer = Decimal(
         0, 0, False, p[] == `-`, StackArray[Byte, MAX_DIGITS](fill=0)
     )
 
     @__parameter
     @always_inline
-    def consume_digits() raises:
+    def consume_digits() raises DeserializationError:
         while p.dist() > 0 and isdigit(p[]):
             if answer.num_digits < MAX_DIGITS:
                 answer.digits[answer.num_digits] = p[] - `0`

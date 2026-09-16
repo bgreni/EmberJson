@@ -233,6 +233,22 @@ def test_object_duplicate_keys_last_write_wins_in_lenient_mode() raises:
     assert_equal(o["a"].int(), 2)
 
 
+def test_dict_rejects_duplicate_keys_in_strict_mode() raises:
+    with assert_raises():
+        _ = from_json[Dict[String, Int]]('{"a":1,"a":2}')
+    with assert_raises():
+        _ = from_json[Dict[String, Dict[String, Int]]]('{"o":{"a":1,"a":2}}')
+
+
+def test_dict_takes_last_write_under_allow_duplicate_keys() raises:
+    comptime lenient = ParseOptions(
+        strict_mode=StrictOptions.ALLOW_DUPLICATE_KEYS
+    )
+    var d = from_json[Dict[String, Int], lenient]('{"a":1,"a":2}')
+    assert_equal(len(d), 1)
+    assert_equal(d["a"], 2)
+
+
 def test_field_names_honor_ignore_unicode() raises:
     # `from_json[Value]` stores keys raw under `ignore_unicode`; field-name
     # matching must agree, so an escaped key no longer binds.
@@ -262,6 +278,21 @@ def test_from_json_accepts_a_string_slice() raises:
     var p = from_json[Point](slice)
     assert_equal(p.x, 7)
     assert_equal(p.y, 9)
+
+
+def test_leading_plus_is_rejected_on_the_float_path() raises:
+    with assert_raises():
+        _ = from_json[Float64]("+1")
+    with assert_raises():
+        _ = from_json[List[Float64]]("[+1]")
+    with assert_raises():
+        _ = from_json[List[Float64]]("[ +1 ]")
+    with assert_raises():
+        _ = from_json[List[Float64]]("[+1e5]")
+    with assert_raises():
+        _ = from_json[Dict[String, Float64]]('{"a":+1}')
+    # exponent signs stay legal
+    assert_equal(from_json[List[Float64]]("[-1.5, 1e+5, -1e+5]")[1], 100000.0)
 
 
 def main() raises:

@@ -259,5 +259,265 @@ def test_embedded_nul_after_scalar_is_rejected() raises:
             _ = from_json[Value](as_slice(in_array))
 
 
+# ===========================================================================
+# RFC 8259 SS7: every byte U+0000-U+001F inside a JSON string must be
+# escaped. The serial fallback scanners (`Parser.read_serial` and the
+# matching fallback in `_tape_string`) only rejected \n \t \r, so any other
+# raw control byte -- including an embedded NUL -- parsed successfully
+# whenever the string was scanned by the serial path rather than the SIMD
+# scanner. That happens for short (unpadded) inputs whose string opens with
+# fewer than SIMD8_WIDTH bytes remaining.
+# ===========================================================================
+
+
+def test_raw_control_byte_in_string_is_rejected() raises:
+    def with_byte(
+        prefix: StringSlice, byte: Byte, suffix: StringSlice
+    ) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(byte)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    for byte in [Byte(0x00), Byte(0x01), Byte(0x1F)]:
+        var data = with_byte('["a', byte, 'a"]')
+        with assert_raises():
+            _ = from_json[Value](as_slice(data))
+        with assert_raises():
+            _ = from_json[Document](as_slice(data))
+
+
+def test_raw_control_byte_in_string_rejected_via_reflection() raises:
+    def with_byte(
+        prefix: StringSlice, byte: Byte, suffix: StringSlice
+    ) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(byte)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    var data = with_byte('["a', 0, 'a"]')
+    with assert_raises():
+        _ = from_json[List[String]](as_slice(data))
+
+
+def test_raw_nul_in_object_key_is_rejected() raises:
+    def with_byte(
+        prefix: StringSlice, byte: Byte, suffix: StringSlice
+    ) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(byte)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    var data = with_byte('{"a', 0, 'b":1}')
+    with assert_raises():
+        _ = from_json[Value](as_slice(data))
+    with assert_raises():
+        _ = from_json[Document](as_slice(data))
+
+
+def test_raw_nul_in_top_level_string_is_rejected() raises:
+    def with_byte(
+        prefix: StringSlice, byte: Byte, suffix: StringSlice
+    ) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(byte)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    var data = with_byte('"a', 0, 'a"')
+    with assert_raises():
+        _ = from_json[Value](as_slice(data))
+    with assert_raises():
+        _ = from_json[Document](as_slice(data))
+
+
+def test_raw_control_byte_rejected_at_every_scanner_boundary() raises:
+    def with_byte(
+        prefix: StringSlice, byte: Byte, suffix: StringSlice
+    ) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(byte)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    # Filler string elements used only to push the "a<NUL>a" string's
+    # opening quote to a chosen offset in the overall buffer.
+    var filler40 = String()
+    for _ in range(4):
+        filler40 += "0123456789"
+
+    var filler120 = String()
+    for _ in range(12):
+        filler120 += "0123456789"
+
+    # (a) "a<NUL>a" first in a 50-byte array: opens with >= SIMD8_WIDTH
+    # bytes remaining, so the SIMD scanner handles it.
+    var simd_path = with_byte('["a', 0, 'a","' + filler40 + '"]')
+    with assert_raises():
+        _ = from_json[Value](as_slice(simd_path))
+    with assert_raises():
+        _ = from_json[Document](as_slice(simd_path))
+
+    # (b) "a<NUL>a" last in a 50-byte array: opens with < SIMD8_WIDTH bytes
+    # remaining, so the unpadded parse falls back to the serial scanner.
+    var serial_path = with_byte('["' + filler40 + '","a', 0, 'a"]')
+    with assert_raises():
+        _ = from_json[Value](as_slice(serial_path))
+    with assert_raises():
+        _ = from_json[Document](as_slice(serial_path))
+
+    # (c) "a<NUL>a" last in a >=130-byte array: total length crosses
+    # PAD_INPUT_THRESHOLD, so the padded engine (always SIMD) handles it.
+    var padded_path = with_byte('["' + filler120 + '","a', 0, 'a"]')
+    with assert_raises():
+        _ = from_json[Value](as_slice(padded_path))
+    with assert_raises():
+        _ = from_json[Document](as_slice(padded_path))
+
+
+def test_escaped_and_printable_bytes_still_accepted() raises:
+    def with_byte(
+        prefix: StringSlice, byte: Byte, suffix: StringSlice
+    ) -> List[Byte]:
+        var out = List[Byte]()
+        for b in prefix.as_bytes():
+            out.append(b)
+        out.append(byte)
+        for b in suffix.as_bytes():
+            out.append(b)
+        return out^
+
+    def as_slice(ref bytes: List[Byte]) -> StringSlice[origin_of(bytes)]:
+        return StringSlice(unsafe_from_utf8=Span(bytes))
+
+    # A properly-escaped NUL (a six-character escape sequence, no raw
+    # byte) decodes to a single NUL byte, giving a 3-byte string element.
+    var escaped_nul = from_json[Value]('["a\\u0000a"]')
+    assert_equal(escaped_nul.array()[0].string().byte_length(), 3)
+
+    # Raw DEL (0x7F) is not a control character under RFC 8259 SS7 and must
+    # still be accepted unescaped.
+    var del_data = with_byte('["a', 0x7F, 'a"]')
+    _ = from_json[Value](as_slice(del_data))
+    _ = from_json[Document](as_slice(del_data))
+
+    # An escaped newline (backslash-n, not a raw LF byte) continues to
+    # parse correctly.
+    _ = from_json[Value]('["a\\na"]')
+    _ = from_json[Document]('["a\\na"]')
+
+
+# ===========================================================================
+# [F3] `minify` reads past the end of a truncated string
+# The string branch of `minify` never checked whether an escape (or a
+# fallback chunk) ran the cursor off the end of the input before loading
+# another `StringBlock` there; an unterminated escape let it walk past the
+# buffer and copy garbage bytes into the output instead of raising.
+# ===========================================================================
+
+
+def test_minify_rejects_string_whose_escape_runs_into_eof() raises:
+    # quote, backslash: the escape has no body
+    with assert_raises():
+        _ = minify('"\\')
+    # quote, backslash, quote: the escape consumes the closing quote
+    with assert_raises():
+        _ = minify('"\\"')
+    with assert_raises():
+        _ = minify('["\\"]')
+    # well-formed neighbours must be untouched
+    assert_equal(minify('"a\\\\"'), '"a\\\\"')
+    assert_equal(minify('"a\\""'), '"a\\""')
+    assert_equal(minify('{"a": "x y"}'), '{"a":"x y"}')
+
+
+# ===========================================================================
+# [F4] The recursive `Value`/`Document` parsers have no nesting-depth limit
+# The tape builder (`tape_indexed.mojo`) caps container nesting against a
+# fixed-size scope stack, but the recursive-descent `Value` parser recurses
+# on every open bracket with no counter at all — deeply nested input can
+# overflow the call stack instead of raising a clean parse error.
+# ===========================================================================
+
+
+def _nested(open: String, close: String, n: Int, middle: String) -> String:
+    var s = String()
+    for _ in range(n):
+        s += open
+    s += middle
+    for _ in range(n):
+        s += close
+    return s^
+
+
+def test_nesting_at_the_limit_parses_on_every_strategy() raises:
+    var ok = _nested("[", "]", 1024, "")
+    _ = from_json[Value](ok)
+    _ = from_json[Document](ok)
+
+
+def test_nesting_beyond_the_limit_is_rejected_not_a_crash() raises:
+    var arrays = _nested("[", "]", 1025, "")
+    with assert_raises():
+        _ = from_json[Value](arrays)
+    with assert_raises():
+        _ = from_json[Document](arrays)
+    var objects = _nested('{"a":', "}", 1025, "1")
+    with assert_raises():
+        _ = from_json[Value](objects)
+    with assert_raises():
+        _ = from_json[Document](objects)
+    # reflection reaches the same parser through `Value`-typed elements
+    var via_reflection = _nested("[", "]", 2000, "")
+    with assert_raises():
+        _ = from_json[List[Value]](via_reflection)
+    # 50 000 levels used to segfault `Value`; it must now be a clean raise
+    var deep = _nested("[", "]", 50_000, "")
+    with assert_raises():
+        _ = from_json[Value](deep)
+
+
+def test_minify_trailing_whitespace_does_not_over_read() raises:
+    var doc = String('{"a":"xy"}')
+    var padded = doc + String(" ") * 45
+    assert_equal(minify(padded), doc)
+    var spaces_only = String(" ") * 40
+    assert_equal(minify(spaces_only), "")
+    var leading = String(" ") * 20 + "[1, 2]" + String(" ") * 33
+    assert_equal(minify(leading), "[1,2]")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

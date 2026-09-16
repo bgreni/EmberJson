@@ -6,7 +6,7 @@ from ._parser_helper import (
     hex_to_u32,
     is_numerical_component,
 )
-from emberjson.utils import BytePtr, ByteVec, to_string
+from emberjson.utils import BytePtr, to_string
 from emberjson.simd import SIMD8_WIDTH
 from emberjson.constants import (
     `"`,
@@ -34,6 +34,7 @@ from emberjson.constants import (
 from std.memory import unsafe_memcpy, unsafe_memcmp
 from std.memory.alloc import unsafe_alloc
 from std.sys.intrinsics import unlikely, likely
+from emberserde.error import DeserializationError, DerErrorKind
 
 
 #######################################################
@@ -213,7 +214,7 @@ def _handle_unicode_codepoint_ptr[
     mut p: BytePtr[o1],
     mut w: Pointer[Byte, MutUntrackedOrigin],
     end: BytePtr[o2],
-) raises:
+) raises DeserializationError:
     """`handle_unicode_codepoint` retargeted at a raw write pointer.
 
     Safety:
@@ -221,29 +222,39 @@ def _handle_unicode_codepoint_ptr[
         codepoint never emits more bytes than its escape sequence spans.
     """
     if unlikely(p.unsafe_offset(3) >= end):
-        raise Error("Bad unicode codepoint")
+        raise DeserializationError(
+            "Bad unicode codepoint", DerErrorKind.InvalidValue
+        )
     var c1 = hex_to_u32(p)
     p = p.unsafe_offset(4)
 
     if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
-        raise Error("Invalid unicode: lone surrogate")
+        raise DeserializationError(
+            "Invalid unicode: lone surrogate", DerErrorKind.InvalidValue
+        )
     if c1 >= 0xD800 and c1 < 0xDC00:
         if unlikely(p.unsafe_offset(5) >= end):
-            raise Error("Bad unicode codepoint")
+            raise DeserializationError(
+                "Bad unicode codepoint", DerErrorKind.InvalidValue
+            )
         elif unlikely(not (p[] == `\\` and p[unsafe_offset=1] == `u`)):
-            raise Error("Bad unicode codepoint")
+            raise DeserializationError(
+                "Bad unicode codepoint", DerErrorKind.InvalidValue
+            )
 
         p = p.unsafe_offset(2)
         var c2 = hex_to_u32(p)
 
         if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
-            raise Error("Bad unicode codepoint")
+            raise DeserializationError(
+                "Bad unicode codepoint", DerErrorKind.InvalidValue
+            )
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
         p = p.unsafe_offset(4)
 
     if unlikely(c1 > 0x10FFFF):
-        raise Error("Invalid unicode")
+        raise DeserializationError("Invalid unicode", DerErrorKind.InvalidValue)
 
     if c1 < 0x80:
         w[] = UInt8(c1)
@@ -273,7 +284,7 @@ def _arena_write[
     end: BytePtr,
     found_escaped: Bool,
     first_escape: Int,
-) raises -> Int:
+) raises DeserializationError -> Int:
     """Appends the string bytes in [start, end) to the arena as
     `u32 length + bytes + NUL`, returning the entry's offset.
 
@@ -346,7 +357,9 @@ def _arena_write[
                         w = w.unsafe_offset(1)
                         p = p.unsafe_offset(1)
                     else:
-                        raise Error("Invalid escape sequence")
+                        raise DeserializationError(
+                            "Invalid escape sequence", DerErrorKind.InvalidValue
+                        )
         final_len = Int(w) - Int(content)
     else:
         unsafe_memcpy(dest=content, src=start, count=raw_len)
@@ -362,7 +375,9 @@ def _arena_write[
 
 def _tape_string[
     origin: ImmOrigin, options: ParseOptions, //
-](mut p: Parser[origin, options], mut sink: TapeSink) raises:
+](
+    mut p: Parser[origin, options], mut sink: TapeSink
+) raises DeserializationError:
     """Scans the string at the cursor (mirroring `Parser.find` /
     `Parser.read_serial`) and appends it to the arena + tape."""
     p.data += 1
@@ -386,14 +401,17 @@ def _tape_string[
                 p.data += 1
                 break
             elif unlikely(p.data.p >= p.data.end):
-                raise Error("Unexpected EOF")
+                raise DeserializationError(
+                    "Unexpected EOF", DerErrorKind.InvalidValue
+                )
 
             if unlikely(block.has_unescaped()):
-                raise Error(
-                    "Control characters must be escaped: ",
-                    to_string(p.load_chunk()),
-                    " : ",
-                    String(block.unescaped_index()),
+                raise DeserializationError(
+                    String("Control characters must be escaped: ")
+                    + String(to_string(p.load_chunk()))
+                    + String(" : ")
+                    + String(String(block.unescaped_index())),
+                    DerErrorKind.InvalidValue,
                 )
             if not block.has_backslash():
                 p.data += SIMD8_WIDTH
@@ -410,10 +428,11 @@ def _tape_string[
                     break
                 else:
                     if unlikely(p.cur() not in acceptable_escapes):
-                        raise Error(
-                            "Invalid escape sequence: ",
-                            to_string(p.data[-1]),
-                            to_string(p.cur()),
+                        raise DeserializationError(
+                            String("Invalid escape sequence: ")
+                            + String(to_string(p.data[-1]))
+                            + String(to_string(p.cur())),
+                            DerErrorKind.InvalidValue,
                         )
                 p.data += 1
                 if p.cur() != `\\`:
@@ -421,7 +440,9 @@ def _tape_string[
     else:
         while True:
             if unlikely(not p.has_more()):
-                raise Error("Invalid String")
+                raise DeserializationError(
+                    "Invalid String", DerErrorKind.InvalidValue
+                )
             if p.data[] == `"`:
                 end_ptr = p.data.p
                 p.data += 1
@@ -429,17 +450,18 @@ def _tape_string[
             if p.data[] == `\\`:
                 p.data += 1
                 if unlikely(p.data[] not in acceptable_escapes):
-                    raise Error(
-                        "Invalid escape sequence: ",
-                        to_string(p.data[-1]),
-                        to_string(p.data[]),
+                    raise DeserializationError(
+                        String("Invalid escape sequence: ")
+                        + String(to_string(p.data[-1]))
+                        + String(to_string(p.data[])),
+                        DerErrorKind.InvalidValue,
                     )
                 found_escaped = True
-            comptime control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
-            if unlikely(p.data[] in control_chars):
-                raise Error(
-                    "Control characters must be escaped: ",
-                    String(p.data[]),
+            if unlikely(p.data[] < 0x20):
+                raise DeserializationError(
+                    String("Control characters must be escaped: ")
+                    + String(String(p.data[])),
+                    DerErrorKind.InvalidValue,
                 )
             p.data += 1
 
@@ -486,7 +508,9 @@ def _key_disc(strings: _Arena, off: Int) -> UInt64:
     return acc
 
 
-def _push_and_check_key(mut sink: TapeSink, base: Int, key_off: Int) raises:
+def _push_and_check_key(
+    mut sink: TapeSink, base: Int, key_off: Int
+) raises DeserializationError:
     """Strict-mode duplicate detection for the key at `key_off`, against
     the keys recorded since `base` (this object's slice of the shared
     scratch stacks)."""
@@ -496,14 +520,22 @@ def _push_and_check_key(mut sink: TapeSink, base: Int, key_off: Int) raises:
             sink.key_hashes[i] == h
             and _arena_str_eq(sink.strings, Int(sink.key_offs[i]), key_off)
         ):
-            raise Error("Duplicate key: ", _arena_view(sink.strings, key_off))
+            # Rule 3: the strict-mode duplicate-key raise, matching
+            # `Object._append_for_parse` on the `Value` path.
+            raise DeserializationError(
+                String("Duplicate key: ")
+                + String(_arena_view(sink.strings, key_off)),
+                DerErrorKind.DuplicateField,
+            )
     sink.key_hashes.append(h)
     sink.key_offs.append(UInt32(key_off))
 
 
 def _tape_object[
     origin: ImmOrigin, options: ParseOptions, //
-](mut p: Parser[origin, options], mut sink: TapeSink) raises:
+](
+    mut p: Parser[origin, options], mut sink: TapeSink
+) raises DeserializationError:
     p.data += 1
     p.skip_whitespace()
 
@@ -517,7 +549,9 @@ def _tape_object[
     else:
         while True:
             if unlikely(p.cur() != `"`):
-                raise Error("Invalid identifier")
+                raise DeserializationError(
+                    "Invalid identifier", DerErrorKind.InvalidValue
+                )
             _tape_string(p, sink)
             comptime if (
                 StrictOptions.ALLOW_DUPLICATE_KEYS not in options.strict_mode
@@ -529,7 +563,10 @@ def _tape_object[
                 )
             p.skip_whitespace()
             if unlikely(p.cur() != `:`):
-                raise Error("Invalid identifier : ", p.remaining())
+                raise DeserializationError(
+                    String("Invalid identifier : ") + String(p.remaining()),
+                    DerErrorKind.InvalidValue,
+                )
             p.data += 1
             _tape_value(p, sink)
             count += 1
@@ -546,12 +583,18 @@ def _tape_object[
                     in options.strict_mode
                 ):
                     if has_comma:
-                        raise Error("Illegal trailing comma")
+                        raise DeserializationError(
+                            "Illegal trailing comma", DerErrorKind.InvalidValue
+                        )
                 break
             elif not has_comma:
-                raise Error("Expected ',' or '}'")
+                raise DeserializationError(
+                    "Expected ',' or '}'", DerErrorKind.InvalidValue
+                )
             if unlikely(p.bytes_remaining() == 0):
-                raise Error("Expected '}'")
+                raise DeserializationError(
+                    "Expected '}'", DerErrorKind.InvalidValue
+                )
 
     p.data += 1
     p.skip_whitespace()
@@ -566,7 +609,9 @@ def _tape_object[
 
 def _tape_array[
     origin: ImmOrigin, options: ParseOptions, //
-](mut p: Parser[origin, options], mut sink: TapeSink) raises:
+](
+    mut p: Parser[origin, options], mut sink: TapeSink
+) raises DeserializationError:
     p.data += 1
     p.skip_whitespace()
 
@@ -592,12 +637,18 @@ def _tape_array[
                     not in options.strict_mode
                 ):
                     if has_comma:
-                        raise Error("Illegal trailing comma")
+                        raise DeserializationError(
+                            "Illegal trailing comma", DerErrorKind.InvalidValue
+                        )
                 break
             elif unlikely(not has_comma):
-                raise Error("Expected ',' or ']'")
+                raise DeserializationError(
+                    "Expected ',' or ']'", DerErrorKind.InvalidValue
+                )
             if unlikely(not p.has_more()):
-                raise Error("Expected ']'")
+                raise DeserializationError(
+                    "Expected ']'", DerErrorKind.InvalidValue
+                )
 
     p.data += 1
     p.skip_whitespace()
@@ -609,7 +660,9 @@ def _tape_array[
 
 def _tape_value[
     origin: ImmOrigin, options: ParseOptions, //
-](mut p: Parser[origin, options], mut sink: TapeSink) raises:
+](
+    mut p: Parser[origin, options], mut sink: TapeSink
+) raises DeserializationError:
     p.skip_whitespace()
     var b = p.cur()
     if b == `"`:
@@ -633,12 +686,16 @@ def _tape_value[
         sink.tape.append(_pack_word(TapeTag.INT64 + r.kind, 0))
         sink.tape.append(r.bits)
     else:
-        raise Error("Invalid json value")
+        raise DeserializationError(
+            "Invalid json value", DerErrorKind.InvalidValue
+        )
 
 
 def parse_document_tape[
     origin: ImmOrigin, options: ParseOptions, //
-](mut p: Parser[origin, options], mut sink: TapeSink) raises:
+](
+    mut p: Parser[origin, options], mut sink: TapeSink
+) raises DeserializationError:
     """Parses the parser's whole input onto `sink`, enforcing the same
     grammar, strictness and trailing-input rules as `Parser.parse`."""
     p.skip_whitespace()
@@ -646,7 +703,8 @@ def parse_document_tape[
 
     p.skip_whitespace()
     if unlikely(p.has_more()):
-        raise Error(
-            "Invalid json, expected end of input, recieved: ",
-            p.remaining(),
+        raise DeserializationError(
+            String("Invalid json, expected end of input, received: ")
+            + String(p.remaining()),
+            DerErrorKind.InvalidValue,
         )

@@ -21,19 +21,21 @@ bench_compare = { cmd = "./bench --print-relative && rm bench", depends-on=["bui
 bench_float = "mojo compare_algo.mojo"
 bench_write_results = { cmd = "./bench --overwrite && rm bench", depends-on=["build_bench"] }
 update_and_build = { cmd = "pixi update && pixi run test && pixi run build" }
-precommit = { depends-on = ["format", "test", "test_python_compat", "fuzz"] }
+precommit = { depends-on = ["check_lock_compilers", "format", "test", "test_python_compat", "fuzz"] }
 update_and_test = "pixi update && pixi run test && pixi run bench_compare"
 test_python_compat = "python python_compat.py"
 fuzz = "mojo -D ASSERT=all fuzz.mojo"
 gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 gen_large = "python tools/gen_large_datasets.py"
+check_lock_compilers = "python tools/check_lock_compilers.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = ">=1.1.0.dev2026090905,<2"
-# Local source dependency while the emberserde port is in flight; swap for the
-# git spec once the API settles.
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
+mojo = "==1.1.0rc0"
+# Pinned to a commit so it only moves when this rev is bumped, and so the
+# nightly canary can re-solve emberserde's build environment against a new
+# compiler (`pixi update mojo emberserde`) without also pulling new commits.
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4d4bdd3a956fd8cea25ac1d3ab222a8a538f1cee" }
 
 
 
@@ -45,17 +47,17 @@ version = "0.4.0"
 backend = { name = "pixi-build-mojo", version = ">=0.2.6,<0.3" }
 
 [package.host-dependencies]
-mojo-compiler = ">=1.1.0.dev2026090905,<2"
+mojo-compiler = "==1.1.0rc0"
 
 # The library imports emberserde throughout (`__init__`, `value`, `object`,
 # `array`, `lazy`, `schema`, `traits`, `_serde/`), so `mojo precompile`
 # needs its `.mojoc` next to the compiler (build env) and consumers need it
 # at run time -- the workspace [dependencies] entry above only covers dev
-# tasks. Keep all three in sync (swap them for the git spec together).
+# tasks. Keep all three in sync, `rev` included.
 [package.build-dependencies]
-mojo-compiler = ">=1.1.0.dev2026090905,<2"
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
+mojo-compiler = "==1.1.0rc0"
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4d4bdd3a956fd8cea25ac1d3ab222a8a538f1cee" }
 
 [package.run-dependencies]
-mojo-compiler = ">=1.1.0.dev2026090905,<2"
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git" }
+mojo-compiler = "==1.1.0rc0"
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4d4bdd3a956fd8cea25ac1d3ab222a8a538f1cee" }

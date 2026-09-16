@@ -31,5 +31,26 @@ def test_read_lines_big() raises:
         i += 1
 
 
+def test_read_lines_on_a_directory_raises() raises:
+    with assert_raises(contains="is a directory"):
+        _ = read_lines("test/emberjson/parsing")
+
+
+def test_leading_bom_is_stripped_from_the_first_record() raises:
+    var bom_file = String("/tmp/emberjson_bom.jsonl")
+    var bytes = List[Byte]()
+    bytes.append(0xEF)
+    bytes.append(0xBB)
+    bytes.append(0xBF)
+    for b in String("1\n2\n").as_bytes():
+        bytes.append(b)
+    with open(bom_file, "w") as f:
+        f.write_bytes(Span(bytes))
+    var got = read_lines(bom_file).collect()
+    assert_equal(len(got), 2)
+    assert_equal(got[0].int(), 1)
+    assert_equal(got[1].int(), 2)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

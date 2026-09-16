@@ -15,9 +15,12 @@
 name: Nightly canary
 
 on:
-  schedule:
-    # Modular publishes nightlies around 05:30 UTC; give them a few hours.
-    - cron: "0 9 * * *"
+  # The daily schedule is off while the toolchain is being pinned to the 1.1.0
+  # release candidate instead of tracking nightlies. Re-enable it by
+  # uncommenting the cron below; a manual run still works from the Actions tab.
+  # schedule:
+  #   # Modular publishes nightlies around 05:30 UTC; give them a few hours.
+  #   - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       simulate_failure:
@@ -84,9 +87,12 @@ jobs:
           PR_BRANCH: ${{ steps.pr.outputs.pr_branch }}
         run: |
           set -o pipefail
-          # Only the Mojo toolchain moves; emberserde stays at its locked commit
-          # so the nightly is the single variable under test.
-          pixi update mojo
+          # emberserde is built from source in its own build environment, which
+          # `pixi update mojo` alone leaves on the old compiler, and its
+          # `.mojoc` only loads with the compiler that built it. Naming it too
+          # re-solves that environment; the `rev` pin in pixi.toml keeps its
+          # commit fixed, so the nightly is still the single variable under test.
+          pixi update mojo emberserde
           version="$(pixi run mojo --version | awk '{print $2}')"
           echo "mojo_version=$version" >> "$GITHUB_OUTPUT"
           {
@@ -103,9 +109,10 @@ jobs:
           # Every stage runs even after an earlier one fails, so one log shows
           # the whole breakage surface. Stage names are the pixi task names.
           # Bench numbers from a shared runner are noise; that stage only checks
-          # that the harness still compiles and runs.
+          # that the harness still compiles and runs. check_lock_compilers goes
+          # first: when it fails, the other stages' errors are all fallout.
           failed_stages=""
-          for stage in test build test_python_compat fuzz bench; do
+          for stage in check_lock_compilers test build test_python_compat fuzz bench; do
             echo "::group::stage $stage"
             echo "=== stage $stage: START ===" | tee -a canary.log
             if pixi run "$stage" 2>&1 | tee -a canary.log; then
@@ -272,8 +279,12 @@ jobs:
             failed: ${{ env.FAILED_STAGES }}. Get every stage passing on that nightly
             and open a pull request for a human to review.
 
-            The canary runs five pixi tasks in order, and each is a stage:
-            `test` (the unit tests), `build` (`mojo precompile` of the library),
+            The canary runs six pixi tasks in order, and each is a stage:
+            `check_lock_compilers` (asserts `pixi.lock` names one Mojo compiler;
+            when it fails, `emberserde.mojoc` was built by a different compiler,
+            every other stage's errors are fallout from that, and the fix is
+            `pixi update mojo emberserde`, not source edits), `test` (the unit
+            tests), `build` (`mojo precompile` of the library),
             `test_python_compat` (imports the Mojo Python extension in
             `emberjson_python.mojo` through `mojo.importer` and parses a file),
             `fuzz` (the property tests in `fuzz.mojo`), and `bench` (compiles and
@@ -307,9 +318,10 @@ jobs:
             4. If the errors point into emberserde, the git dependency built from
                source, do not patch around them in this repo. Describe the emberserde
                failure in the PR body instead.
-            5. Before committing, run `pixi run format`, then confirm all five stages
-               pass: `pixi run test`, `pixi run build`, `pixi run test_python_compat`,
-               `pixi run fuzz`, and `pixi run bench`.
+            5. Before committing, run `pixi run format`, then confirm all six stages
+               pass: `pixi run check_lock_compilers`, `pixi run test`,
+               `pixi run build`, `pixi run test_python_compat`, `pixi run fuzz`,
+               and `pixi run bench`.
             ${{ env.DELIVERY }}
 
             Never push to main.

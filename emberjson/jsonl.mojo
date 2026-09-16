@@ -59,11 +59,15 @@ struct JSONLinesIter(Iterator):
     var f: FileHandle
     var next_object: Value
     var read_buf: _ReadBuffer
+    var first: Bool
+    var read_error: Optional[String]
 
     def __init__(out self, var file: FileHandle):
         self.f = file^
         self.next_object = Value()
         self.read_buf = _ReadBuffer()
+        self.first = True
+        self.read_error = None
 
     def __next__(mut self, out j: Value) raises StopIteration:
         # Loop so blank lines and malformed lines don't truncate the stream:
@@ -79,6 +83,22 @@ struct JSONLinesIter(Iterator):
 
             if len(line) == 0:
                 continue
+
+            if self.first:
+                self.first = False
+                if (
+                    len(line) >= 3
+                    and line[0] == 0xEF
+                    and line[1] == 0xBB
+                    and line[2] == 0xBF
+                ):
+                    var stripped = List[Byte](length=len(line) - 3, fill=0)
+                    unsafe_memcpy(
+                        dest=stripped.unsafe_ptr(),
+                        src=line.unsafe_ptr().unsafe_offset(3),
+                        count=len(line) - 3,
+                    )
+                    line = stripped^
 
             try:
                 j = Value(
@@ -100,6 +120,8 @@ struct JSONLinesIter(Iterator):
                 l.append(self.__next__())
             except StopIteration:
                 break
+        if self.read_error:
+            raise Error(self.read_error.value())
 
     def _read_until_newline(mut self) raises -> List[Byte]:
         ref file = self.f
@@ -126,7 +148,12 @@ struct JSONLinesIter(Iterator):
                 ),
                 length=self.read_buf.BUFFER_SIZE - self.read_buf.length,
             )
-            var read = file.read(buf_span)
+            var read: Int
+            try:
+                read = file.read(buf_span)
+            except e:
+                self.read_error = String(e)
+                raise Error("EOF")
             self.read_buf.length += read
 
             if read <= 0:
@@ -176,6 +203,18 @@ struct JSONLinesIter(Iterator):
 
 
 def read_lines(p: Some[PathLike]) raises -> JSONLinesIter:
+    """Opens `p` and returns an iterator over its JSON Lines records.
+
+    Note:
+        A `for` loop over the returned iterator cannot surface an I/O read
+        error: the `Iterator` protocol only allows `__next__` to raise
+        `StopIteration`, so a failed read looks identical to a clean
+        end-of-file. Use `collect()`, which re-raises any recorded error
+        after exhausting the iterator, or inspect the iterator's
+        `read_error` field directly.
+    """
+    if Path(p.__fspath__()).is_dir():
+        raise Error("read_lines: '", p.__fspath__(), "' is a directory")
     return JSONLinesIter(open(p, "r"))
 
 

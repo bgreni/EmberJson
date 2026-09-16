@@ -1,4 +1,5 @@
-from emberjson import Value, PointerIndex
+from emberjson import Value, PointerIndex, from_json, parse_pointer
+from emberjson._pointer import unescape, parse_int
 from std.testing import assert_equal, assert_raises, assert_true, TestSuite
 
 
@@ -134,6 +135,54 @@ def test_value_sugar() raises:
     # Write using backticks on intermediate Value
     j.users[1].`name` = "Bob Dylan"
     assert_equal(j.users[1].name.string(), "Bob Dylan")
+
+
+def test_pointer_escape_preserves_non_ascii_bytes() raises:
+    var j = from_json[Value]('{"h~éllo": 1, "é~x": 2, "~é": 3, "a/😀": 4}')
+    assert_equal(j.get("/h~0éllo").int(), 1)
+    assert_equal(j.get("/é~0x").int(), 2)
+    assert_equal(j.get("/~0é").int(), 3)
+    assert_equal(j.get("/a~1😀").int(), 4)
+    assert_equal(unescape("h~0éllo"), "h~éllo")
+    assert_equal(unescape("h~0éllo").byte_length(), 7)
+
+
+def test_pointer_invalid_tilde_escape_is_a_syntax_error() raises:
+    var j = from_json[Value]('{"~": 5, "x~2y": 16, "a~b": 7, "~1": 9}')
+    var bad: List[String] = [
+        "/~",
+        "/~2",
+        "/x~2y",
+        "/a~",
+        "/~0~",
+        "/~9~1",
+        "/a~b",
+    ]
+    for p in bad:
+        with assert_raises():
+            _ = j.get(p)
+    # the same keys stay reachable through the RFC spelling
+    assert_equal(j.get("/~0").int(), 5)
+    assert_equal(j.get("/x~02y").int(), 16)
+    assert_equal(j.get("/a~0b").int(), 7)
+    assert_equal(j.get("/~01").int(), 9)
+
+
+def test_pointer_index_overflow_falls_back_to_string_key() raises:
+    with assert_raises():
+        _ = parse_int("26678799368473580175")
+    assert_equal(parse_int("9223372036854775807"), Int.MAX)
+    var j = from_json[Value](
+        '{"26678799368473580175": 1, "99999999999999999999": 2}'
+    )
+    assert_equal(j.get("/26678799368473580175").int(), 1)
+    assert_equal(j.get("/99999999999999999999").int(), 2)
+    assert_equal(
+        parse_pointer(
+            '{"27218869431608750394": 2}', "/27218869431608750394"
+        ).int(),
+        2,
+    )
 
 
 def main() raises:

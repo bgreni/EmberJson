@@ -6,8 +6,8 @@ def merge_patch(mut target: Value, patch: String) raises:
 
 
 def merge_patch(mut target: Value, patch: Value) raises:
-    """Applies a JSON Merge Patch (RFC 7386) to the target value.
-    The target is modified in-place.
+    """Applies a JSON Merge Patch (RFC 7396, which obsoletes RFC 7386) to
+    the target value. The target is modified in place.
     """
     if patch.is_object():
         if not target.is_object():
@@ -29,13 +29,13 @@ def merge_patch(mut target: Value, patch: Value) raises:
                 if key in target.object():
                     target.object().pop(key)
             else:
-                # Add or update
+                # RFC 7396 §2: Target[Name] = MergePatch(Target[Name], Value).
+                # An absent member is "undefined"; seed it with null so the
+                # recursion sees a non-object and applies the same rules
+                # (nulls inside the patch subtree are directives, not data).
                 if key not in target.object():
-                    target[key] = patch_val.copy()
-                else:
-                    # Recursive merge
-                    # We need to get a mutable reference to the target child
-                    merge_patch(target[key], patch_val)
+                    target[key] = Value()
+                merge_patch(target[key], patch_val)
     else:
         # If the patch is not an object, it replaces the target.
         target = patch.copy()

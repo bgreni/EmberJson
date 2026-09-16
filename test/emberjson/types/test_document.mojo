@@ -229,14 +229,17 @@ def test_strictness() raises:
         _ = from_json[Document]('{"a": 1, "a": 2}')
 
     comptime lenient = ParseOptions(strict_mode=StrictOptions.LENIENT)
-    var d = from_json[Document, lenient]("[1, 2,]")
+    comptime trailing_comma = ParseOptions(
+        strict_mode=StrictOptions.ALLOW_TRAILING_COMMA
+    )
+    var d = from_json[Document, trailing_comma]("[1, 2,]")
     assert_equal(len(d.root()), 2)
 
-    # Lenient duplicate keys: last-write-wins, matching the DOM parser.
-    var d2 = from_json[Document, lenient]('{"a": 1, "b": 2, "a": 3}')
-    assert_equal(d2.root()["a"].int(), 3)
+    # `Document` refuses `ALLOW_DUPLICATE_KEYS` (and `LENIENT`, which
+    # includes it) at compile time -- only `Value` supports lenient
+    # duplicate keys, with last-write-wins semantics.
     var v2 = from_json[Value, lenient]('{"a": 1, "b": 2, "a": 3}')
-    assert_true(d2.to_value() == v2)
+    assert_equal(v2["a"].int(), 3)
 
 
 def test_errors() raises:

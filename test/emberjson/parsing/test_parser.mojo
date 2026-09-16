@@ -325,13 +325,13 @@ def test_unicode_byte_lengths() raises:
 
 def test_trailing_tokens() raises:
     with assert_raises(
-        contains="Invalid json, expected end of input, recieved: garbage tokens"
+        contains="Invalid json, expected end of input, received: garbage tokens"
     ):
         _ = from_json[Value]("[1, null, false] garbage tokens")
 
     with assert_raises(
         contains=(
-            'Invalid json, expected end of input, recieved: "trailing string"'
+            'Invalid json, expected end of input, received: "trailing string"'
         )
     ):
         _ = from_json[Value]('{"key": null} "trailing string"')

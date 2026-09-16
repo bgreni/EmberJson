@@ -8,51 +8,66 @@ from std.sys.intrinsics import unlikely
 
 
 def parse_int(s: String) raises -> Int:
-    # Simple integer parser
-    var res = 0
+    # Decimal digits only; overflow is detected before the multiply so a wrap
+    # can never land on a plausible-looking positive value.
     if s == "":
         raise Error("Empty string is not an integer")
     var bytes = s.as_bytes()
+    if len(bytes) > 19:
+        raise Error("Integer overflow parsing JSON pointer ref")
+    var res = 0
     for i in range(len(bytes)):
         var b = bytes[i]
         if b < 48 or b > 57:
             raise Error("Invalid integer: " + s)
-        var old = res
-        res = res * 10 + Int(b - 48)
-
-        if res < old:
+        var d = Int(b - 48)
+        if res > (Int.MAX - d) // 10:
             raise Error("Integer overflow parsing JSON pointer ref")
+        res = res * 10 + d
     return res
 
 
-def unescape(token: StringSlice) -> String:
-    # RFC 6901 Escaping:
-    # ~1 -> /
-    # ~0 -> ~
+def unescape(token: StringSlice) raises -> String:
+    """RFC 6901 §3: `~1` → `/`, `~0` → `~`, in that order of evaluation;
+    any other `~` is a syntax error. Bytes between escapes are copied as
+    runs so multi-byte UTF-8 sequences stay intact (a `~` is ASCII, so it can
+    never split one)."""
     if "~" not in token:
         return String(token)
 
     var out = String()
-    var i = 0
     var bytes = token.as_bytes()
+    var start = 0
+    var i = 0
     while i < len(bytes):
-        if bytes[i] == 126:  # ~
-            if i + 1 < len(bytes):
-                var next = bytes[i + 1]
-                if next == 49:  # 1
-                    out.write("/")
-                    i += 2
-                    continue
-                elif next == 48:  # 0
-                    out.write("~")
-                    i += 2
-                    continue
+        if bytes[i] != 126:  # not '~'
+            i += 1
+            continue
+        if i > start:
+            out.write(token[byte=start:i])
+        if i + 1 >= len(bytes):
+            raise Error(
+                "Invalid JSON Pointer escape: trailing '~' in token '"
+                + String(token)
+                + "'"
+            )
+        var next = bytes[i + 1]
+        if next == 49:  # '1'
+            out.write("/")
+        elif next == 48:  # '0'
             out.write("~")
-            i += 1
         else:
-            out.write(Codepoint(bytes[i]))
-            i += 1
-    return out
+            raise Error(
+                "Invalid JSON Pointer escape: '~' must be followed by '0' or"
+                " '1' in token '"
+                + String(token)
+                + "'"
+            )
+        i += 2
+        start = i
+    if start < len(bytes):
+        out.write(token[byte = start : len(bytes)])
+    return out^
 
 
 comptime PointerToken = Variant[String, Int]

@@ -3,6 +3,7 @@ from emberjson import (
     parse_pointer,
     try_parse_pointer,
     to_json,
+    DerErrorKind,
     PointerIndex,
     Value,
 )
@@ -120,6 +121,37 @@ def test_corpus_paths() raises:
             to_json(want),
             String("corpus mismatch: ") + path + " " + pointer,
         )
+
+
+def test_truncated_document_after_colon_raises_instead_of_aborting() raises:
+    var docs: List[String] = ['{"a":', '{"a":{"b":', '{"a": 1, "b": {"c":']
+    var paths: List[String] = ["/a", "/a/b", "/b/c"]
+    for i in range(len(docs)):
+        with assert_raises():
+            _ = parse_pointer(docs[i], paths[i])
+        assert_false(try_parse_pointer(docs[i], paths[i]))
+
+
+def test_parse_pointer_agrees_on_escapes() raises:
+    assert_equal(parse_pointer('{"h~éllo": 1}', "/h~0éllo").int(), 1)
+    with assert_raises():
+        _ = parse_pointer('{"x~2y": 16}', "/x~2y")
+
+
+def test_parse_pointer_raises_typed_errors() raises:
+    # The plain-`String`-path overload of `parse_pointer` builds
+    # `PointerIndex` inside its own `try`, so this stays exactly the
+    # public form documented in the module docstring/README/CLAUDE.md --
+    # no local helper or pre-built `PointerIndex` needed.
+    var kind = DerErrorKind.Custom
+    var raised = False
+    try:
+        _ = parse_pointer('{"a":1}', "/b")
+    except e:
+        kind = e.kind
+        raised = True
+    assert_true(raised)
+    assert_equal(kind, DerErrorKind.InvalidValue)
 
 
 def main() raises:

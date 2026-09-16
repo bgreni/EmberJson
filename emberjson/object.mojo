@@ -285,7 +285,7 @@ struct Object(JsonValue, Sized):
         var key: String,
         var item: Value,
         mut index: _ObjectParseIndex,
-    ) raises:
+    ) raises DeserializationError:
         """Parser-only insertion: hashes the key and searches once, combining
         the duplicate-key check with the insert. In strict mode
         (`allow_duplicates=False`) a duplicate raises; in lenient mode it
@@ -307,7 +307,9 @@ struct Object(JsonValue, Sized):
                 self._data[entry].value = item^
                 return
             else:
-                raise Error("Duplicate key: ", key)
+                raise DeserializationError(
+                    "Duplicate key: " + key, DerErrorKind.DuplicateField
+                )
         self._data.append(KeyValuePair(h, key^, item^))
         index.note_append(self._data, h)
 

@@ -96,9 +96,12 @@ print(name.string())
 ```
 
 The trade-off: the target (and everything actually traversed) is fully
-validated, but bytes that are merely skipped over are checked only for
-structural sanity — `parse_pointer('{"bad": nope, "good": 1}', "/good")`
-succeeds. Use `from_json[Value]` when whole-document validation matters.
+validated, but skipped bytes are only checked for string boundaries; an
+unterminated enclosing container or trailing content is not detected
+(`parse_pointer('{"a":1', "/a")` returns `1`), and duplicate keys on the
+traversed path resolve to the first match.
+`parse_pointer('{"bad": nope, "good": 1}', "/good")` succeeds. Use
+`from_json[Value]` when whole-document validation matters.
 `try_parse_pointer` is the non-raising variant.
 
 ### UTF-8 validation
@@ -772,7 +775,7 @@ print(j.foo.bar[1])  # prints 2
 
 ### JSON Patch
 
-EmberJson supports [RFC 6902](https://tools.ietf.org/html/rfc6902) JSON Patch for applying a sequence of operations to a JSON document, and [RFC 7386](https://tools.ietf.org/html/rfc7386) JSON Merge Patch for recursive merging.
+EmberJson supports [RFC 6902](https://tools.ietf.org/html/rfc6902) JSON Patch for applying a sequence of operations to a JSON document, and [RFC 7396](https://tools.ietf.org/html/rfc7396) JSON Merge Patch for recursive merging.
 
 ```mojo
 from emberjson import from_json, Value, Object
@@ -792,7 +795,7 @@ def main() raises:
     # "test" asserts a value matches — raises if it doesn't
     patch(doc, '[{"op": "test", "path": "/foo", "value": "baz"}]')
 
-    # RFC 7386: recursive merge patch
+    # RFC 7396: recursive merge patch
     var target = from_json[Value]('{"a": "b", "c": {"d": "e", "f": "g"}}')
     merge_patch(target, '{"a": "z", "c": {"f": null}}')
     # target is now {"a": "z", "c": {"d": "e"}}
@@ -819,6 +822,41 @@ def main() raises:
     var lines: List[Value] = [Value(1), Value(2), Value(3)]
     write_lines(Path("output.jsonl"), lines)
 ```
+
+### Conformance notes
+
+EmberJson targets RFC 8259 (JSON), RFC 6901 (JSON Pointer), RFC 6902 (JSON Patch),
+RFC 7396 (JSON Merge Patch) and JSON Lines. Behaviours the specifications leave
+to the implementation:
+
+- **Encoding.** Input must be UTF-8 (RFC 8259 §8.1); UTF-16/32 and a leading byte
+  order mark are rejected. `ParseOptions(validate_utf8=False)` skips the check and
+  can produce `String`s that violate the UTF-8 invariant; `to_json` does not
+  re-validate.
+- **Top-level scalars** are accepted (RFC 8259 §2); RFC 4627 forbade them.
+- **Duplicate object names** are rejected by default (`Value`, `Document`,
+  reflection into `Dict`). `StrictOptions.ALLOW_DUPLICATE_KEYS` gives
+  last-write-wins for `Value` and `Dict`; `Document` does not support it;
+  reflection into a struct always rejects a repeated declared field;
+  `parse_pointer` resolves to the first match on its path.
+- **Numbers.** Integers fit `Int64`/`UInt64`; a literal outside that range parses
+  as `Float64`. A float that overflows to ±Inf is rejected; underflow rounds to
+  zero. `-0` parses as the integer 0; `-0.0` keeps its sign. NaN and ±Inf
+  serialize as `null`.
+- **Strings.** Unpaired surrogate escapes (`"\uD800"`) are rejected (RFC 8259
+  §8.2 leaves them undefined). `ParseOptions(ignore_unicode=True)` keeps `\u`
+  escapes as raw text without validating them (`"\uD800"` and `"\u12G4"` are
+  stored as-is); such values do not round-trip through `to_json`. Use it only
+  on trusted input.
+- **Nesting** is limited to 1024 levels for `Value`, `Document`, and reflected
+  values that bottom out through `Value` (for example `List[Value]`);
+  reflecting directly into a recursive struct or collection type has no depth
+  guard of its own beyond the Mojo call stack.
+- **JSON Pointer.** A `~` must be followed by `0` or `1`; any other `~` is a
+  syntax error. The URI fragment form (`#/a~1b`) is not supported.
+- **JSON Patch `test`** compares numbers numerically (`1` equals `1.0`).
+- **JSON Lines.** Blank and malformed lines are skipped; a leading byte order mark
+  on the first line is stripped; read errors surface from `collect()`.
 
 ## Acknowledgments
 

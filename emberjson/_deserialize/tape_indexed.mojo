@@ -64,10 +64,12 @@ from emberjson.constants import (
     ` `,
     `\\`,
     acceptable_escapes,
+    MAX_NESTING_DEPTH,
 )
 from std.collections import Array
 from std.bit import count_trailing_zeros
 from std.sys.intrinsics import unlikely, likely
+from emberserde.error import DeserializationError, DerErrorKind
 
 
 def _gen_token_end_table(out t: StackArray[Bool, 256]):
@@ -95,7 +97,7 @@ comptime _TOKEN_END_OK: StackArray[Bool, 256] = _gen_token_end_table()
 @always_inline
 def _check_token_end[
     origin: ImmOrigin, options: ParseOptions, //
-](p: Parser[origin, options]) raises:
+](p: Parser[origin, options]) raises DeserializationError:
     """After a number/literal, the next byte must terminate the token."""
     var b = p.data.unsafe_get()
     if likely(lut[_TOKEN_END_OK](Int(b))):
@@ -107,12 +109,17 @@ def _check_token_end[
     # on the same bytes.
     if b == 0 and p.data.dist() <= 0:
         return
-    raise Error("Invalid json value: ", to_string(b))
+    raise DeserializationError(
+        String("Invalid json value: ") + String(to_string(b)),
+        DerErrorKind.InvalidValue,
+    )
 
 
 def _validate_escape_names[
     origin: ImmOrigin, options: ParseOptions, //
-](p: Parser[origin, options], off: Int, end_off: Int) raises:
+](
+    p: Parser[origin, options], off: Int, end_off: Int
+) raises DeserializationError:
     """Escape-name validation for the `ignore_unicode` verbatim path (the
     decode path validates names itself)."""
     var q = p.data.start.unsafe_offset(off)
@@ -122,9 +129,10 @@ def _validate_escape_names[
             if q.unsafe_offset(1) >= end:
                 break
             if unlikely((q.unsafe_offset(1))[] not in acceptable_escapes):
-                raise Error(
-                    "Invalid escape sequence: ",
-                    to_string((q.unsafe_offset(1))[]),
+                raise DeserializationError(
+                    String("Invalid escape sequence: ")
+                    + String(to_string((q.unsafe_offset(1))[])),
+                    DerErrorKind.InvalidValue,
                 )
             q = q.unsafe_offset(2)
             continue
@@ -133,9 +141,9 @@ def _validate_escape_names[
 
 def _iscan_string[
     origin: ImmOrigin, options: ParseOptions, //
-](p: Parser[origin, options], start_off: Int, end_off: Int) raises -> Tuple[
-    Bool, Int
-]:
+](
+    p: Parser[origin, options], start_off: Int, end_off: Int
+) raises DeserializationError -> Tuple[Bool, Int]:
     """Validates the string content span and locates its first escape.
 
     Returns (found_escaped, first_escape offset within the span). Raises
@@ -157,9 +165,10 @@ def _iscan_string[
             ctrl &= lanemask
             bs &= lanemask
         if unlikely(ctrl != 0):
-            raise Error(
-                "Control characters must be escaped: ",
-                String(count_trailing_zeros(ctrl)),
+            raise DeserializationError(
+                String("Control characters must be escaped: ")
+                + String(String(count_trailing_zeros(ctrl))),
+                DerErrorKind.InvalidValue,
             )
         if bs != 0 and not found:
             found = True
@@ -183,8 +192,6 @@ struct _Scope(TrivialRegisterPassable):
     var is_object: Bool
 
 
-comptime _MAX_DEPTH = 1024
-
 # Walk states (simdjson's goto labels).
 comptime _OBJECT_BEGIN: Int = 0
 comptime _OBJECT_CONTINUE: Int = 1
@@ -195,7 +202,9 @@ comptime _SCOPE_END: Int = 4
 
 def parse_document_tape_indexed[
     origin: ImmOrigin, options: ParseOptions, //
-](mut p: Parser[origin, options], mut sink: TapeSink) raises:
+](
+    mut p: Parser[origin, options], mut sink: TapeSink
+) raises DeserializationError:
     """Stage-1 + stage-2 parse of the parser's whole input.
 
     Same tape/arena output and verdicts as `parse_document_tape`.
@@ -205,7 +214,9 @@ def parse_document_tape_indexed[
     structural_index[True](p.data.start, p.size, positions)
     var n_structurals = len(positions)
     if unlikely(n_structurals == 0):
-        raise Error("Invalid json value")
+        raise DeserializationError(
+            "Invalid json value", DerErrorKind.InvalidValue
+        )
     # Sentinels (simdjson stage-1 convention): entries past the real
     # structurals point at end-of-input, where the padding NUL fails
     # every dispatch — this is what lets `advance` skip bounds checks.
@@ -221,7 +232,7 @@ def _walk_tape_from_index[
     mut sink: TapeSink,
     idx_start: Pointer[UInt32, _],
     n_structurals: Int,
-) raises:
+) raises DeserializationError:
     """Stage-2 walk over a precomputed structural index.
 
     Pointer contract: entries `[0, n_structurals)` are strictly ascending
@@ -245,7 +256,7 @@ def _walk_tape_from_index[
     var idx = idx_start
     var idx_last = idx_start.unsafe_offset(n_structurals)
 
-    var stack = Array[_Scope, _MAX_DEPTH](uninitialized=True)
+    var stack = Array[_Scope, MAX_NESTING_DEPTH](uninitialized=True)
     var depth = 0
 
     @__parameter
@@ -256,13 +267,15 @@ def _walk_tape_from_index[
 
     @__parameter
     @always_inline
-    def visit_string(off: Int, out arena_off: Int) raises:
+    def visit_string(off: Int, out arena_off: Int) raises DeserializationError:
         """The string opening at `off`: its closing quote is the next
         structural (escaped quotes are masked out of the index)."""
         var close = Int(idx[])
         idx = idx.unsafe_offset(1)
         if unlikely(base[unsafe_offset=close] != `"`):
-            raise Error("Unexpected EOF")
+            raise DeserializationError(
+                "Unexpected EOF", DerErrorKind.InvalidValue
+            )
         var scan = _iscan_string(p, off + 1, close)
         arena_off = _arena_write[options.ignore_unicode](
             sink.strings,
@@ -275,7 +288,7 @@ def _walk_tape_from_index[
 
     @__parameter
     @always_inline
-    def visit_primitive(b: Byte, off: Int) raises:
+    def visit_primitive(b: Byte, off: Int) raises DeserializationError:
         if b == `"`:
             _ = visit_string(off)
         elif is_numerical_component(b):
@@ -301,11 +314,26 @@ def _walk_tape_from_index[
             sink.tape.append(_pack_word(TapeTag.NULL, 0))
             _check_token_end(p)
         else:
-            raise Error("Invalid json value")
+            raise DeserializationError(
+                "Invalid json value", DerErrorKind.InvalidValue
+            )
 
     @__parameter
     @always_inline
-    def emit_empty(open_tag: Byte, close_tag: Byte):
+    def emit_empty(open_tag: Byte, close_tag: Byte) raises DeserializationError:
+        # An empty container never pushes a `_Scope` (there is nothing to
+        # recurse into), but it is still one level deeper than its parent,
+        # so it must be checked against the same limit as `push_scope` —
+        # otherwise a chain of nested containers ending in an empty `[]`/`{}`
+        # could dodge the depth guard entirely.
+        # `>=` here (against a not-yet-incremented `depth`) pairs with the
+        # recursive parser's increment-then-`>` check in `parser.mojo`
+        # (`parse_array`/`parse_object`), so both strategies admit exactly
+        # `MAX_NESTING_DEPTH` levels.
+        if unlikely(depth >= MAX_NESTING_DEPTH):
+            raise DeserializationError(
+                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
+            )
         var open_idx = len(sink.tape)
         sink.tape.append(0)
         sink.tape.append(_pack_word(close_tag, UInt64(open_idx)))
@@ -313,9 +341,11 @@ def _walk_tape_from_index[
 
     @__parameter
     @always_inline
-    def push_scope(is_object: Bool) raises:
-        if unlikely(depth >= _MAX_DEPTH):
-            raise Error("Exceeded maximum nesting depth")
+    def push_scope(is_object: Bool) raises DeserializationError:
+        if unlikely(depth >= MAX_NESTING_DEPTH):
+            raise DeserializationError(
+                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
+            )
         var dup_base: UInt32 = 0
         comptime if strict_dups:
             dup_base = UInt32(len(sink.key_hashes))
@@ -327,7 +357,7 @@ def _walk_tape_from_index[
 
     @__parameter
     @always_inline
-    def visit_key(off: Int) raises:
+    def visit_key(off: Int) raises DeserializationError:
         var arena_off = visit_string(off)
         comptime if strict_dups:
             _push_and_check_key(
@@ -365,12 +395,16 @@ def _walk_tape_from_index[
             # First key of a non-empty object.
             off = advance()
             if unlikely(base[unsafe_offset=off] != `"`):
-                raise Error("Invalid identifier")
+                raise DeserializationError(
+                    "Invalid identifier", DerErrorKind.InvalidValue
+                )
             visit_key(off)
             # object_field: colon then value.
             off = advance()
             if unlikely(base[unsafe_offset=off] != `:`):
-                raise Error("Invalid identifier")
+                raise DeserializationError(
+                    "Invalid identifier", DerErrorKind.InvalidValue
+                )
             stack.unsafe_get(depth - 1).count += 1
             off = advance()
             b = base[unsafe_offset=off]
@@ -402,12 +436,16 @@ def _walk_tape_from_index[
                         idx = idx.unsafe_offset(1)
                         state = _SCOPE_END
                         continue
-                    raise Error("Illegal trailing comma")
+                    raise DeserializationError(
+                        "Illegal trailing comma", DerErrorKind.InvalidValue
+                    )
                 state = _OBJECT_BEGIN
             elif b == `}`:
                 state = _SCOPE_END
             else:
-                raise Error("Expected ',' or '}'")
+                raise DeserializationError(
+                    "Expected ',' or '}'", DerErrorKind.InvalidValue
+                )
         elif state == _ARRAY_BEGIN:
             # Next element of a non-empty array.
             stack.unsafe_get(depth - 1).count += 1
@@ -441,12 +479,16 @@ def _walk_tape_from_index[
                         idx = idx.unsafe_offset(1)
                         state = _SCOPE_END
                         continue
-                    raise Error("Illegal trailing comma")
+                    raise DeserializationError(
+                        "Illegal trailing comma", DerErrorKind.InvalidValue
+                    )
                 state = _ARRAY_BEGIN
             elif b == `]`:
                 state = _SCOPE_END
             else:
-                raise Error("Expected ',' or ']'")
+                raise DeserializationError(
+                    "Expected ',' or ']'", DerErrorKind.InvalidValue
+                )
         else:  # _SCOPE_END
             depth -= 1
             ref scope = stack.unsafe_get(depth)
@@ -475,4 +517,6 @@ def _walk_tape_from_index[
 
     # document_end: every real structural must have been consumed.
     if unlikely(idx != idx_last):
-        raise Error("Invalid json, expected end of input")
+        raise DeserializationError(
+            "Invalid json, expected end of input", DerErrorKind.InvalidValue
+        )

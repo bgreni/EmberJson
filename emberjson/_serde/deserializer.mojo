@@ -1,7 +1,16 @@
 from std.collections.string.string_span import get_static_string
 
 from emberjson._deserialize import Parser, ParseOptions, StrictOptions
-from emberjson.constants import `[`, `]`, `{`, `}`, `"`, `:`, `,`, `n`
+from emberjson.constants import (
+    `[`,
+    `]`,
+    `{`,
+    `}`,
+    `"`,
+    `:`,
+    `,`,
+    `n`,
+)
 from emberjson.value import Value
 
 from emberserde.deserialize import (
@@ -24,11 +33,15 @@ from emberserde.utils import Base
 # emberserde's format-agnostic traits (`emberserde/emberserde/deserialize/
 # __init__.mojo`). Structurally this mirrors `emberserde/test/_json_format.
 # mojo`'s `JsonDeserializer`, but drives EmberJson's own byte-walking parser
-# instead of a hand-rolled cursor: the `Parser`'s low-level token methods
-# (`expect`, `peek`, `skip_whitespace`, `expect_string_bytes`, `expect_int`,
-# `expect_float`, `expect_bool`, `expect_null`, `skip_value`, `read_string`)
-# raise a plain (untyped) `Error`, so every call here is wrapped in a
-# try/except that converts it into a typed `DeserializationError`.
+# instead of a hand-rolled cursor. Since F16 the `Parser`'s token methods
+# (`expect`, `expect_open`, `expect_string`, `expect_int`, `expect_float`,
+# `expect_bool`, `expect_null`, `skip_value`, `read_string`, ...) declare
+# `raises DeserializationError` and pick the `DerErrorKind` at the failure
+# site, so this layer calls them directly: no try/except scaffolding, and
+# no second, external guess at what the byte at the cursor meant.
+# `_invalid`/`_mismatch` survive only for conditions THIS layer detects on
+# its own (a trailing comma, a missing enum tag, an unusable `raw_bytes`
+# request).
 #
 # Two origins, like the toy format's `Pointer[JsonCursor, origin]`, but
 # split in two because `Parser` itself is generic over the origin of the
@@ -61,38 +74,32 @@ struct EmberJsonSeqDe[
     var first: Bool
 
     def has_next(mut self) raises DeserializationError -> Bool:
-        try:
-            self.p[].skip_whitespace()
+        self.p[].skip_whitespace()
+        if self.p[].peek() == `]`:
+            return False
+        if not self.first:
+            # A separator is required between elements (`expect` raises
+            # on anything else), and a separator followed by the closing
+            # bracket is a trailing comma -- legal only when the options
+            # say so. Mirrors `Parser.parse_array` exactly.
+            self.p[].expect(`,`)
             if self.p[].peek() == `]`:
-                return False
-            if not self.first:
-                # A separator is required between elements (`expect` raises
-                # on anything else), and a separator followed by the closing
-                # bracket is a trailing comma -- legal only when the options
-                # say so. Mirrors `Parser.parse_array` exactly.
-                self.p[].expect(`,`)
-                if self.p[].peek() == `]`:
-                    comptime if (
-                        StrictOptions.ALLOW_TRAILING_COMMA
-                        in Self.options.strict_mode
-                    ):
-                        return False
-                    else:
-                        raise Error("Illegal trailing comma")
-            self.first = False
-            return True
-        except e:
-            raise _invalid(String(e))
+                comptime if (
+                    StrictOptions.ALLOW_TRAILING_COMMA
+                    in Self.options.strict_mode
+                ):
+                    return False
+                else:
+                    raise _invalid("Illegal trailing comma")
+        self.first = False
+        return True
 
     def expect_element[T: AnyType](mut self) raises DeserializationError -> T:
         var sub = EmberJsonDeserializer(p=self.p)
         return deserialize[T](sub)
 
     def end(mut self) raises DeserializationError:
-        try:
-            self.p[].expect(`]`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].expect(`]`)
 
 
 @fieldwise_init
@@ -101,28 +108,28 @@ struct EmberJsonMapDe[
 ](MapDerState):
     var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
     var first: Bool
+    # Strict mode only: keys already seen in this object (RFC 8259 §4 lets a
+    # parser reject duplicates; `Value`/`Document` do, so `Dict` must too).
+    var seen: Dict[String, Bool]
 
     def has_next(mut self) raises DeserializationError -> Bool:
-        try:
-            self.p[].skip_whitespace()
+        self.p[].skip_whitespace()
+        if self.p[].peek() == `}`:
+            return False
+        if not self.first:
+            # See `EmberJsonSeqDe.has_next`: required separator, trailing
+            # comma legal only under `ALLOW_TRAILING_COMMA`.
+            self.p[].expect(`,`)
             if self.p[].peek() == `}`:
-                return False
-            if not self.first:
-                # See `EmberJsonSeqDe.has_next`: required separator, trailing
-                # comma legal only under `ALLOW_TRAILING_COMMA`.
-                self.p[].expect(`,`)
-                if self.p[].peek() == `}`:
-                    comptime if (
-                        StrictOptions.ALLOW_TRAILING_COMMA
-                        in Self.options.strict_mode
-                    ):
-                        return False
-                    else:
-                        raise Error("Illegal trailing comma")
-            self.first = False
-            return True
-        except e:
-            raise _invalid(String(e))
+                comptime if (
+                    StrictOptions.ALLOW_TRAILING_COMMA
+                    in Self.options.strict_mode
+                ):
+                    return False
+                else:
+                    raise _invalid("Illegal trailing comma")
+        self.first = False
+        return True
 
     def expect_key[T: AnyType](mut self) raises DeserializationError -> T:
         # `has_next` has already skipped whitespace and any separating
@@ -130,21 +137,28 @@ struct EmberJsonMapDe[
         # deserialize path only ever asks for `String` keys (JSON object
         # keys are always strings), so this delegates straight through.
         var sub = EmberJsonDeserializer(p=self.p)
-        return deserialize[T](sub)
+        comptime if T == String and not (
+            StrictOptions.ALLOW_DUPLICATE_KEYS in Self.options.strict_mode
+        ):
+            comptime assert conforms_to(T, Base), "unreachable: T == String"
+            var key = deserialize[T](sub)
+            ref name = rebind[String](key)
+            if name in self.seen:
+                raise DeserializationError(
+                    "Duplicate key: " + name, DerErrorKind.DuplicateField
+                )
+            self.seen[name] = True
+            return key^
+        else:
+            return deserialize[T](sub)
 
     def expect_value[T: AnyType](mut self) raises DeserializationError -> T:
-        try:
-            self.p[].expect(`:`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].expect(`:`)
         var sub = EmberJsonDeserializer(p=self.p)
         return deserialize[T](sub)
 
     def end(mut self) raises DeserializationError:
-        try:
-            self.p[].expect(`}`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].expect(`}`)
 
 
 @fieldwise_init
@@ -157,35 +171,35 @@ struct EmberJsonStructDe[
     def expect_field_name(
         mut self,
     ) raises DeserializationError -> Optional[String]:
-        try:
-            self.p[].skip_whitespace()
+        self.p[].skip_whitespace()
+        if self.p[].peek() == `}`:
+            # End of struct: leave the `}` for `end()` to consume.
+            return None
+        if not self.first:
+            # See `EmberJsonSeqDe.has_next`: required separator, trailing
+            # comma legal only under `ALLOW_TRAILING_COMMA`.
+            self.p[].expect(`,`)
             if self.p[].peek() == `}`:
-                # End of struct: leave the `}` for `end()` to consume.
-                return None
-            if not self.first:
-                # See `EmberJsonSeqDe.has_next`: required separator, trailing
-                # comma legal only under `ALLOW_TRAILING_COMMA`.
-                self.p[].expect(`,`)
-                if self.p[].peek() == `}`:
-                    comptime if (
-                        StrictOptions.ALLOW_TRAILING_COMMA
-                        in Self.options.strict_mode
-                    ):
-                        return None
-                    else:
-                        raise Error("Illegal trailing comma")
-            self.first = False
-            if self.p[].peek() != `"`:
-                raise Error("expected an object key string")
-            # `read_string` is the same reader `Parser.parse_object` uses for
-            # its keys: escape decoding -- including the `ignore_unicode`
-            # opt-out -- matches `parse()` exactly, instead of a hand-rolled
-            # copy that silently diverged on it.
-            var name = self.p[].read_string()
-            self.p[].expect(`:`)
-            return name^
-        except e:
-            raise _invalid(String(e))
+                comptime if (
+                    StrictOptions.ALLOW_TRAILING_COMMA
+                    in Self.options.strict_mode
+                ):
+                    return None
+                else:
+                    raise _invalid("Illegal trailing comma")
+        self.first = False
+        # A key is a grammar position, not a value position: whatever sits
+        # here instead of a quote is malformed JSON, never "a value of the
+        # wrong type", so this stays a deserializer-detected `_invalid`.
+        if self.p[].peek() != `"`:
+            raise _invalid("expected an object key string")
+        # `read_string` is the same reader `Parser.parse_object` uses for
+        # its keys: escape decoding -- including the `ignore_unicode`
+        # opt-out -- matches `parse()` exactly, instead of a hand-rolled
+        # copy that silently diverged on it.
+        var name = self.p[].read_string()
+        self.p[].expect(`:`)
+        return name^
 
     def expect_field_value[
         T: AnyType
@@ -194,16 +208,10 @@ struct EmberJsonStructDe[
         return deserialize[T](sub)
 
     def skip_value(mut self) raises DeserializationError:
-        try:
-            self.p[].skip_value()
-        except e:
-            raise _invalid(String(e))
+        self.p[].skip_value()
 
     def end(mut self) raises DeserializationError:
-        try:
-            self.p[].expect(`}`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].expect(`}`)
 
 
 @fieldwise_init
@@ -214,21 +222,15 @@ struct EmberJsonTupleDe[
     var first: Bool
 
     def expect_element[T: AnyType](mut self) raises DeserializationError -> T:
-        try:
-            self.p[].skip_whitespace()
-            if not self.first:
-                self.p[].expect(`,`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].skip_whitespace()
+        if not self.first:
+            self.p[].expect(`,`)
         self.first = False
         var sub = EmberJsonDeserializer(p=self.p)
         return deserialize[T](sub)
 
     def end(mut self) raises DeserializationError:
-        try:
-            self.p[].expect(`]`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].expect(`]`)
 
 
 @fieldwise_init
@@ -246,10 +248,7 @@ struct EmberJsonEnumDe[
         return deserialize[T](sub)
 
     def end(mut self) raises DeserializationError:
-        try:
-            self.p[].expect(`}`)
-        except e:
-            raise _invalid(String(e))
+        self.p[].expect(`}`)
 
 
 @fieldwise_init
@@ -275,78 +274,64 @@ struct EmberJsonDeserializer[
     ]
     comptime Value = Value
 
+    # The three scalar entry points below are one call each: the `Parser`
+    # method skips whitespace, parses, and on failure decides between
+    # `TypeMismatch` (another COMPLETE value opens at the cursor) and
+    # `InvalidValue` itself -- see `Parser._other_value_opens_here`. The
+    # external classifier this layer used to run before every scalar is
+    # gone: it duplicated the parser's own lookahead and could only guess
+    # at conditions (integer overflow) the parser sees directly.
     def expect_bool(mut self) raises DeserializationError -> Bool:
-        try:
-            self.p[].skip_whitespace()
-            return self.p[].expect_bool()
-        except e:
-            raise _mismatch(String(e))
+        return self.p[].expect_bool()
 
     def expect_number[
         DT: DType
     ](mut self) raises DeserializationError -> Scalar[DT]:
-        try:
-            self.p[].skip_whitespace()
-            comptime if DT.is_floating_point():
-                return self.p[].expect_float[DT]()
-            else:
-                return self.p[].expect_int[DT]()
-        except e:
-            raise _mismatch(String(e))
+        comptime if DT.is_floating_point():
+            return self.p[].expect_float[DT]()
+        else:
+            return self.p[].expect_int[DT]()
 
     def expect_string(mut self) raises DeserializationError -> String:
-        try:
-            self.p[].skip_whitespace()
-            if self.p[].peek() != `"`:
-                raise Error("expected a string")
-            return self.p[].read_string()
-        except e:
-            raise _mismatch(String(e))
+        return self.p[].expect_string()
 
     def expect_optional[
         T: Base
     ](mut self) raises DeserializationError -> Optional[T]:
-        try:
-            self.p[].skip_whitespace()
-            if self.p[].peek() == `n`:
-                self.p[].expect_null()
-                return Optional[T]()
-        except e:
-            raise _mismatch(String(e))
+        # No shape check here: `Optional` never rejects a shape on its own
+        # -- anything other than `null` is handed to `deserialize[T]`
+        # below, which does its own (possibly typed-mismatch) validation.
+        self.p[].skip_whitespace()
+        if self.p[].peek() == `n`:
+            self.p[].expect_null()
+            return Optional[T]()
         return Optional[T](deserialize[T](self))
 
+    # `expect_open` is `expect` for a bracket standing at a VALUE position:
+    # an absent value (EOF) is a grammar failure -- there is no byte to
+    # disagree about -- while a different complete value opener is a shape
+    # mismatch. `expect` itself stays grammar-only, for `:`/`,` and the
+    # closing brackets.
     def begin_seq(mut self) raises DeserializationError -> Self.SeqType:
-        try:
-            self.p[].expect(`[`)
-        except e:
-            raise _mismatch(String(e))
+        self.p[].expect_open(`[`)
         return EmberJsonSeqDe(p=self.p, first=True)
 
     def begin_map(mut self) raises DeserializationError -> Self.MapType:
-        try:
-            self.p[].expect(`{`)
-        except e:
-            raise _mismatch(String(e))
-        return EmberJsonMapDe(p=self.p, first=True)
+        self.p[].expect_open(`{`)
+        return EmberJsonMapDe(p=self.p, first=True, seen=Dict[String, Bool]())
 
     def begin_struct[
         T: AnyType
     ](mut self) raises DeserializationError -> Self.StructType:
         # Field names are read off the wire, so `T` is unused; the
         # framework's reflection default drives the name-matching loop.
-        try:
-            self.p[].expect(`{`)
-        except e:
-            raise _mismatch(String(e))
+        self.p[].expect_open(`{`)
         return EmberJsonStructDe(p=self.p, first=True)
 
     def begin_tuple[
         field_count: Int
     ](mut self) raises DeserializationError -> Self.TupleType:
-        try:
-            self.p[].expect(`[`)
-        except e:
-            raise _mismatch(String(e))
+        self.p[].expect_open(`[`)
         return EmberJsonTupleDe(p=self.p, first=True)
 
     # Externally tagged `{"Arm":payload}`: consume up to and including the
@@ -354,17 +339,17 @@ struct EmberJsonDeserializer[
     def begin_enum[
         T: AnyType, arm_names: List[String]
     ](mut self) raises DeserializationError -> Self.EnumType:
-        var name: String
-        try:
-            self.p[].expect(`{`)
-            if self.p[].peek() != `"`:
-                raise Error("expected an enum tag string")
-            # Same reader as `EmberJsonStructDe.expect_field_name` -- see
-            # the comment there.
-            name = self.p[].read_string()
-            self.p[].expect(`:`)
-        except e:
-            raise _mismatch(String(e))
+        # Only the opening `{` is a shape check (`expect_open`); a missing
+        # tag string once inside an object is a grammar failure, not a
+        # different-type mismatch, so it stays a deserializer-detected
+        # `_invalid`.
+        self.p[].expect_open(`{`)
+        if self.p[].peek() != `"`:
+            raise _invalid("expected an enum tag string")
+        # Same reader as `EmberJsonStructDe.expect_field_name` -- see the
+        # comment there.
+        var name = self.p[].read_string()
+        self.p[].expect(`:`)
         var idx = -1
         # `comptime for` over the interned candidates: no per-value list.
         comptime for i in range(len(arm_names)):
@@ -409,36 +394,37 @@ struct EmberJsonDeserializer[
                 "raw_bytes requires an unpadded input buffer -- borrowing is"
                 " incompatible with the padded-buffer path"
             )
-        try:
-            comptime if kind == RawKind.Any:
-                return rebind[Span[Byte, ImmUntrackedOrigin]](
-                    self.p[].expect_value_bytes()
-                )
-            elif kind == RawKind.Integer:
-                return rebind[Span[Byte, ImmUntrackedOrigin]](
-                    self.p[].expect_int_bytes()
-                )
-            elif kind == RawKind.Float:
-                return rebind[Span[Byte, ImmUntrackedOrigin]](
-                    self.p[].expect_float_bytes()
-                )
-            elif kind == RawKind.Str:
-                self.p[].skip_whitespace()
-                if self.p[].peek() != `"`:
-                    raise Error("expected a string")
-                return rebind[Span[Byte, ImmUntrackedOrigin]](
-                    self.p[].expect_string_bytes()
-                )
-            elif kind == RawKind.Seq:
-                return rebind[Span[Byte, ImmUntrackedOrigin]](
-                    self.p[].expect_array_bytes()
-                )
-            else:
-                return rebind[Span[Byte, ImmUntrackedOrigin]](
-                    self.p[].expect_object_bytes()
-                )
-        except e:
-            raise _mismatch(String(e))
+        comptime if kind == RawKind.Any:
+            return rebind[Span[Byte, ImmUntrackedOrigin]](
+                self.p[].expect_value_bytes()
+            )
+        elif kind == RawKind.Integer:
+            return rebind[Span[Byte, ImmUntrackedOrigin]](
+                self.p[].expect_int_bytes()
+            )
+        elif kind == RawKind.Float:
+            return rebind[Span[Byte, ImmUntrackedOrigin]](
+                self.p[].expect_float_bytes()
+            )
+        elif kind == RawKind.Str:
+            # `expect_string_bytes` assumes its caller has already validated
+            # the opening quote (its other call sites do), so position and
+            # shape-check here. Anything but a quote at a value position
+            # where a string was requested is a kind mismatch.
+            self.p[].skip_whitespace()
+            if self.p[].peek() != `"`:
+                raise _mismatch("Expected a string")
+            return rebind[Span[Byte, ImmUntrackedOrigin]](
+                self.p[].expect_string_bytes()
+            )
+        elif kind == RawKind.Seq:
+            return rebind[Span[Byte, ImmUntrackedOrigin]](
+                self.p[].expect_array_bytes()
+            )
+        else:
+            return rebind[Span[Byte, ImmUntrackedOrigin]](
+                self.p[].expect_object_bytes()
+            )
 
     # `SelfDescribingDeserializer`: `Value` (`emberjson/value.mojo`) already
     # has a fast, hand-written recursive-descent path for "parse whatever is
@@ -447,10 +433,7 @@ struct EmberJsonDeserializer[
     # `begin_map`/etc. token by token (as the toy `_json_format.mojo` does,
     # for lack of a real parser to lean on).
     def deserialize_any(mut self) raises DeserializationError -> Value:
-        try:
-            return self.p[].parse_value()
-        except e:
-            raise _invalid(String(e))
+        return self.p[].parse_value()
 
 
 def from_json[
@@ -489,9 +472,6 @@ def from_json[
     result = deserialize[T](d)
     # `parse()` rejects content after the root value; this entry point must
     # agree, or the two public paths accept different documents.
-    try:
-        p.skip_whitespace()
-    except e:
-        raise _invalid(String(e))
+    p.skip_whitespace()
     if p.has_more():
         raise _invalid("trailing content after top-level JSON value")

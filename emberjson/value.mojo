@@ -132,7 +132,9 @@ struct Value(JsonValue, Sized):
     @implicit
     @always_inline
     def __init__(out self, v: IntLiteral):
-        if UInt64(v) > Int64.MAX.cast[DType.uint64]():
+        if v < 0:
+            self._data = Int64(v)
+        elif UInt64(v) > Int64.MAX.cast[DType.uint64]():
             self._data = UInt64(v)
         else:
             self._data = Int64(v)

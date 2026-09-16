@@ -20,6 +20,7 @@ from std.sys.intrinsics import unlikely
 from std.utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
 from std.builtin.globals import global_constant
+from emberserde.error import DeserializationError, DerErrorKind
 
 comptime ByteVec = SIMD[DType.uint8, _]
 comptime ByteView = Span[Byte, _]
@@ -90,17 +91,30 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
     @always_inline("nodebug")
     def __getitem__(
         ref self,
-    ) raises -> ref[Self.origin, self.p.address_space] Byte:
+    ) raises DeserializationError -> ref[
+        Self.origin, self.p.address_space
+    ] Byte:
+        # Typed, not bare `Error`: this is the parser's per-byte read, so a
+        # bare raise here would force every `raises DeserializationError`
+        # caller to wrap it. The cost is that every user of `p[]` must
+        # itself sit in a `raises DeserializationError` (or plain `raises`)
+        # context.
         if unlikely(self.dist() <= 0):
-            raise Error("Unexpected EOF")
+            raise DeserializationError(
+                "Unexpected EOF", DerErrorKind.InvalidValue
+            )
         return self.p[]
 
     @always_inline("nodebug")
     def __getitem__(
         ref self, i: Int
-    ) raises -> ref[Self.origin, self.p.address_space] Byte:
+    ) raises DeserializationError -> ref[
+        Self.origin, self.p.address_space
+    ] Byte:
         if unlikely(self.dist() - i <= 0):
-            raise Error("Unexpected EOF")
+            raise DeserializationError(
+                "Unexpected EOF", DerErrorKind.InvalidValue
+            )
         return self.p[unsafe_offset=i]
 
     @always_inline("nodebug")

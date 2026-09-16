@@ -4,7 +4,6 @@ from emberjson.utils import (
     ByteView,
     PaddedBuffer,
     to_string,
-    ByteVec,
     is_space,
     select,
     lut,
@@ -76,8 +75,10 @@ from emberjson.constants import (
     `1`,
     `E`,
     `e`,
+    MAX_NESTING_DEPTH,
 )
 from std.utils.numerics import FPUtils
+from emberserde.error import DeserializationError, DerErrorKind
 
 
 #######################################################
@@ -131,7 +132,11 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
     """JSON parsing options.
 
     Fields:
-        ignore_unicode: Do not decode escaped unicode characters for a slight increase in performance.
+        ignore_unicode: Keep `\\u` escapes as their raw six-character text
+            instead of decoding them (a small speed-up for trusted input).
+            Escapes are NOT validated under this flag (`\\u12G4` is stored
+            as-is), and a value parsed this way does not round-trip:
+            `to_json` re-escapes the backslash.
         strict_mode: Flags to control strictness of parsing.
         validate_utf8: Validate that the whole input is well-formed UTF-8
             (RFC 3629) before parsing, as the JSON spec requires. On by
@@ -206,6 +211,8 @@ struct RawNumber(TrivialRegisterPassable):
 struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer[Self.origin]
     var size: Int
+    # Open containers on the recursion stack; bounded by MAX_NESTING_DEPTH.
+    var depth: Int
 
     @implicit
     def __init__(
@@ -243,6 +250,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         )
         self.data = CheckedPointer(ptr, ptr, ptr.unsafe_offset(length))
         self.size = length
+        self.depth = 0
 
     def __init__(
         out self: Parser[Self.origin, Self.options],
@@ -262,6 +270,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         ] = padded._data.unsafe_ptr().unsafe_origin_cast[Self.origin]()
         self.data = CheckedPointer(p, p, p.unsafe_offset(padded._len))
         self.size = padded._len
+        self.depth = 0
 
     @always_inline
     def bytes_remaining(self) -> Int:
@@ -304,11 +313,11 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         return self.size - (self.size - self.data.dist())
 
     @always_inline
-    def peek(self) raises -> Byte:
+    def peek(self) raises DeserializationError -> Byte:
         return self.data[]
 
     @always_inline
-    def cur(self) raises -> Byte:
+    def cur(self) raises DeserializationError -> Byte:
         """The byte at the current position. In padded mode reads at or past
         end-of-input return the NUL padding (which no token accepts, so every
         caller falls into its existing error/terminate branch); otherwise a
@@ -319,19 +328,25 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         else:
             return self.data[]
 
-    def parse(mut self, out json: Value) raises:
+    def parse(mut self, out json: Value) raises DeserializationError:
         self.skip_whitespace()
         json = self.parse_value()
 
         self.skip_whitespace()
         if unlikely(self.has_more()):
-            raise Error(
-                "Invalid json, expected end of input, recieved: ",
-                self.remaining(),
+            raise DeserializationError(
+                String("Invalid json, expected end of input, received: ")
+                + String(self.remaining()),
+                DerErrorKind.InvalidValue,
             )
 
-    def parse_array(mut self, out arr: Array) raises:
+    def parse_array(mut self, out arr: Array) raises DeserializationError:
         self.data += 1
+        self.depth += 1
+        if unlikely(self.depth > MAX_NESTING_DEPTH):
+            raise DeserializationError(
+                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
+            )
         self.skip_whitespace()
 
         if unlikely(self.cur() == `]`):
@@ -355,18 +370,31 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                         not in Self.options.strict_mode
                     ):
                         if has_comma:
-                            raise Error("Illegal trailing comma")
+                            raise DeserializationError(
+                                "Illegal trailing comma",
+                                DerErrorKind.InvalidValue,
+                            )
                     break
                 elif unlikely(not has_comma):
-                    raise Error("Expected ',' or ']'")
+                    raise DeserializationError(
+                        "Expected ',' or ']'", DerErrorKind.InvalidValue
+                    )
                 if unlikely(not self.has_more()):
-                    raise Error("Expected ']'")
+                    raise DeserializationError(
+                        "Expected ']'", DerErrorKind.InvalidValue
+                    )
 
         self.data += 1
+        self.depth -= 1
         self.skip_whitespace()
 
-    def parse_object(mut self, out obj: Object) raises:
+    def parse_object(mut self, out obj: Object) raises DeserializationError:
         self.data += 1
+        self.depth += 1
+        if unlikely(self.depth > MAX_NESTING_DEPTH):
+            raise DeserializationError(
+                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
+            )
         self.skip_whitespace()
 
         if unlikely(self.cur() == `}`):
@@ -381,11 +409,17 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             var index = _ObjectParseIndex()
             while True:
                 if unlikely(self.cur() != `"`):
-                    raise Error("Invalid identifier")
+                    raise DeserializationError(
+                        "Invalid identifier", DerErrorKind.InvalidValue
+                    )
                 var ident = self.read_string()
                 self.skip_whitespace()
                 if unlikely(self.cur() != `:`):
-                    raise Error("Invalid identifier : ", self.remaining())
+                    raise DeserializationError(
+                        String("Invalid identifier : ")
+                        + String(self.remaining()),
+                        DerErrorKind.InvalidValue,
+                    )
                 self.data += 1
                 var v = self.parse_value()
                 self.skip_whitespace()
@@ -410,45 +444,65 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                         in Self.options.strict_mode
                     ):
                         if has_comma:
-                            raise Error("Illegal trailing comma")
+                            raise DeserializationError(
+                                "Illegal trailing comma",
+                                DerErrorKind.InvalidValue,
+                            )
                     break
                 elif not has_comma:
-                    raise Error("Expected ',' or '}'")
+                    raise DeserializationError(
+                        "Expected ',' or '}'", DerErrorKind.InvalidValue
+                    )
                 if unlikely(self.bytes_remaining() == 0):
-                    raise Error("Expected '}'")
+                    raise DeserializationError(
+                        "Expected '}'", DerErrorKind.InvalidValue
+                    )
 
         self.data += 1
+        self.depth -= 1
         self.skip_whitespace()
 
     @always_inline
-    def parse_true(mut self) raises -> Bool:
+    def parse_true(mut self) raises DeserializationError -> Bool:
         if unlikely(self.bytes_remaining() < 4):
-            raise Error('Encountered EOF when expecting "true"')
+            raise DeserializationError(
+                'Encountered EOF when expecting "true"',
+                DerErrorKind.InvalidValue,
+            )
         # Safety: Safe because we checked the amount of bytes remaining
         var w = self.data.p.unsafe_bitcast[UInt32]()[]
         if w != TRUE:
-            raise Error("Expected 'true', received: ", to_string(w))
+            raise DeserializationError(
+                String("Expected 'true', received: ") + String(to_string(w)),
+                DerErrorKind.InvalidValue,
+            )
         self.data += 4
         return True
 
     @always_inline
-    def parse_false(mut self) raises -> Bool:
+    def parse_false(mut self) raises DeserializationError -> Bool:
         self.data += 1
         if unlikely(self.bytes_remaining() < 4):
-            raise Error('Encountered EOF when expecting "false"')
+            raise DeserializationError(
+                'Encountered EOF when expecting "false"',
+                DerErrorKind.InvalidValue,
+            )
         # Safety: Safe because we checked the amount of bytes remaining
         var w = self.data.p.unsafe_bitcast[UInt32]()[]
         if w != ALSE:
-            raise Error("Expected 'false', received: f", to_string(w))
+            raise DeserializationError(
+                String("Expected 'false', received: f") + String(to_string(w)),
+                DerErrorKind.InvalidValue,
+            )
         self.data += 4
         return False
 
     @always_inline
-    def parse_null(mut self) raises -> Null:
+    def parse_null(mut self) raises DeserializationError -> Null:
         self.expect_null()
         return Null()
 
-    def parse_value(mut self, out v: Value) raises:
+    def parse_value(mut self, out v: Value) raises DeserializationError:
         self.skip_whitespace()
         var b = self.cur()
         # Handle string
@@ -479,9 +533,13 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         elif is_numerical_component(b):
             v = self.parse_number()
         else:
-            raise Error("Invalid json value")
+            raise DeserializationError(
+                "Invalid json value", DerErrorKind.InvalidValue
+            )
 
-    def find(mut self, start: CheckedPointer, out s: String) raises:
+    def find(
+        mut self, start: CheckedPointer, out s: String
+    ) raises DeserializationError:
         var found_escaped = False
         var first_escape = 0
         while True:
@@ -502,14 +560,17 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             elif unlikely(self.data.p >= self.data.end):
                 # We got EOF before finding the end quote, so obviously this
                 # input is malformed
-                raise Error("Unexpected EOF")
+                raise DeserializationError(
+                    "Unexpected EOF", DerErrorKind.InvalidValue
+                )
 
             if unlikely(block.has_unescaped()):
-                raise Error(
-                    "Control characters must be escaped: ",
-                    to_string(self.load_chunk()),
-                    " : ",
-                    String(block.unescaped_index()),
+                raise DeserializationError(
+                    String("Control characters must be escaped: ")
+                    + String(to_string(self.load_chunk()))
+                    + String(" : ")
+                    + String(String(block.unescaped_index())),
+                    DerErrorKind.InvalidValue,
                 )
             if not block.has_backslash():
                 self.data += SIMD8_WIDTH
@@ -529,16 +590,19 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                     break
                 else:
                     if unlikely(self.cur() not in acceptable_escapes):
-                        raise Error(
-                            "Invalid escape sequence: ",
-                            to_string(self.data[-1]),
-                            to_string(self.cur()),
+                        raise DeserializationError(
+                            String("Invalid escape sequence: ")
+                            + String(to_string(self.data[-1]))
+                            + String(to_string(self.cur())),
+                            DerErrorKind.InvalidValue,
                         )
                 self.data += 1
                 if self.cur() != `\\`:
                     break
 
-    def read_serial(mut self, start: CheckedPointer, out s: String) raises:
+    def read_serial(
+        mut self, start: CheckedPointer, out s: String
+    ) raises DeserializationError:
         var found_escaped = False
         while likely(self.has_more()):
             if self.data[] == `"`:
@@ -550,24 +614,25 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             if self.data[] == `\\`:
                 self.data += 1
                 if unlikely(self.data[] not in acceptable_escapes):
-                    raise Error(
-                        "Invalid escape sequence: ",
-                        to_string(self.data[-1]),
-                        to_string(self.data[]),
+                    raise DeserializationError(
+                        String("Invalid escape sequence: ")
+                        + String(to_string(self.data[-1]))
+                        + String(to_string(self.data[])),
+                        DerErrorKind.InvalidValue,
                     )
                 # We found a backslash, so we need to unescape
                 found_escaped = True
-            comptime control_chars = ByteVec[4](`\n`, `\t`, `\r`, `\r`)
-            if unlikely(self.data[] in control_chars):
-                raise Error(
-                    "Control characters must be escaped: ",
-                    String(self.data[]),
+            if unlikely(self.data[] < 0x20):
+                raise DeserializationError(
+                    String("Control characters must be escaped: ")
+                    + String(String(self.data[])),
+                    DerErrorKind.InvalidValue,
                 )
             self.data += 1
 
-        raise Error("Invalid String")
+        raise DeserializationError("Invalid String", DerErrorKind.InvalidValue)
 
-    def read_string(mut self, out s: String) raises:
+    def read_string(mut self, out s: String) raises DeserializationError:
         self.data += 1
         var start = self.data
         # compile time interpreter is incompatible with the SIMD accelerated
@@ -579,7 +644,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             s = self.read_serial(start)
 
     @always_inline
-    def skip_whitespace(mut self) raises:
+    def skip_whitespace(mut self) raises DeserializationError:
         comptime if Self.options._assume_padded:
             # NUL padding is not whitespace, so the EOF check is free.
             if not is_space(self.cur()):
@@ -622,7 +687,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
     @always_inline
     def compute_float64(
         self, out d: Float64, power: Int64, var i: UInt64, negative: Bool
-    ) raises:
+    ) raises DeserializationError:
         comptime min_fast_power = Int64(-22)
         comptime max_fast_power = Int64(22)
 
@@ -698,7 +763,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         mantissa &= ~(`1 << 52`)
 
         if unlikely(real_exponent > 2046):
-            raise Error("infinite value")
+            raise DeserializationError(
+                "infinite value", DerErrorKind.InvalidValue
+            )
 
         d = to_double(mantissa, real_exponent.cast[DType.uint64](), negative)
 
@@ -711,7 +778,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         start_digits: CheckedPointer,
         digit_count: Int,
         exponent: Int64,
-    ) raises:
+    ) raises DeserializationError:
         if unlikely(
             digit_count > 19
             and significant_digits(start_digits.p, digit_count) > 19
@@ -721,12 +788,14 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         if unlikely(exponent < smallest_power or exponent > largest_power):
             if likely(exponent < smallest_power or i == 0):
                 return select(negative, -0.0, 0.0)
-            raise Error("Invalid number: inf")
+            raise DeserializationError(
+                "Invalid number: inf", DerErrorKind.InvalidValue
+            )
 
         return self.compute_float64(exponent, i, negative)
 
     @always_inline
-    def parse_number(mut self, out v: Value) raises:
+    def parse_number(mut self, out v: Value) raises DeserializationError:
         var r = self._parse_number_raw()
         if r.kind == RawNumber.FLOAT64:
             v = bitcast[DType.float64](r.bits)
@@ -736,11 +805,15 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             v = bitcast[DType.int64](r.bits)
 
     @always_inline
-    def _parse_number_raw(mut self, out r: RawNumber) raises:
+    def _parse_number_raw(
+        mut self, out r: RawNumber
+    ) raises DeserializationError:
         comptime padded = Self.options._assume_padded
 
         if self.cur() == `+`:
-            raise Error('Expected digit of "-", found "+"')
+            raise DeserializationError(
+                'Expected digit of "-", found "+"', DerErrorKind.InvalidValue
+            )
 
         var neg = self.cur() == `-`
         var p = self.data + Int(neg)
@@ -768,7 +841,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             digit_count == 0
             or (at_or_nul[padded](start_digits) == `0` and digit_count > 1)
         ):
-            raise Error("Invalid number")
+            raise DeserializationError(
+                "Invalid number", DerErrorKind.InvalidValue
+            )
 
         var exponent: Int64 = 0
         var is_float = False
@@ -787,7 +862,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 p += 1
             exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
-                raise Error("Invalid number")
+                raise DeserializationError(
+                    "Invalid number", DerErrorKind.InvalidValue
+                )
             digit_count = ptr_dist(start_digits.p, p.p)
 
         if is_exp_char(at_or_nul[padded](p)):
@@ -798,7 +875,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             p += Int(neg_exp or at_or_nul[padded](p) == `+`)
 
             if unlikely(is_exp_char(at_or_nul[padded](p))):
-                raise Error("Invalid float: Double sign for exponent")
+                raise DeserializationError(
+                    "Invalid float: Double sign for exponent",
+                    DerErrorKind.InvalidValue,
+                )
 
             var start_exp = p
             var exp_number: Int64 = 0
@@ -806,7 +886,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 p += 1
 
             if unlikely(p == start_exp):
-                raise Error("Invalid number")
+                raise DeserializationError(
+                    "Invalid number", DerErrorKind.InvalidValue
+                )
 
             if unlikely(p > start_exp + 18):
                 while at_or_nul[padded](start_exp) == `0`:
@@ -825,30 +907,61 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
         var longest_digit_count = select(neg, 19, 20)
         comptime SIGNED_OVERFLOW = UInt64(Int64.MAX)
-        if digit_count > longest_digit_count:
-            raise Error("integer overflow")
-        if digit_count == longest_digit_count:
+        var overflow = digit_count > longest_digit_count
+        if not overflow and digit_count == longest_digit_count:
             if neg:
-                if unlikely(i > SIGNED_OVERFLOW + 1):
-                    raise Error("integer overflow")
-                self.data = p
-                return RawNumber(RawNumber.INT64, ~i + 1)
-            elif unlikely(self.cur() != `1` or i <= SIGNED_OVERFLOW):
-                raise Error("integer overflow")
+                overflow = i > SIGNED_OVERFLOW + 1
+            else:
+                overflow = self.cur() != `1` or i <= SIGNED_OVERFLOW
+        if unlikely(overflow):
+            # R2: an integer literal outside Int64/UInt64 is a Float64, the
+            # same result `List[Float64]` already produces; only ±Inf raises.
+            var f = self.write_float(neg, i, start_digits, digit_count, 0)
+            self.data = p
+            return RawNumber(RawNumber.FLOAT64, bitcast[DType.uint64](f))
 
         self.data = p
-        if i > SIGNED_OVERFLOW:
+        if not neg and i > SIGNED_OVERFLOW:
             return RawNumber(RawNumber.UINT64, i)
         return RawNumber(RawNumber.INT64, select(neg, ~i + 1, i))
 
-    def expect(mut self, expected: Byte) raises:
+    def expect(mut self, expected: Byte) raises DeserializationError:
+        """Grammar-only token check (`:`, `,`, and the closing brackets).
+
+        A byte that is not the one the grammar requires here is always
+        malformed JSON -- there is no "value of the wrong type" reading of
+        a missing separator -- so this never consults the shape test. Use
+        `expect_open` for the `[`/`{` that stand at a value position.
+        """
         self.skip_whitespace()
         if unlikely(self.cur() != expected):
-            raise Error(
-                "Invalid JSON, Expected: ",
-                to_string(expected),
-                ", Received: ",
-                to_string(self.cur()),
+            raise DeserializationError(
+                String("Invalid JSON, Expected: ")
+                + String(to_string(expected))
+                + String(", Received: ")
+                + String(to_string(self.cur())),
+                DerErrorKind.InvalidValue,
+            )
+        self.data += 1
+        self.skip_whitespace()
+
+    def expect_open(mut self, expected: Byte) raises DeserializationError:
+        """`expect` for the `[` or `{` that opens a value.
+
+        Unlike a separator, a container opener sits where a whole JSON
+        value is expected, so a different *complete* value opener at the
+        cursor is a shape disagreement (`TypeMismatch`), not a grammar
+        one. Anything else -- EOF, a truncated keyword, a stray byte --
+        stays `InvalidValue`. The test only runs on the failure path.
+        """
+        self.skip_whitespace()
+        if unlikely(self.cur() != expected):
+            raise DeserializationError(
+                String("Invalid JSON, Expected: ")
+                + String(to_string(expected))
+                + String(", Received: ")
+                + String(to_string(self.cur())),
+                self._value_shape_kind(),
             )
         self.data += 1
         self.skip_whitespace()
@@ -856,9 +969,15 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
     @always_inline
     def _parse_integer_common[
         acc_type: DType
-    ](mut self,) raises -> IntegerParseResult[Self.origin, acc_type]:
+    ](
+        mut self,
+    ) raises DeserializationError -> IntegerParseResult[
+        Self.origin, acc_type
+    ]:
         if unlikely(self.data[] == `+`):
-            raise Error('Expected digit of "-", found "+"')
+            raise DeserializationError(
+                'Expected digit of "-", found "+"', DerErrorKind.InvalidValue
+            )
 
         var neg = self.data[] == `-`
         var p = self.data + Int(neg)
@@ -872,24 +991,44 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         while p.dist() > 0 and isdigit(p[]):
             var dig = (p[] - `0`).cast[acc_type]()
             if unlikely(i > MAX_VAL or (i == MAX_VAL and dig > MAX_REM)):
-                raise Error("integer overflow")
+                # Well-formed JSON that does not fit the target width: a
+                # shape problem, not a grammar one (there is no range kind).
+                raise DeserializationError(
+                    "integer overflow", DerErrorKind.TypeMismatch
+                )
             else:
                 i = i * 10 + dig
             p += 1
 
         var digit_count = ptr_dist(start_digits.p, p.p)
 
-        if unlikely(
-            digit_count == 0 or (start_digits[] == `0` and digit_count > 1)
-        ):
-            raise Error("Invalid number")
+        if unlikely(digit_count == 0):
+            # No digits at all: the cursor holds something that is not a
+            # number. If it opens a complete value of another type this is a
+            # shape mismatch; otherwise (`-a`, `+`, EOF, `tru`) it is
+            # malformed JSON.
+            raise DeserializationError(
+                "Invalid number", self._number_shape_kind()
+            )
+
+        if unlikely(start_digits[] == `0` and digit_count > 1):
+            raise DeserializationError(
+                "Invalid number", DerErrorKind.InvalidValue
+            )
 
         if unlikely(p.dist() > 0 and (p[] == `.` or is_exp_char(p[]))):
-            raise Error("Expected integer, found float")
+            # One class with `integer overflow`: a well-formed JSON number
+            # the requested target cannot represent.
+            raise DeserializationError(
+                "Expected integer, found float", DerErrorKind.TypeMismatch
+            )
 
         return i, neg, p, digit_count, start_digits
 
-    def expect_int[type: DType = DType.int64](mut self) raises -> Scalar[type]:
+    def expect_int[
+        type: DType = DType.int64
+    ](mut self) raises DeserializationError -> Scalar[type]:
+        self.skip_whitespace()
         comptime acc_type = _uint_type_of_width[bit_width_of[type]()]()
 
         var i, neg, p, _, _ = self._parse_integer_common[acc_type]()
@@ -900,29 +1039,39 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             if neg:
                 comptime MIN_ABS = (~Scalar[type].MIN.cast[acc_type]()) + 1
                 if unlikely(i > MIN_ABS):
-                    raise Error("integer overflow")
+                    raise DeserializationError(
+                        "integer overflow", DerErrorKind.TypeMismatch
+                    )
                 return (~i + 1).cast[type]()
             else:
                 comptime MAX_ABS = Scalar[type].MAX.cast[acc_type]()
                 if unlikely(i > MAX_ABS):
-                    raise Error("integer overflow")
+                    raise DeserializationError(
+                        "integer overflow", DerErrorKind.TypeMismatch
+                    )
                 return i.cast[type]()
         else:
             if unlikely(neg):
-                raise Error("Expected unsigned integer, found negative")
+                # See `integer overflow`: well-formed JSON, unrepresentable
+                # in the requested target.
+                raise DeserializationError(
+                    "Expected unsigned integer, found negative",
+                    DerErrorKind.TypeMismatch,
+                )
 
             self.data = p
             return i.cast[type]()
 
     def expect_float[
         type: DType = DType.float64
-    ](mut self) raises -> Scalar[type]:
+    ](mut self) raises DeserializationError -> Scalar[type]:
         comptime assert (
             type.is_floating_point()
         ), "Expected float, found non-float type: " + String(type)
 
+        self.skip_whitespace()
         var neg = self.data[] == `-`
-        var p = self.data + Int(neg or self.data[] == `+`)
+        var p = self.data + Int(neg)
 
         var start_digits = p
         var i: UInt64 = 0
@@ -936,10 +1085,17 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
         var digit_count = ptr_dist(start_digits.p, p.p)
 
-        if unlikely(
-            digit_count == 0 or (start_digits[] == `0` and digit_count > 1)
-        ):
-            raise Error("Invalid number")
+        if unlikely(digit_count == 0):
+            # See `_parse_integer_common`: no digits means the cursor is not
+            # a number at all, so the shape test decides the kind.
+            raise DeserializationError(
+                "Invalid number", self._number_shape_kind()
+            )
+
+        if unlikely(start_digits[] == `0` and digit_count > 1):
+            raise DeserializationError(
+                "Invalid number", DerErrorKind.InvalidValue
+            )
 
         var exponent: Int64 = 0
 
@@ -954,7 +1110,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 p += 1
             exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
-                raise Error("Invalid number")
+                raise DeserializationError(
+                    "Invalid number", DerErrorKind.InvalidValue
+                )
             digit_count = ptr_dist(start_digits.p, p.p)
 
         if p.dist() > 0 and is_exp_char(p[]):
@@ -964,7 +1122,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             p += Int(neg_exp or p[] == `+`)
 
             if unlikely(is_exp_char(p[])):
-                raise Error("Invalid float: Double sign for exponent")
+                raise DeserializationError(
+                    "Invalid float: Double sign for exponent",
+                    DerErrorKind.InvalidValue,
+                )
 
             var start_exp = p
             var exp_number: Int64 = 0
@@ -972,7 +1133,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 p += 1
 
             if unlikely(p == start_exp):
-                raise Error("Invalid number")
+                raise DeserializationError(
+                    "Invalid number", DerErrorKind.InvalidValue
+                )
 
             if unlikely(p > start_exp + 18):
                 while start_exp.dist() > 0 and start_exp[] == `0`:
@@ -991,7 +1154,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             var casted = f.cast[type]()
             # Check if casting caused infinity where original wasn't
             if unlikely(not isinf(f) and isinf(casted)):
-                raise Error("float overflow")
+                raise DeserializationError(
+                    "float overflow", DerErrorKind.InvalidValue
+                )
             # Guard against double-rounding: if the float64 result lands exactly
             # on a float32/float16 midpoint, the cast may choose the wrong
             # neighbour. Re-parse with correctly-rounded big-decimal arithmetic.
@@ -1006,30 +1171,127 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
         return f.cast[type]()
 
-    def expect_bool(mut self) raises -> Bool:
+    def expect_bool(mut self) raises DeserializationError -> Bool:
+        self.skip_whitespace()
         if self.data[] == `t`:
             return self.parse_true()
         elif self.data[] == `f`:
             return self.parse_false()
-        raise Error("Expected Bool")
+        # Neither `t` nor `f`: the shape test decides whether this is
+        # another complete value (mismatch) or malformed JSON.
+        raise DeserializationError("Expected Bool", self._value_shape_kind())
 
-    def expect_null(mut self) raises:
+    def expect_null(mut self) raises DeserializationError:
+        # No `skip_whitespace` here: every caller (`parse_null` via
+        # `parse_value`, `_expect_literal`, the deserializer's
+        # `expect_optional`) has already positioned the cursor on the
+        # literal, and this sits on the `Value` path.
+        #
+        # Both kinds are hardcoded `InvalidValue`: the shape test is
+        # structurally dead here. Every caller has already seen an `n` at
+        # the cursor, so reaching a failure branch means the keyword does
+        # not spell out -- which the shape test rejects as an opener too.
         if unlikely(self.bytes_remaining() < 4):
-            raise Error("Encountered EOF when expecting 'null'")
+            raise DeserializationError(
+                "Encountered EOF when expecting 'null'",
+                DerErrorKind.InvalidValue,
+            )
         # Safety: Safe because we checked the amount of bytes remaining
         var w = self.data.p.unsafe_bitcast[UInt32]()[]
         if w != NULL:
-            raise Error("Expected 'null', received: ", to_string(w))
+            raise DeserializationError(
+                String("Expected 'null', received: ") + String(to_string(w)),
+                DerErrorKind.InvalidValue,
+            )
         self.data += 4
 
-    def expect_value_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    @no_inline
+    def _other_value_opens_here[wants_number: Bool = False](self) -> Bool:
+        """True when the cursor holds a COMPLETE JSON value opener.
+
+        The openers are `"`, `{`, `[`, `-` and the digits, plus `true`,
+        `false` and `null` spelled out in full. A truncated keyword
+        (`tru`, `nul`, a bare `n`) is NOT an opener: it is malformed JSON,
+        not a well-formed value of the wrong type. Every read is bounded
+        by `bytes_remaining()`, so this never over-reads -- and it never
+        raises, so a failure branch can consult it freely.
+
+        `wants_number=True` drops `-`/digit from the set, for the callers
+        whose own type IS a number: a `-` with no digits after it (`-a`)
+        is a malformed number, not "some other value".
+
+        `@no_inline` and failure-branch-only: the success path of
+        `expect_bool` on `t`, `expect_number` on a digit, `expect_string`
+        on `"` and `expect_open` on its own bracket never reaches here.
+        """
+        var remaining = self.bytes_remaining()
+        if remaining <= 0:
+            return False
+        var c = self.data.unsafe_get()
+        if c == `"` or c == `{` or c == `[`:
+            return True
+        comptime if not wants_number:
+            if c == `-` or (`0` <= c <= `9`):
+                return True
+        if c == `t`:
+            return (
+                remaining >= 4
+                and self.data.p.unsafe_bitcast[UInt32]()[] == TRUE
+            )
+        if c == `f`:
+            # `parse_false`'s own offset: the four bytes after the `f`.
+            return (
+                remaining >= 5
+                and (self.data + 1).p.unsafe_bitcast[UInt32]()[] == ALSE
+            )
+        if c == `n`:
+            return (
+                remaining >= 4
+                and self.data.p.unsafe_bitcast[UInt32]()[] == NULL
+            )
+        return False
+
+    @no_inline
+    def _value_shape_kind(self) -> DerErrorKind:
+        """`TypeMismatch` when another complete value opens at the cursor,
+        else `InvalidValue`. Failure branches only -- see
+        `_other_value_opens_here`."""
+        if self._other_value_opens_here():
+            return DerErrorKind.TypeMismatch
+        return DerErrorKind.InvalidValue
+
+    @no_inline
+    def _number_shape_kind(self) -> DerErrorKind:
+        """`_value_shape_kind` for the number entry points, where `-` and a
+        digit are the wanted opener rather than "some other type"."""
+        if self._other_value_opens_here[wants_number=True]():
+            return DerErrorKind.TypeMismatch
+        return DerErrorKind.InvalidValue
+
+    def expect_string(mut self, out s: String) raises DeserializationError:
+        """The string entry point the reflection deserializer calls.
+
+        Positions the cursor itself (unlike `read_string`, whose other
+        callers have already validated the opening quote) and applies the
+        shape rule on failure.
+        """
+        self.skip_whitespace()
+        if unlikely(self.cur() != `"`):
+            raise DeserializationError(
+                "Expected a string", self._value_shape_kind()
+            )
+        s = self.read_string()
+
+    def expect_value_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         return self._expect_validated_bytes()
 
-    def skip_value(mut self) raises:
+    def skip_value(mut self) raises DeserializationError:
         _ = self.expect_value_bytes()
 
     @always_inline
-    def _skip_ws(mut self) raises:
+    def _skip_ws(mut self) raises DeserializationError:
         """Whitespace skip tuned for the token-dense validating walk.
 
         Three measured facts drive the shape of this (M3, citm):
@@ -1070,7 +1332,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             self.data += 1
 
     @always_inline
-    def _expect_literal(mut self) raises:
+    def _expect_literal(mut self) raises DeserializationError:
         """Bounds-checked `true`/`false`/`null`. Unlike a fixed 4/5 byte bump
         this can neither over-read the input nor accept a misspelling.
         """
@@ -1083,7 +1345,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             self.expect_null()
 
     @always_inline
-    def _skip_digits(mut self) raises:
+    def _skip_digits(mut self) raises DeserializationError:
         comptime for _ in range(_DIGIT_PEEL):
             if not self.has_more() or not isdigit(self.data[]):
                 return
@@ -1102,37 +1364,70 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         while self.has_more() and isdigit(self.data[]):
             self.data += 1
 
-    def _validate_number[integer_only: Bool = False](mut self) raises:
+    def _validate_number[
+        integer_only: Bool = False
+    ](mut self) raises DeserializationError:
         """Consume one number, enforcing the JSON grammar:
         `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`.
         """
+        # The shape test below reads the byte AT THE CURSOR, so it is only
+        # meaningful while the cursor still sits where the value began. Once
+        # a sign has been consumed we are unambiguously inside a malformed
+        # number (`-true`, `-"x"`, `-{}`), never looking at another type's
+        # opener -- and that is also the only way the untyped skip path
+        # (`_expect_validated_bytes` -> `skip_value`, which has no requested
+        # type at all) can reach here, since its dispatcher enters
+        # `_validate_number` only on `-` or a digit.
+        var consumed_sign = False
         if self.data[] == `-`:
+            consumed_sign = True
             self.data += 1
             if unlikely(not self.has_more()):
-                raise Error("Unexpected EOF in number")
+                raise DeserializationError(
+                    "Unexpected EOF in number", DerErrorKind.InvalidValue
+                )
 
         var c = self.data[]
         if c == `0`:
             self.data += 1
             if unlikely(self.has_more() and isdigit(self.data[])):
-                raise Error("Number may not have a leading zero")
+                raise DeserializationError(
+                    "Number may not have a leading zero",
+                    DerErrorKind.InvalidValue,
+                )
         elif likely(isdigit(c)):
             self._skip_digits()
         else:
-            raise Error("Invalid number, expected a digit")
+            # Same split as `_parse_integer_common`: nothing numeric at the
+            # cursor, so the shape test decides the kind -- but only while
+            # the cursor is unmoved (see `consumed_sign` above). That keeps
+            # `expect_float_bytes` on `"abc"` a `TypeMismatch` while `-true`
+            # stays the malformed number it is.
+            raise DeserializationError(
+                "Invalid number, expected a digit",
+                DerErrorKind.InvalidValue if consumed_sign else self._number_shape_kind(),
+            )
 
         comptime if integer_only:
             if unlikely(
                 self.has_more()
                 and (self.data[] == `.` or is_exp_char(self.data[]))
             ):
-                raise Error("Expected an integer, received a float")
+                # See `_parse_integer_common`: a well-formed number the
+                # requested (integer) target cannot represent.
+                raise DeserializationError(
+                    "Expected an integer, received a float",
+                    DerErrorKind.TypeMismatch,
+                )
             return
 
         if self.has_more() and self.data[] == `.`:
             self.data += 1
             if unlikely(not self.has_more() or not isdigit(self.data[])):
-                raise Error("Expected a digit after the decimal point")
+                raise DeserializationError(
+                    "Expected a digit after the decimal point",
+                    DerErrorKind.InvalidValue,
+                )
             self._skip_digits()
 
         if self.has_more() and is_exp_char(self.data[]):
@@ -1140,22 +1435,31 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             if self.has_more() and (self.data[] == `+` or self.data[] == `-`):
                 self.data += 1
             if unlikely(not self.has_more() or not isdigit(self.data[])):
-                raise Error("Expected a digit in the exponent")
+                raise DeserializationError(
+                    "Expected a digit in the exponent",
+                    DerErrorKind.InvalidValue,
+                )
             self._skip_digits()
 
     @always_inline
-    def _expect_key_and_colon(mut self) raises:
+    def _expect_key_and_colon(mut self) raises DeserializationError:
         """Consume `"key" :` at the head of an object member."""
         self._skip_ws()
         if unlikely(not self.has_more() or self.data[] != `"`):
-            raise Error("Expected an object key string")
+            raise DeserializationError(
+                "Expected an object key string", DerErrorKind.InvalidValue
+            )
         _ = self.expect_string_bytes()
         self._skip_ws()
         if unlikely(not self.has_more() or self.data[] != `:`):
-            raise Error("Expected ':' after an object key")
+            raise DeserializationError(
+                "Expected ':' after an object key", DerErrorKind.InvalidValue
+            )
         self.data += 1
 
-    def _expect_validated_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def _expect_validated_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         """Consume exactly one JSON value and return the bytes spanning it.
 
         This is a full grammar check that stops short of materializing
@@ -1176,7 +1480,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         while True:
             self._skip_ws()
             if unlikely(not self.has_more()):
-                raise Error("Unexpected EOF while parsing a value")
+                raise DeserializationError(
+                    "Unexpected EOF while parsing a value",
+                    DerErrorKind.InvalidValue,
+                )
 
             # --- consume one value ------------------------------------------
             var b = self.data[]
@@ -1190,7 +1497,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 self.data += 1
                 self._skip_ws()
                 if unlikely(not self.has_more()):
-                    raise Error("Unexpected EOF while parsing an object")
+                    raise DeserializationError(
+                        "Unexpected EOF while parsing an object",
+                        DerErrorKind.InvalidValue,
+                    )
                 if self.data[] == `}`:
                     self.data += 1
                 else:
@@ -1201,14 +1511,20 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 self.data += 1
                 self._skip_ws()
                 if unlikely(not self.has_more()):
-                    raise Error("Unexpected EOF while parsing an array")
+                    raise DeserializationError(
+                        "Unexpected EOF while parsing an array",
+                        DerErrorKind.InvalidValue,
+                    )
                 if self.data[] == `]`:
                     self.data += 1
                 else:
                     closers.append(`]`)
                     continue
             else:
-                raise Error("Invalid JSON value: ", to_string(b))
+                raise DeserializationError(
+                    String("Invalid JSON value: ") + String(to_string(b)),
+                    DerErrorKind.InvalidValue,
+                )
 
             # --- a value completed: close out every container it finished ----
             while True:
@@ -1220,7 +1536,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
                 self._skip_ws()
                 if unlikely(not self.has_more()):
-                    raise Error("Unexpected EOF while parsing a structure")
+                    raise DeserializationError(
+                        "Unexpected EOF while parsing a structure",
+                        DerErrorKind.InvalidValue,
+                    )
 
                 var closer = closers[len(closers) - 1]
                 var c = self.data[]
@@ -1230,11 +1549,12 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                     continue
 
                 if unlikely(c != `,`):
-                    raise Error(
-                        "Invalid JSON, Expected: ",
-                        to_string(closer),
-                        " or ',', Received: ",
-                        to_string(c),
+                    raise DeserializationError(
+                        String("Invalid JSON, Expected: ")
+                        + String(to_string(closer))
+                        + String(" or ',', Received: ")
+                        + String(to_string(c)),
+                        DerErrorKind.InvalidValue,
                     )
 
                 self.data += 1
@@ -1253,7 +1573,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 break
 
     @always_inline
-    def _expect_escape_body(mut self) raises:
+    def _expect_escape_body(mut self) raises DeserializationError:
         """Positioned on the byte after a backslash: validate and consume the
         escape body. Escape-byte legality and the four `\\u` hex digits are
         checked here so captured spans carry the same guarantee as the eager
@@ -1261,13 +1581,16 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         to materialization.
         """
         if unlikely(not self.has_more()):
-            raise Error("Unexpected EOF")
+            raise DeserializationError(
+                "Unexpected EOF", DerErrorKind.InvalidValue
+            )
         var esc = self.data[]
         if unlikely(esc not in acceptable_escapes):
-            raise Error(
-                "Invalid escape sequence: ",
-                to_string(self.data[-1]),
-                to_string(esc),
+            raise DeserializationError(
+                String("Invalid escape sequence: ")
+                + String(to_string(self.data[-1]))
+                + String(to_string(esc)),
+                DerErrorKind.InvalidValue,
             )
         self.data += 1
         if esc == `u`:
@@ -1275,10 +1598,14 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 ptr_dist(self.data.p, self.data.end) < 4
                 or not is_hex_digits(self.data.p.unsafe_load[width=4]())
             ):
-                raise Error("Invalid hex digit encountered")
+                raise DeserializationError(
+                    "Invalid hex digit encountered", DerErrorKind.InvalidValue
+                )
             self.data += 4
 
-    def expect_string_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_string_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         var start = self.data
         self.data += 1
 
@@ -1293,7 +1620,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 return res
 
             if unlikely(block.has_unescaped()):
-                raise Error("Control characters must be escaped")
+                raise DeserializationError(
+                    "Control characters must be escaped",
+                    DerErrorKind.InvalidValue,
+                )
 
             if not block.has_backslash():
                 self.data += SIMD8_WIDTH
@@ -1316,39 +1646,59 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 self.data += 1
                 self._expect_escape_body()
             elif c < 0x20:
-                raise Error("Control characters must be escaped")
+                raise DeserializationError(
+                    "Control characters must be escaped",
+                    DerErrorKind.InvalidValue,
+                )
             else:
                 self.data += 1
 
-        raise Error("Unexpected EOF")
+        raise DeserializationError("Unexpected EOF", DerErrorKind.InvalidValue)
 
-    def expect_int_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_int_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         self.skip_whitespace()
         var start = self.data
         self._validate_number[integer_only=True]()
         return Span(unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
-    def expect_float_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_float_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         self.skip_whitespace()
         var start = self.data
         self._validate_number()
         return Span(unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
-    def expect_object_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_object_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         self.skip_whitespace()
         if unlikely(not self.has_more() or self.data[] != `{`):
-            raise Error("Invalid JSON, Expected an object")
+            raise DeserializationError(
+                "Invalid JSON, Expected an object", self._value_shape_kind()
+            )
         return self._expect_validated_bytes()
 
-    def expect_array_bytes(mut self) raises -> Span[Byte, Self.origin]:
+    def expect_array_bytes(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
         self.skip_whitespace()
         if unlikely(not self.has_more() or self.data[] != `[`):
-            raise Error("Invalid JSON, Expected an array")
+            raise DeserializationError(
+                "Invalid JSON, Expected an array", self._value_shape_kind()
+            )
         return self._expect_validated_bytes()
 
 
 def minify(s: String, out out_str: String) raises:
     """Removes whitespace characters from JSON string.
+
+    `minify` is a lexical transform: it strips whitespace outside strings
+    and rejects unescaped control characters inside them, but does not
+    validate the grammar, numbers or UTF-8. Call `from_json` first on
+    untrusted input.
 
     Returns:
         A copy of the input string with all whitespace characters removed.
@@ -1380,11 +1730,14 @@ def minify(s: String, out out_str: String) raises:
         var bits = get_non_space_bits(chunk)
         while bits == 0 and ptr < end:
             ptr = ptr.unsafe_offset(SIMD8_WIDTH)
-            chunk = ptr.unsafe_load[width=SIMD8_WIDTH]()
+            chunk = _load_chunk(ptr, ptr.unsafe_offset(SIMD8_WIDTH) < end)
             bits = get_non_space_bits(chunk)
 
         var trailing = count_trailing_zeros(bits)
         ptr = ptr.unsafe_offset(trailing)
+        if ptr >= end:
+            break
+        is_block_iter = likely(ptr.unsafe_offset(SIMD8_WIDTH) < end)
 
         if ptr[] == `"`:
             var p = ptr
@@ -1405,9 +1758,18 @@ def minify(s: String, out out_str: String) raises:
                     )
                     length += ind
                     p = p.unsafe_offset(ind)
+                if unlikely(p >= end):
+                    # The escape (or the chunk) ran off the end of the
+                    # input: the string was never closed. Never load a
+                    # block at `end`.
+                    raise "Invalid JSON, unterminated string"
                 block = StringBlock.find(p)
 
+            if unlikely(not block.has_quote_first()):
+                raise "Invalid JSON, unterminated string"
             length += Int(block.quote_index() + 1)
+            if unlikely(Int(ptr) + length > Int(end)):
+                raise "Invalid JSON, unterminated string"
             out_str += StringSlice(
                 unsafe_from_utf8=Span[Byte, ptr.origin](
                     unsafe_ptr=ptr, length=length
