@@ -823,41 +823,6 @@ def main() raises:
     write_lines(Path("output.jsonl"), lines)
 ```
 
-### Conformance notes
-
-EmberJson targets RFC 8259 (JSON), RFC 6901 (JSON Pointer), RFC 6902 (JSON Patch),
-RFC 7396 (JSON Merge Patch) and JSON Lines. Behaviours the specifications leave
-to the implementation:
-
-- **Encoding.** Input must be UTF-8 (RFC 8259 §8.1); UTF-16/32 and a leading byte
-  order mark are rejected. `ParseOptions(validate_utf8=False)` skips the check and
-  can produce `String`s that violate the UTF-8 invariant; `to_json` does not
-  re-validate.
-- **Top-level scalars** are accepted (RFC 8259 §2); RFC 4627 forbade them.
-- **Duplicate object names** are rejected by default (`Value`, `Document`,
-  reflection into `Dict`). `StrictOptions.ALLOW_DUPLICATE_KEYS` gives
-  last-write-wins for `Value` and `Dict`; `Document` does not support it;
-  reflection into a struct always rejects a repeated declared field;
-  `parse_pointer` resolves to the first match on its path.
-- **Numbers.** Integers fit `Int64`/`UInt64`; a literal outside that range parses
-  as `Float64`. A float that overflows to ±Inf is rejected; underflow rounds to
-  zero. `-0` parses as the integer 0; `-0.0` keeps its sign. NaN and ±Inf
-  serialize as `null`.
-- **Strings.** Unpaired surrogate escapes (`"\uD800"`) are rejected (RFC 8259
-  §8.2 leaves them undefined). `ParseOptions(ignore_unicode=True)` keeps `\u`
-  escapes as raw text without validating them (`"\uD800"` and `"\u12G4"` are
-  stored as-is); such values do not round-trip through `to_json`. Use it only
-  on trusted input.
-- **Nesting** is limited to 1024 levels for `Value`, `Document`, and reflected
-  values that bottom out through `Value` (for example `List[Value]`);
-  reflecting directly into a recursive struct or collection type has no depth
-  guard of its own beyond the Mojo call stack.
-- **JSON Pointer.** A `~` must be followed by `0` or `1`; any other `~` is a
-  syntax error. The URI fragment form (`#/a~1b`) is not supported.
-- **JSON Patch `test`** compares numbers numerically (`1` equals `1.0`).
-- **JSON Lines.** Blank and malformed lines are skipped; a leading byte order mark
-  on the first line is stripped; read errors surface from `collect()`.
-
 ## Acknowledgments
 
 EmberJson uses the [Teju Jagua](https://github.com/cassioneri/teju_jagua) algorithm for efficient floating-point formatting, developed by Cassio Neri and licensed under the Apache License, Version 2.0.
