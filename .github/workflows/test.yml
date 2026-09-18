@@ -13,9 +13,8 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-            - name: Run the test suite  
+            - uses: prefix-dev/setup-pixi@v0.8.1
+            - name: Run the test suite
               run: |
-                curl -fsSL https://pixi.sh/install.sh | sh
-                export PATH="$HOME/.pixi/bin:$PATH"
                 pixi run check_lock_compilers
                 pixi run test

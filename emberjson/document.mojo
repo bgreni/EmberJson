@@ -8,7 +8,7 @@ from ._deserialize.tape import (
     TapeSink,
 )
 from ._deserialize.tape_indexed import parse_document_tape_indexed
-from emberserde.error import DeserializationError, DerErrorKind
+from emberserde.error import DeserializationError
 from ._deserialize.tape import (
     TapeTag,
     CLOSE_MASK,

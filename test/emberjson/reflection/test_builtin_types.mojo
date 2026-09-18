@@ -6,7 +6,6 @@ from emberjson import (
     Object,
     Array,
     Null,
-    JSON,
 )
 
 

@@ -38,7 +38,6 @@ from .tape import (
     TapeTag,
     _pack_word,
     _pack_container_open,
-    _payload_of,
     _arena_write,
     _push_and_check_key,
 )
@@ -48,7 +47,7 @@ from ._parser_helper import (
     pack_into_integer,
 )
 from emberjson._index import structural_index
-from emberjson.utils import is_space, to_string, lut, StackArray
+from emberjson.utils import to_string, lut, StackArray
 from emberjson.simd import SIMD8_WIDTH
 from emberjson.constants import (
     `"`,

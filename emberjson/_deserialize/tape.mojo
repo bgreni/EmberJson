@@ -1,21 +1,17 @@
 from .parser import Parser, ParseOptions, StrictOptions, RawNumber
 from ._parser_helper import (
-    StringBlock,
     ptr_dist,
     _next_backslash,
-    hex_to_u32,
+    decode_codepoint,
+    decode_escape,
     is_numerical_component,
 )
-from emberjson.utils import BytePtr, to_string
-from emberjson.simd import SIMD8_WIDTH
+from emberjson.utils import BytePtr
 from emberjson.constants import (
     `"`,
     `t`,
     `f`,
     `n`,
-    `b`,
-    `r`,
-    `/`,
     `{`,
     `}`,
     `[`,
@@ -23,17 +19,10 @@ from emberjson.constants import (
     `,`,
     `:`,
     `u`,
-    `\\`,
-    `\n`,
-    `\t`,
-    `\r`,
-    `\b`,
-    `\f`,
-    acceptable_escapes,
 )
 from std.memory import unsafe_memcpy, unsafe_memcmp
 from std.memory.alloc import unsafe_alloc
-from std.sys.intrinsics import unlikely, likely
+from std.sys.intrinsics import unlikely
 from emberserde.error import DeserializationError, DerErrorKind
 
 
@@ -221,41 +210,7 @@ def _handle_unicode_codepoint_ptr[
         The caller must have reserved enough space behind `w`; a decoded
         codepoint never emits more bytes than its escape sequence spans.
     """
-    if unlikely(p.unsafe_offset(3) >= end):
-        raise DeserializationError(
-            "Bad unicode codepoint", DerErrorKind.InvalidValue
-        )
-    var c1 = hex_to_u32(p)
-    p = p.unsafe_offset(4)
-
-    if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
-        raise DeserializationError(
-            "Invalid unicode: lone surrogate", DerErrorKind.InvalidValue
-        )
-    if c1 >= 0xD800 and c1 < 0xDC00:
-        if unlikely(p.unsafe_offset(5) >= end):
-            raise DeserializationError(
-                "Bad unicode codepoint", DerErrorKind.InvalidValue
-            )
-        elif unlikely(not (p[] == `\\` and p[unsafe_offset=1] == `u`)):
-            raise DeserializationError(
-                "Bad unicode codepoint", DerErrorKind.InvalidValue
-            )
-
-        p = p.unsafe_offset(2)
-        var c2 = hex_to_u32(p)
-
-        if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
-            raise DeserializationError(
-                "Bad unicode codepoint", DerErrorKind.InvalidValue
-            )
-
-        c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
-        p = p.unsafe_offset(4)
-
-    if unlikely(c1 > 0x10FFFF):
-        raise DeserializationError("Invalid unicode", DerErrorKind.InvalidValue)
-
+    var c1 = decode_codepoint(p, end)
     if c1 < 0x80:
         w[] = UInt8(c1)
         w = w.unsafe_offset(1)
@@ -321,45 +276,12 @@ def _arena_write[
                 p = p.unsafe_offset(1)  # skip backslash
                 if p < end:
                     var c = p[]
+                    p = p.unsafe_offset(1)
                     if c == `u`:
-                        p = p.unsafe_offset(1)
                         _handle_unicode_codepoint_ptr(p, w, end)
-                    elif c == `"`:
-                        w[] = `"`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `\\`:
-                        w[] = `\\`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `/`:
-                        w[] = `/`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `b`:
-                        w[] = `\b`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `f`:
-                        w[] = `\f`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `n`:
-                        w[] = `\n`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `r`:
-                        w[] = `\r`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
-                    elif c == `t`:
-                        w[] = `\t`
-                        w = w.unsafe_offset(1)
-                        p = p.unsafe_offset(1)
                     else:
-                        raise DeserializationError(
-                            "Invalid escape sequence", DerErrorKind.InvalidValue
-                        )
+                        w[] = decode_escape(c)
+                        w = w.unsafe_offset(1)
         final_len = Int(w) - Int(content)
     else:
         unsafe_memcpy(dest=content, src=start, count=raw_len)
@@ -378,95 +300,14 @@ def _tape_string[
 ](
     mut p: Parser[origin, options], mut sink: TapeSink
 ) raises DeserializationError:
-    """Scans the string at the cursor (mirroring `Parser.find` /
-    `Parser.read_serial`) and appends it to the arena + tape."""
-    p.data += 1
-    var start = p.data
-    var end_ptr: BytePtr[origin]
-    var found_escaped = False
-    var first_escape = 0
-
-    # compile time interpreter is incompatible with the SIMD accelerated
-    # path, so fallback to the serial implementation (see read_string)
-    if p.can_load_chunk():
-        while True:
-            var block: StringBlock
-            comptime if options._assume_padded:
-                block = StringBlock.find(p.data.p)
-            else:
-                block = StringBlock.find(p.data)
-            if block.has_quote_first():
-                p.data += block.quote_index()
-                end_ptr = p.data.p
-                p.data += 1
-                break
-            elif unlikely(p.data.p >= p.data.end):
-                raise DeserializationError(
-                    "Unexpected EOF", DerErrorKind.InvalidValue
-                )
-
-            if unlikely(block.has_unescaped()):
-                raise DeserializationError(
-                    String("Control characters must be escaped: ")
-                    + String(to_string(p.load_chunk()))
-                    + String(" : ")
-                    + String(String(block.unescaped_index())),
-                    DerErrorKind.InvalidValue,
-                )
-            if not block.has_backslash():
-                p.data += SIMD8_WIDTH
-                continue
-            p.data += block.bs_index()
-
-            if not found_escaped:
-                first_escape = ptr_dist(start.p, p.data.p)
-            found_escaped = True
-            while True:
-                p.data += 1
-                if p.cur() == `u`:
-                    p.data += 1
-                    break
-                else:
-                    if unlikely(p.cur() not in acceptable_escapes):
-                        raise DeserializationError(
-                            String("Invalid escape sequence: ")
-                            + String(to_string(p.data[-1]))
-                            + String(to_string(p.cur())),
-                            DerErrorKind.InvalidValue,
-                        )
-                p.data += 1
-                if p.cur() != `\\`:
-                    break
-    else:
-        while True:
-            if unlikely(not p.has_more()):
-                raise DeserializationError(
-                    "Invalid String", DerErrorKind.InvalidValue
-                )
-            if p.data[] == `"`:
-                end_ptr = p.data.p
-                p.data += 1
-                break
-            if p.data[] == `\\`:
-                p.data += 1
-                if unlikely(p.data[] not in acceptable_escapes):
-                    raise DeserializationError(
-                        String("Invalid escape sequence: ")
-                        + String(to_string(p.data[-1]))
-                        + String(to_string(p.data[])),
-                        DerErrorKind.InvalidValue,
-                    )
-                found_escaped = True
-            if unlikely(p.data[] < 0x20):
-                raise DeserializationError(
-                    String("Control characters must be escaped: ")
-                    + String(String(p.data[])),
-                    DerErrorKind.InvalidValue,
-                )
-            p.data += 1
-
+    """Scans the string at the cursor and appends it to the arena + tape."""
+    var scan = p.scan_string()
     var off = _arena_write[options.ignore_unicode](
-        sink.strings, start.p, end_ptr, found_escaped, first_escape
+        sink.strings,
+        scan.start,
+        scan.end,
+        scan.found_escaped,
+        scan.first_escape,
     )
     sink.tape.append(_pack_word(TapeTag.STRING, UInt64(off)))
 

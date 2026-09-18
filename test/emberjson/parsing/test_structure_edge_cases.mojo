@@ -1,7 +1,6 @@
 from emberjson import (
     from_json,
     Parser,
-    JSON,
     Object,
     Array,
     ParseOptions,

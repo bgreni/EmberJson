@@ -25,7 +25,7 @@ from std.memory import unsafe_memcpy
 
 from emberjson.utils import BytePtr
 from .simd_ops import SimdInput
-from .classifier import classify, CharacterBlock
+from .classifier import classify
 from .portable import structurals_from_masks
 from .string_mask import EscapeScanner, StringScanner
 

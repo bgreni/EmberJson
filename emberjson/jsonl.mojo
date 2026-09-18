@@ -1,15 +1,12 @@
 from std.pathlib import Path
 from std.collections import Span
-from std.memory import ArcPointer, unsafe_memset, unsafe_memcpy
-from .constants import `\n`, `\r`
+from std.memory import unsafe_memset, unsafe_memcpy
+from .constants import `\n`
 from std.os import PathLike
-from .simd import SIMD8_WIDTH
-from std.bit import count_leading_zeros
-from std.memory.unsafe import pack_bits
 from emberjson import Value
 
 
-struct _ReadBuffer(Copyable, Movable, Sized, Writable):
+struct _ReadBuffer(Movable, Sized):
     comptime BUFFER_SIZE = 4096
     var buf: Array[Byte, Self.BUFFER_SIZE]
     var length: Int
@@ -42,12 +39,10 @@ struct _ReadBuffer(Copyable, Movable, Sized, Writable):
         unsafe_memset(self.ptr(), 0, Self.BUFFER_SIZE)
         self.length = 0
 
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write(
-            StringSlice(
-                unsafe_from_utf8=Span(unsafe_ptr=self.ptr(), length=self.length)
-            )
-        )
+    def drain_into(mut self, mut line: List[Byte], n: Int, skip: Int = 0):
+        """Moves the first `n` bytes onto `line`, dropping `skip` more."""
+        line.extend(Span(unsafe_ptr=self.ptr(), length=n))
+        self.clear(n + skip)
 
     def __len__(self) -> Int:
         return self.length
@@ -124,82 +119,36 @@ struct JSONLinesIter(Iterator):
             raise Error(self.read_error.value())
 
     def _read_until_newline(mut self) raises -> List[Byte]:
-        ref file = self.f
-
         var line = List[Byte]()
-
-        var newline_ind = self.read_buf.index(`\n`)
-        if newline_ind != -1:
-            var p = self.read_buf.ptr()
-            var old_len = len(line)
-            line.resize(old_len + newline_ind, 0)
-            unsafe_memcpy(
-                dest=line.unsafe_ptr().unsafe_offset(old_len),
-                src=p,
-                count=newline_ind,
-            )
-            self.read_buf.clear(newline_ind + 1)
-            return line^
-
         while True:
-            var buf_span = Span(
-                unsafe_ptr=self.read_buf.ptr().unsafe_offset(
-                    self.read_buf.length
-                ),
-                length=self.read_buf.BUFFER_SIZE - self.read_buf.length,
-            )
+            var newline_ind = self.read_buf.index(`\n`)
+            if newline_ind != -1:
+                self.read_buf.drain_into(line, newline_ind, skip=1)
+                return line^
+
+            # No newline buffered: bank what we have, then refill.
+            self.read_buf.drain_into(line, len(self.read_buf))
             var read: Int
             try:
-                read = file.read(buf_span)
+                read = self.f.read(
+                    Span(
+                        unsafe_ptr=self.read_buf.ptr(),
+                        length=self.read_buf.BUFFER_SIZE,
+                    )
+                )
             except e:
                 self.read_error = String(e)
                 raise Error("EOF")
-            self.read_buf.length += read
 
             if read <= 0:
-                if len(self.read_buf) != 0:
-                    var p = self.read_buf.ptr()
-                    var old_len = len(line)
-                    var count = len(self.read_buf)
-                    line.resize(old_len + count, 0)
-                    unsafe_memcpy(
-                        dest=line.unsafe_ptr().unsafe_offset(old_len),
-                        src=p,
-                        count=count,
-                    )
-                    self.read_buf.clear()
-                # Distinguish a true EOF from a blank line. A blank line returns
-                # an empty buffer via the `\n` branch above; only here, with no
-                # buffered bytes and no accumulated line content, are we really
-                # past the end of the file.
+                # Distinguish a true EOF from a blank line. A blank line
+                # returns an empty buffer via the `\n` branch above; only
+                # here, with nothing read and no accumulated line content,
+                # are we really past the end of the file.
                 if len(line) == 0:
                     raise Error("EOF")
                 return line^
-
-            newline_ind = self.read_buf.index(`\n`)
-
-            if newline_ind != -1:
-                var p = self.read_buf.ptr()
-                var old_len = len(line)
-                line.resize(old_len + newline_ind, 0)
-                unsafe_memcpy(
-                    dest=line.unsafe_ptr().unsafe_offset(old_len),
-                    src=p,
-                    count=newline_ind,
-                )
-                self.read_buf.clear(newline_ind + 1)
-                return line^
-            else:
-                var p = self.read_buf.ptr()
-                var old_len = len(line)
-                var count = len(self.read_buf)
-                line.resize(old_len + count, 0)
-                unsafe_memcpy(
-                    dest=line.unsafe_ptr().unsafe_offset(old_len),
-                    src=p,
-                    count=count,
-                )
-                self.read_buf.clear()
+            self.read_buf.length = read
 
 
 def read_lines(p: Some[PathLike]) raises -> JSONLinesIter:

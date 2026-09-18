@@ -1,21 +1,14 @@
-from std.bit import pop_count, count_trailing_zeros
+from std.bit import count_trailing_zeros
 from std.memory.unsafe import pack_bits
 from .constants import ` `, `\n`, `\t`, `\r`, `\b`, `\f`, `"`, `\\`
-from std.utils.numerics import FPUtils
-from std.math import log10, log2
 from std.collections import Span
-from std.memory import (
-    unsafe_memcmp,
-    unsafe_memcpy,
-    unsafe_memset,
-)
+from std.memory import unsafe_memcpy, unsafe_memset
 from std.format._utils import _FlushingWriteBuffer
 from .traits import JsonValue
 from .object import Object
 from .array import Array
 from std.collections import Array as StdArray
 from .value import Null
-from std.sys import size_of
 from std.sys.intrinsics import unlikely
 from std.utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH

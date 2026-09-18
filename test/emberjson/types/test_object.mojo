@@ -4,7 +4,6 @@ from emberjson.value import Null, Value
 from emberjson import (
     to_json,
     from_json,
-    JSON,
     ParseOptions,
     StrictOptions,
     Value,
@@ -50,7 +49,7 @@ def test_object_spaces() raises:
 
 
 def test_nested_object() raises:
-    var s = '{"nested": { "foo": null } }"'
+    var s = '{"nested": { "foo": null } }'
     var ob = Object(parse_string=s)
     assert_true("nested" in ob)
     assert_true(ob["nested"].isa[Object]())

@@ -1,1 +1,1 @@
-from .parser import Parser, ParseOptions, minify, StrictOptions
+from .parser import Parser, ParseOptions, minify, StrictOptions, parse_root

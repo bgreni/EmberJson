@@ -1,5 +1,4 @@
 from .value import Value, Null
-from .json import JSON
 from .array import Array
 from .object import Object
 from .utils import write, PaddedBuffer, PAD_INPUT_THRESHOLD
@@ -18,6 +17,7 @@ from ._deserialize import (
     ParseOptions,
     minify,
     StrictOptions,
+    parse_root as _parse_root,
 )
 
 from ._serde import (
@@ -36,7 +36,6 @@ from .lazy import (
     LazyInt,
     LazyUInt,
     LazyFloat,
-    Lazy,
     LazyValue,
 )
 
@@ -99,30 +98,6 @@ from emberserde.error import (
 )
 
 
-def _parse_value_root[
-    o: ImmOrigin, //, options: ParseOptions
-](s: StringSlice[o], out j: Value) raises DeserializationError:
-    """`from_json[Value]`'s parse, with the UTF-8 pre-pass removed.
-
-    Copies the input into a NUL-padded buffer (one memcpy, cheap relative
-    to parsing) so the parser's hot loops can skip per-byte bounds checks.
-    Safe because the returned `Value` owns all of its data. Tiny inputs
-    skip the copy: the allocation would cost more than the parse.
-
-    `Parser.parse()` raises `DeserializationError` itself, with the kind
-    chosen at the failure site (F16), so nothing is translated here: a
-    duplicate key arrives as `DuplicateField`, not flattened into
-    `InvalidValue` by a blanket re-wrap.
-    """
-    if s.byte_length() < PAD_INPUT_THRESHOLD:
-        var p = Parser[options=options](s)
-        j = p.parse()
-    else:
-        var buf = PaddedBuffer(s.as_bytes())
-        var p = Parser[options=options._padded()](padded=buf)
-        j = p.parse()
-
-
 def from_json[
     o: ImmOrigin,
     //,
@@ -167,7 +142,7 @@ def from_json[
     # Validation has run; clear the flag so no branch repeats it.
     comptime checked = options._utf8_validated()
     comptime if T == Value:
-        result = _rebind_var[T](_parse_value_root[checked](s))
+        result = _rebind_var[T](_parse_root[checked](s.as_bytes()))
     elif T == Document:
         comptime assert not (
             StrictOptions.ALLOW_DUPLICATE_KEYS in options.strict_mode

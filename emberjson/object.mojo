@@ -1,13 +1,10 @@
-from .value import Value, Null
+from .value import Value
 from std.collections import Dict, List
-from std.sys.intrinsics import unlikely, likely
+from std.sys.intrinsics import unlikely
 from .traits import JsonValue
-from ._deserialize import Parser, ParseOptions
-from .utils import write_escaped_string, PaddedBuffer, PAD_INPUT_THRESHOLD
-from ._utf8 import is_valid_utf8
+from ._deserialize import Parser
+from .utils import write_escaped_string
 from std.python import PythonObject, Python
-from std.os import abort
-from std.hashlib.hasher import Hasher
 from std.hashlib import hash
 
 from emberserde.serialize import Serializer
@@ -242,18 +239,11 @@ struct Object(JsonValue, Sized):
 
     @always_inline
     def __init__(out self, *, parse_string: String) raises:
-        # Default options: UTF-8 validation is on (see ParseOptions).
-        if not is_valid_utf8(StringSlice(parse_string)):
-            raise Error("Invalid UTF-8 in input")
-        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
-        # tiny inputs skip the copy since it would cost more than the parse.
-        if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
-            var p = Parser(parse_string)
-            self = p.parse_object()
-        else:
-            var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-            var p = Parser[options=ParseOptions()._padded()](padded=buf)
-            self = p.parse_object()
+        var v = Value(parse_string=parse_string)
+        if not v.is_object():
+            raise Error("Expected a JSON object")
+        self = Self()
+        swap(self, v.object())
 
     @always_inline
     def _find_entry(self, h: UInt64, key: String) -> Int:

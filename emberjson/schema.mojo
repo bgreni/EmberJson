@@ -30,11 +30,7 @@ from std.reflection import reflect
 ##########################################################
 
 
-struct AllOf[T: _Base, *validators: Validator](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+struct AllOf[T: _Base, *validators: Validator](_Wrapper):
     """A validator that requires a value to pass all of the given validators.
 
     Parameters:
@@ -48,18 +44,6 @@ struct AllOf[T: _Base, *validators: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # See `_validation_failed` for why the constructor does the
-        # validating and why a rejection is `InvalidValue`.
-        var value = serde_deserialize[Self.T](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:
@@ -97,15 +81,31 @@ trait Validator:
         ...
 
 
+trait _Wrapper(Deserializable, Serializable, Validator):
+    """The part every validating wrapper shares: read the payload and hand
+    it to the (validating) constructor."""
+
+    def __init__(out self, var value: Self.Type) raises:
+        ...
+
+    @staticmethod
+    def deserialize(
+        mut d: Some[Deserializer],
+    ) raises DeserializationError -> Self:
+        # See `_validation_failed` for why the constructor does the
+        # validating and why a rejection is `InvalidValue`.
+        var value = serde_deserialize[Self.Type](d)
+        try:
+            return Self(value^)
+        except e:
+            raise _validation_failed(e)
+
+
 struct Validated[
     T: _Base,
     validator: def(T) thin -> Bool,
     err_msg: String = "Value is not valid",
-](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+](_Wrapper):
     """Validates a value by applying the given function.
 
     Parameters:
@@ -120,18 +120,6 @@ struct Validated[
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # See `_validation_failed` for why the constructor does the
-        # validating and why a rejection is `InvalidValue`.
-        var value = serde_deserialize[Self.T](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:
@@ -323,11 +311,7 @@ Parameters:
 """
 
 
-struct OneOf[T: _Base & Equatable, *accepted: Validator](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+struct OneOf[T: _Base & Equatable, *accepted: Validator](_Wrapper):
     """
     Validates a value to pass one and only one of the given validators.
 
@@ -342,18 +326,6 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # See `_validation_failed` for why the constructor does the
-        # validating and why a rejection is `InvalidValue`.
-        var value = serde_deserialize[Self.T](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:
@@ -383,11 +355,7 @@ struct OneOf[T: _Base & Equatable, *accepted: Validator](
         return self.value
 
 
-struct AnyOf[T: _Base & Equatable, *accepted: Validator](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+struct AnyOf[T: _Base & Equatable, *accepted: Validator](_Wrapper):
     """
     Validates a value to pass at least one of the given validators.
 
@@ -402,18 +370,6 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # See `_validation_failed` for why the constructor does the
-        # validating and why a rejection is `InvalidValue`.
-        var value = serde_deserialize[Self.T](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:
@@ -437,11 +393,7 @@ struct AnyOf[T: _Base & Equatable, *accepted: Validator](
         return self.value
 
 
-struct NoneOf[T: _Base & Equatable, *rejected: Validator](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+struct NoneOf[T: _Base & Equatable, *rejected: Validator](_Wrapper):
     """
     Validates a value to not pass any of the given validators.
 
@@ -456,18 +408,6 @@ struct NoneOf[T: _Base & Equatable, *rejected: Validator](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # See `_validation_failed` for why the constructor does the
-        # validating and why a rejection is `InvalidValue`.
-        var value = serde_deserialize[Self.T](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:
@@ -505,11 +445,7 @@ Parameters:
 """
 
 
-struct Enum[T: _Base & Equatable, //, *accepted: T](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+struct Enum[T: _Base & Equatable, //, *accepted: T](_Wrapper):
     """Validates a value against an enumerated set of allowed values.
     A semantic alias for OneOf — use with Eq validators for enum-style validation.
 
@@ -527,18 +463,6 @@ struct Enum[T: _Base & Equatable, //, *accepted: T](
     def __init__(out self, var value: Self.T) raises:
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # See `_validation_failed` for why the constructor does the
-        # validating and why a rejection is `InvalidValue`.
-        var value = serde_deserialize[Self.T](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:
@@ -845,11 +769,7 @@ struct CrossFieldValidator[
         reflect[Parent].field[F1].T,
         reflect[Parent].field[F2].T,
     ) thin raises,
-](
-    Deserializable,
-    Serializable,
-    Validator,
-):
+](_Wrapper):
     """
     Validates a value to depend on another field.
 
@@ -868,18 +788,6 @@ struct CrossFieldValidator[
         comptime assert __field_in_parent[Self.Parent, Self.F2]()
         self.value = value^
         Self.validate(self.value)
-
-    @staticmethod
-    def deserialize(
-        mut d: Some[Deserializer],
-    ) raises DeserializationError -> Self:
-        # Same shape as the value validators, but the thing being checked
-        # is the whole parent struct rather than one field's payload.
-        var value = serde_deserialize[Self.Type](d)
-        try:
-            return Self(value^)
-        except e:
-            raise _validation_failed(e)
 
     @staticmethod
     def validate(value: Self.Type) raises:

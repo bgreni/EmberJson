@@ -1,9 +1,5 @@
-from .object import Object
 from .value import Value
 from .traits import JsonValue
-from .utils import PaddedBuffer, PAD_INPUT_THRESHOLD
-from ._utf8 import is_valid_utf8
-from ._deserialize import Parser, ParseOptions
 from std.python import PythonObject, Python
 
 from emberserde.serialize import Serializer
@@ -79,18 +75,11 @@ struct Array(JsonValue, Sized):
 
     @always_inline
     def __init__(out self: Array, *, parse_string: String) raises:
-        # Default options: UTF-8 validation is on (see ParseOptions).
-        if not is_valid_utf8(StringSlice(parse_string)):
-            raise Error("Invalid UTF-8 in input")
-        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
-        # tiny inputs skip the copy since it would cost more than the parse.
-        if parse_string.byte_length() < PAD_INPUT_THRESHOLD:
-            var p = Parser(parse_string)
-            self = p.parse_array()
-        else:
-            var buf = PaddedBuffer(StringSlice(parse_string).as_bytes())
-            var p = Parser[options=ParseOptions()._padded()](padded=buf)
-            self = p.parse_array()
+        var v = Value(parse_string=parse_string)
+        if not v.is_array():
+            raise Error("Expected a JSON array")
+        self = Self()
+        swap(self, v.array())
 
     @always_inline
     def __getitem__(ref self, ind: Some[Indexer]) -> ref[self._data[ind]] Value:

@@ -1,5 +1,4 @@
 from ._parser_helper import (
-    BytePtr,
     `-`,
     `+`,
     `0`,

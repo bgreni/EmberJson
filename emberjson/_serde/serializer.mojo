@@ -60,7 +60,8 @@ struct EmberJsonSeqSer[
     origin: MutOrigin,
     pretty: Bool = False,
     indent: String = DefaultIndent,
-](SeqSerState):
+](SeqSerState, TupleSerState):
+    # A JSON tuple is an array, so one state serves both traits.
     var out: Pointer[Self.W, Self.origin]
     var first: Bool
     var depth: Int
@@ -200,39 +201,6 @@ struct EmberJsonStructSer[
 
 
 @fieldwise_init
-struct EmberJsonTupleSer[
-    W: Writer & Movable & Deinitable,
-    origin: MutOrigin,
-    pretty: Bool = False,
-    indent: String = DefaultIndent,
-](TupleSerState):
-    var out: Pointer[Self.W, Self.origin]
-    var first: Bool
-    var depth: Int
-
-    def serialize_element(mut self, v: Some[AnyType]) raises SerializationError:
-        if not self.first:
-            self.out[].write(",")
-            comptime if Self.pretty:
-                self.out[].write("\n")
-        self.first = False
-        comptime if Self.pretty:
-            _write_indent[Self.indent](self.out[], self.depth)
-        var sub = EmberJsonSerializer[
-            Self.W, Self.origin, Self.pretty, Self.indent
-        ](out=self.out, depth=self.depth)
-        serialize(v, sub)
-
-    def end(mut self) raises SerializationError:
-        comptime if Self.pretty:
-            # See EmberJsonSeqSer.end for why this is guarded on `first`.
-            if not self.first:
-                self.out[].write("\n")
-            _write_indent[Self.indent](self.out[], self.depth - 1)
-        self.out[].write("]")
-
-
-@fieldwise_init
 struct EmberJsonEnumSer[
     W: Writer & Movable & Deinitable,
     origin: MutOrigin,
@@ -274,9 +242,7 @@ struct EmberJsonSerializer[
     comptime StructType = EmberJsonStructSer[
         Self.W, Self.origin, Self.pretty, Self.indent
     ]
-    comptime TupleType = EmberJsonTupleSer[
-        Self.W, Self.origin, Self.pretty, Self.indent
-    ]
+    comptime TupleType = Self.SeqType
     comptime EnumType = EmberJsonEnumSer[
         Self.W, Self.origin, Self.pretty, Self.indent
     ]
@@ -358,9 +324,7 @@ struct EmberJsonSerializer[
         comptime if Self.pretty:
             self.out[].write("\n")
             d += 1
-        return EmberJsonTupleSer[Self.W, Self.origin, Self.pretty, Self.indent](
-            out=self.out, first=True, depth=d
-        )
+        return Self.TupleType(out=self.out, first=True, depth=d)
 
     def begin_enum[
         name: String, variant: String

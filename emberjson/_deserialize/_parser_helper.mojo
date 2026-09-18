@@ -1,4 +1,11 @@
-from emberjson.utils import BytePtr, CheckedPointer, select, ByteVec
+from emberjson.utils import (
+    BytePtr,
+    CheckedPointer,
+    select,
+    ByteVec,
+    StackArray,
+    lut,
+)
 from std.memory import unsafe_memcpy
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
 from std.builtin.dtype import _uint_type_of_width
@@ -31,8 +38,7 @@ from emberjson.constants import (
 )
 from std.memory.unsafe import bitcast, pack_bits
 from std.bit import count_trailing_zeros
-from std.sys.info import bit_width_of
-from std.sys.intrinsics import likely, unlikely
+from std.sys.intrinsics import unlikely
 from emberserde.error import DeserializationError, DerErrorKind
 
 comptime smallest_power: Int64 = -342
@@ -169,9 +175,12 @@ def hex_to_u32(p: BytePtr) raises DeserializationError -> UInt32:
     return v.reduce_or()
 
 
-def handle_unicode_codepoint(
-    mut p: BytePtr, mut dest: List[UInt8], end: BytePtr
-) raises DeserializationError:
+@always_inline
+def decode_codepoint[
+    o1: ImmOrigin, o2: ImmOrigin, //
+](mut p: BytePtr[o1], end: BytePtr[o2]) raises DeserializationError -> UInt32:
+    """Decodes the `XXXX` at `p` (plus the low-surrogate escape that must
+    follow a high surrogate), advancing `p` past everything consumed."""
     # TODO: is this check necessary or just being paranoid?
     # because theoretically no string can be built with "\u" only
     # But if this points to bytes received over the wire, it makes sense
@@ -221,6 +230,13 @@ def handle_unicode_codepoint(
     if unlikely(c1 > 0x10FFFF):
         raise DeserializationError("Invalid unicode", DerErrorKind.InvalidValue)
 
+    return c1
+
+
+def handle_unicode_codepoint(
+    mut p: BytePtr, mut dest: List[UInt8], end: BytePtr
+) raises DeserializationError:
+    var c1 = decode_codepoint(p, end)
     if c1 < 0x80:
         dest.append(UInt8(c1))
     elif c1 < 0x800:
@@ -235,6 +251,33 @@ def handle_unicode_codepoint(
         dest.append(UInt8(0x80 | ((c1 >> 12) & 0x3F)))
         dest.append(UInt8(0x80 | ((c1 >> 6) & 0x3F)))
         dest.append(UInt8(0x80 | (c1 & 0x3F)))
+
+
+def _gen_escape_decode(out table: StackArray[Byte, 256]):
+    table = StackArray[Byte, 256](fill=0)
+    table.unsafe_get(Int(`"`)) = `"`
+    table.unsafe_get(Int(`\\`)) = `\\`
+    table.unsafe_get(Int(`/`)) = `/`
+    table.unsafe_get(Int(`b`)) = `\b`
+    table.unsafe_get(Int(`f`)) = `\f`
+    table.unsafe_get(Int(`n`)) = `\n`
+    table.unsafe_get(Int(`r`)) = `\r`
+    table.unsafe_get(Int(`t`)) = `\t`
+
+
+comptime _ESCAPE_DECODE: StackArray[Byte, 256] = _gen_escape_decode()
+
+
+@always_inline
+def decode_escape(c: Byte) raises DeserializationError -> Byte:
+    """The byte a single-character escape (`\\n`, `\\"`, ...) stands for.
+    `\\u` is not one of them; callers dispatch it first."""
+    var decoded = lut[_ESCAPE_DECODE](Int(c))
+    if unlikely(decoded == 0):
+        raise DeserializationError(
+            "Invalid escape sequence", DerErrorKind.InvalidValue
+        )
+    return decoded
 
 
 @always_inline
@@ -306,38 +349,11 @@ def copy_to_string[
                 p = p.unsafe_offset(1)  # skip backslash
                 if p < end:
                     var c = p[]
+                    p = p.unsafe_offset(1)
                     if c == `u`:
-                        p = p.unsafe_offset(1)
                         handle_unicode_codepoint(p, dest, end)
-                    elif c == `"`:
-                        dest.append(`"`)
-                        p = p.unsafe_offset(1)
-                    elif c == `\\`:
-                        dest.append(`\\`)
-                        p = p.unsafe_offset(1)
-                    elif c == `/`:
-                        dest.append(`/`)
-                        p = p.unsafe_offset(1)
-                    elif c == `b`:
-                        dest.append(`\b`)
-                        p = p.unsafe_offset(1)
-                    elif c == `f`:
-                        dest.append(`\f`)
-                        p = p.unsafe_offset(1)
-                    elif c == `n`:
-                        dest.append(`\n`)
-                        p = p.unsafe_offset(1)
-                    elif c == `r`:
-                        dest.append(`\r`)
-                        p = p.unsafe_offset(1)
-                    elif c == `t`:
-                        dest.append(`\t`)
-                        p = p.unsafe_offset(1)
                     else:
-                        raise DeserializationError(
-                            "Invalid escape sequence",
-                            DerErrorKind.InvalidValue,
-                        )
+                        dest.append(decode_escape(c))
         return String(unsafe_from_utf8=dest^)
 
     comptime if not ignore_unicode:

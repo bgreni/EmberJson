@@ -25,7 +25,7 @@ from std.benchmark import (
 from emberjson._index import structural_index
 from emberjson.utils import PaddedBuffer
 from emberjson._serde import from_json as _from_json
-from std.python import Python, PythonObject
+from std.python import Python
 from std.sys import argv
 from std.pathlib import Path
 

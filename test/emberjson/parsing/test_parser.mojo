@@ -1,5 +1,5 @@
 from emberjson._deserialize.parser import Parser, ParseOptions
-from emberjson import JSON, Null, Array, Object, Value, from_json
+from emberjson import Null, Array, Object, Value, from_json
 from std.testing import assert_true, assert_equal, assert_raises, TestSuite
 
 

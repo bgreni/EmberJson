@@ -5,17 +5,13 @@ from emberjson import (
     Object,
     Value,
     Null,
-    JSON,
     Parser,
     ParseOptions,
     Document,
 )
 from emberjson._deserialize.tape import TapeSink, _Arena, parse_document_tape
 from emberjson._deserialize.tape_indexed import parse_document_tape_indexed
-from emberjson.utils import write_escaped_string, PaddedBuffer
-from std.memory import UnsafePointer, alloc
-from std.utils.numerics import isinf
-from std.time import monotonic
+from emberjson.utils import PaddedBuffer
 from std.testing import assert_equal
 from std.testing.prop.strategy import Strategy, Rng
 from std.testing.prop.strategy.string_strategy import _StringStrategy

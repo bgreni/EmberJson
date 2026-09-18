@@ -3,19 +3,18 @@ from emberjson.utils import (
     BytePtr,
     ByteView,
     PaddedBuffer,
+    PAD_INPUT_THRESHOLD,
     to_string,
     is_space,
     select,
     lut,
 )
 from std.math import isinf
-from emberjson.json import JSON
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
 from emberjson.array import Array
 from emberjson.object import Object, _ObjectParseIndex
 from emberjson.value import Value, Null
 from std.bit import count_trailing_zeros
-from std.memory import unsafe_memset
 from std.sys.intrinsics import unlikely, likely
 from ._parser_helper import (
     copy_to_string,
@@ -63,9 +62,6 @@ from emberjson.constants import (
     `u`,
     acceptable_escapes,
     `\\`,
-    `\n`,
-    `\r`,
-    `\t`,
     `-`,
     `+`,
     `0`,
@@ -73,8 +69,6 @@ from emberjson.constants import (
     `.`,
     ` `,
     `1`,
-    `E`,
-    `e`,
     MAX_NESTING_DEPTH,
 )
 from std.utils.numerics import FPUtils
@@ -206,6 +200,19 @@ struct RawNumber(TrivialRegisterPassable):
 
     var kind: Byte
     var bits: UInt64
+
+
+@fieldwise_init
+struct StringScan[origin: ImmOrigin](TrivialRegisterPassable):
+    """A scanned string's content, `[start, end)`, and what decoding it needs.
+
+    `first_escape` is the offset of the first backslash (0 when unknown), so
+    the decoder can bulk-copy the clean prefix instead of re-scanning it."""
+
+    var start: BytePtr[Self.origin]
+    var end: BytePtr[Self.origin]
+    var found_escaped: Bool
+    var first_escape: Int
 
 
 struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
@@ -537,11 +544,51 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 "Invalid json value", DerErrorKind.InvalidValue
             )
 
-    def find(
-        mut self, start: CheckedPointer, out s: String
-    ) raises DeserializationError:
+    @always_inline
+    def scan_string(
+        mut self,
+    ) raises DeserializationError -> StringScan[Self.origin]:
+        """Validates the string at the cursor (which sits on its opening
+        quote) and leaves the cursor past the closing quote.
+
+        Decoding is the caller's: `read_string` materializes a `String`,
+        the tape builders write straight into their arena.
+        """
+        self.data += 1
+        var start = self.data.p
         var found_escaped = False
         var first_escape = 0
+
+        # compile time interpreter is incompatible with the SIMD accelerated
+        # path, so fallback to the serial implementation
+        if not self.can_load_chunk():
+            while likely(self.has_more()):
+                if self.data[] == `"`:
+                    var end = self.data.p
+                    self.data += 1
+                    return {start, end, found_escaped, 0}
+                if self.data[] == `\\`:
+                    self.data += 1
+                    if unlikely(self.data[] not in acceptable_escapes):
+                        raise DeserializationError(
+                            String("Invalid escape sequence: ")
+                            + String(to_string(self.data[-1]))
+                            + String(to_string(self.data[])),
+                            DerErrorKind.InvalidValue,
+                        )
+                    # We found a backslash, so we need to unescape
+                    found_escaped = True
+                if unlikely(self.data[] < 0x20):
+                    raise DeserializationError(
+                        String("Control characters must be escaped: ")
+                        + String(String(self.data[])),
+                        DerErrorKind.InvalidValue,
+                    )
+                self.data += 1
+            raise DeserializationError(
+                "Invalid String", DerErrorKind.InvalidValue
+            )
+
         while True:
             var block: StringBlock
             comptime if Self.options._assume_padded:
@@ -554,9 +601,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 block = StringBlock.find(self.data)
             if block.has_quote_first():
                 self.data += block.quote_index()
-                return copy_to_string[Self.options.ignore_unicode](
-                    start.p, self.data.p, found_escaped, first_escape
-                )
+                var end = self.data.p
+                self.data += 1
+                return {start, end, found_escaped, first_escape}
             elif unlikely(self.data.p >= self.data.end):
                 # We got EOF before finding the end quote, so obviously this
                 # input is malformed
@@ -581,7 +628,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             # first one is so the decoder can bulk-copy the clean prefix
             # instead of re-scanning it.
             if not found_escaped:
-                first_escape = ptr_dist(start.p, self.data.p)
+                first_escape = ptr_dist(start, self.data.p)
             found_escaped = True
             while True:
                 self.data += 1
@@ -600,48 +647,11 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 if self.cur() != `\\`:
                     break
 
-    def read_serial(
-        mut self, start: CheckedPointer, out s: String
-    ) raises DeserializationError:
-        var found_escaped = False
-        while likely(self.has_more()):
-            if self.data[] == `"`:
-                s = copy_to_string[Self.options.ignore_unicode](
-                    start.p, self.data.p, found_escaped
-                )
-                self.data += 1
-                return
-            if self.data[] == `\\`:
-                self.data += 1
-                if unlikely(self.data[] not in acceptable_escapes):
-                    raise DeserializationError(
-                        String("Invalid escape sequence: ")
-                        + String(to_string(self.data[-1]))
-                        + String(to_string(self.data[])),
-                        DerErrorKind.InvalidValue,
-                    )
-                # We found a backslash, so we need to unescape
-                found_escaped = True
-            if unlikely(self.data[] < 0x20):
-                raise DeserializationError(
-                    String("Control characters must be escaped: ")
-                    + String(String(self.data[])),
-                    DerErrorKind.InvalidValue,
-                )
-            self.data += 1
-
-        raise DeserializationError("Invalid String", DerErrorKind.InvalidValue)
-
     def read_string(mut self, out s: String) raises DeserializationError:
-        self.data += 1
-        var start = self.data
-        # compile time interpreter is incompatible with the SIMD accelerated
-        # path, so fallback to the serial implementation
-        if self.can_load_chunk():
-            s = self.find(start)
-            self.data += 1
-        else:
-            s = self.read_serial(start)
+        var scan = self.scan_string()
+        s = copy_to_string[Self.options.ignore_unicode](
+            scan.start, scan.end, scan.found_escaped, scan.first_escape
+        )
 
     @always_inline
     def skip_whitespace(mut self) raises DeserializationError:
@@ -1690,6 +1700,30 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 "Invalid JSON, Expected an array", self._value_shape_kind()
             )
         return self._expect_validated_bytes()
+
+
+def parse_root[
+    options: ParseOptions = ParseOptions()
+](s: ByteView[mut=False, ...], out j: Value) raises DeserializationError:
+    """Parses a whole document into a `Value`; UTF-8 is the caller's job.
+
+    Copies the input into a NUL-padded buffer (one memcpy, cheap relative
+    to parsing) so the parser's hot loops can skip per-byte bounds checks.
+    Safe because the returned `Value` owns all of its data. Tiny inputs
+    skip the copy: the allocation would cost more than the parse.
+
+    `Parser.parse()` raises `DeserializationError` itself, with the kind
+    chosen at the failure site (F16), so nothing is translated here: a
+    duplicate key arrives as `DuplicateField`, not flattened into
+    `InvalidValue` by a blanket re-wrap.
+    """
+    if len(s) < PAD_INPUT_THRESHOLD:
+        var p = Parser[options=options](s)
+        j = p.parse()
+    else:
+        var buf = PaddedBuffer(s)
+        var p = Parser[options=options._padded()](padded=buf)
+        j = p.parse()
 
 
 def minify(s: String, out out_str: String) raises:

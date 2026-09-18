@@ -128,24 +128,6 @@ def resolve_pointer(
     return _resolve_ref(root, ptr.tokens, 0)
 
 
-def resolve_pointer(
-    ref root: Object, ptr: PointerIndex
-) raises -> ref[root] Value:
-    if unlikely(len(ptr.tokens) == 0):
-        # Cannot return reference to Object as Value, because Object is not Value.
-        raise Error("Cannot return reference to root Object as Value")
-    return _resolve_ref(root, ptr.tokens, 0)
-
-
-def resolve_pointer(
-    ref root: Array, ptr: PointerIndex
-) raises -> ref[root] Value:
-    if unlikely(len(ptr.tokens) == 0):
-        # Cannot return reference to Array as Value.
-        raise Error("Cannot return reference to root Array as Value")
-    return _resolve_ref(root, ptr.tokens, 0)
-
-
 def _resolve_ref(
     ref val: Value, tokens: List[PointerToken], idx: Int
 ) raises -> ref[val] Value:
@@ -179,8 +161,7 @@ def _resolve_ref(
     ref obj: Object, tokens: List[PointerToken], idx: Int
 ) raises -> ref[obj] Value:
     if unlikely(idx >= len(tokens)):
-        # Unreachable from resolve_pointer(Object) because of empty check,
-        # but prevents returning a non-existent Value ref.
+        # Unreachable: `_resolve_ref(Value)` returns before dispatching here.
         raise Error("Cannot resolve reference to Object root")
 
     var token = tokens[idx]

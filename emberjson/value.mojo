@@ -5,13 +5,10 @@ from .utils import (
     constrain_json_type,
     write_escaped_string,
     ByteView,
-    PaddedBuffer,
-    PAD_INPUT_THRESHOLD,
 )
 from std.utils.variant import Variant
 from .traits import JsonValue
-from std.sys.intrinsics import unlikely, likely
-from ._deserialize import Parser, ParseOptions
+from ._deserialize import parse_root
 from ._utf8 import is_valid_utf8
 from std.sys.info import bit_width_of
 from .teju import write_float
@@ -200,15 +197,7 @@ struct Value(JsonValue, Sized):
         # Default options: UTF-8 validation is on (see ParseOptions).
         if not is_valid_utf8(parse_bytes):
             raise Error("Invalid UTF-8 in input")
-        # See `emberjson.parse`: pad-and-copy enables unchecked hot loops;
-        # tiny inputs skip the copy since it would cost more than the parse.
-        if len(parse_bytes) < PAD_INPUT_THRESHOLD:
-            var parser = Parser(parse_bytes)
-            self = parser.parse()
-        else:
-            var buf = PaddedBuffer(parse_bytes)
-            var parser = Parser[options=ParseOptions()._padded()](padded=buf)
-            self = parser.parse()
+        self = parse_root(parse_bytes)
 
     @implicit
     @always_inline
