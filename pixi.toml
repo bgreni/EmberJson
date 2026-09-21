@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
 preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
@@ -29,11 +29,11 @@ check_lock_compilers = "python tools/check_lock_compilers.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 
 [dependencies]
-mojo = "==1.1.0rc0"
+mojo = "==1.1.0"
 # Pinned to a commit so it only moves when this rev is bumped, and so the
 # nightly canary can re-solve emberserde's build environment against a new
 # compiler (`pixi update mojo emberserde`) without also pulling new commits.
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4d4bdd3a956fd8cea25ac1d3ab222a8a538f1cee" }
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4935ac5fd6e310e5f09f94ce961086f17de41353" }
 
 
 
@@ -45,7 +45,7 @@ version = "0.4.0"
 backend = { name = "pixi-build-mojo", version = ">=0.2.6,<0.3" }
 
 [package.host-dependencies]
-mojo-compiler = "==1.1.0rc0"
+mojo-compiler = "==1.1.0"
 
 # The library imports emberserde throughout (`__init__`, `value`, `object`,
 # `array`, `lazy`, `schema`, `traits`, `_serde/`), so `mojo precompile`
@@ -53,9 +53,9 @@ mojo-compiler = "==1.1.0rc0"
 # at run time -- the workspace [dependencies] entry above only covers dev
 # tasks. Keep all three in sync, `rev` included.
 [package.build-dependencies]
-mojo-compiler = "==1.1.0rc0"
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4d4bdd3a956fd8cea25ac1d3ab222a8a538f1cee" }
+mojo-compiler = "==1.1.0"
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4935ac5fd6e310e5f09f94ce961086f17de41353" }
 
 [package.run-dependencies]
-mojo-compiler = "==1.1.0rc0"
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4d4bdd3a956fd8cea25ac1d3ab222a8a538f1cee" }
+mojo-compiler = "==1.1.0"
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4935ac5fd6e310e5f09f94ce961086f17de41353" }

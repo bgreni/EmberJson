@@ -89,24 +89,4 @@ try_parse_pointer[options](s, path)    # → Optional[Value]
 is_valid_utf8(bytes_or_slice)          # → Bool (ON by default in from_json)
 ```
 
-## Mojo Version
-
-Requires exactly `mojo ==1.1.0rc0`, the 1.1.0 release candidate (published on
-the MAX nightly channel; the stable `max` channel stops at 1.0.0). The
-authoritative pin is `pixi.toml`, spelled out there four times — `mojo` under
-`[dependencies]` plus `mojo-compiler` under `[package.host-dependencies]`,
-`[package.build-dependencies]` and `[package.run-dependencies]` — and
-emberserde pins the same version in its own manifest. Platforms: osx-arm64,
-linux-aarch64, linux-64.
-
-The pin is exact rather than a range for two reasons. A `.mojoc` only loads
-with the compiler that built it, so `[package.run-dependencies]` must name one
-version or consumers can install a compiler that cannot read this package. And
-conda orders `1.1.0rc0` *below* every `1.1.0.dev*` nightly, so no range can
-mean "the release candidate or newer" — a `>=1.1.0.dev...` floor excludes the
-RC outright, with a misleading "no candidates were found" error.
-`pixi run check_lock_compilers` asserts `pixi.lock` ends up naming a single
-compiler across the workspace environment and emberserde's source build
-environment; move both with `pixi update mojo emberserde`.
-
 A full reference for the Mojo APIs https://docs.modular.com/llms-mojo.txt

@@ -1,6 +1,7 @@
 from std.collections.string.string_span import get_static_string
 
 from emberjson._deserialize import Parser, ParseOptions, StrictOptions
+from emberjson._deserialize._parser_helper import copy_to_string, ptr_dist
 from emberjson.constants import (
     `[`,
     `]`,
@@ -26,6 +27,7 @@ from emberserde.deserialize import (
     deserialize,
 )
 from emberserde.error import DeserializationError, DerErrorKind
+from emberserde.field_meta import field_index
 from emberserde.utils import Base
 
 # JSON `Deserializer` format over EmberJson's existing hand-written `Parser`
@@ -168,9 +170,9 @@ struct EmberJsonStructDe[
     var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
     var first: Bool
 
-    def expect_field_name(
-        mut self,
-    ) raises DeserializationError -> Optional[String]:
+    def expect_field_index[
+        T: AnyType
+    ](mut self) raises DeserializationError -> Optional[Int]:
         self.p[].skip_whitespace()
         if self.p[].peek() == `}`:
             # End of struct: leave the `}` for `end()` to consume.
@@ -193,13 +195,27 @@ struct EmberJsonStructDe[
         # wrong type", so this stays a deserializer-detected `_invalid`.
         if self.p[].peek() != `"`:
             raise _invalid("expected an object key string")
-        # `read_string` is the same reader `Parser.parse_object` uses for
-        # its keys: escape decoding -- including the `ignore_unicode`
-        # opt-out -- matches `parse()` exactly, instead of a hand-rolled
-        # copy that silently diverged on it.
-        var name = self.p[].read_string()
+        # `scan_string` is the scanner under `read_string`, the reader
+        # `Parser.parse_object` uses for its keys. An escape-free key
+        # resolves as a slice of the input, no `String` per field; an
+        # escaped one decodes exactly as `read_string` would -- including
+        # the `ignore_unicode` opt-out -- so it matches `parse()`.
+        var scan = self.p[].scan_string()
         self.p[].expect(`:`)
-        return name^
+        if scan.found_escaped:
+            return field_index[T](
+                copy_to_string[Self.options.ignore_unicode](
+                    scan.start, scan.end, True, scan.first_escape
+                )
+            )
+        return field_index[T](
+            StringSlice(
+                unsafe_from_utf8=Span(
+                    unsafe_ptr=scan.start,
+                    length=ptr_dist(scan.start, scan.end),
+                )
+            )
+        )
 
     def expect_field_value[
         T: AnyType
@@ -323,8 +339,8 @@ struct EmberJsonDeserializer[
     def begin_struct[
         T: AnyType
     ](mut self) raises DeserializationError -> Self.StructType:
-        # Field names are read off the wire, so `T` is unused; the
-        # framework's reflection default drives the name-matching loop.
+        # Field names are read off the wire, so `T` is unused here;
+        # `expect_field_index` resolves each key against it.
         self.p[].expect_open(`{`)
         return EmberJsonStructDe(p=self.p, first=True)
 
@@ -346,8 +362,8 @@ struct EmberJsonDeserializer[
         self.p[].expect_open(`{`)
         if self.p[].peek() != `"`:
             raise _invalid("expected an enum tag string")
-        # Same reader as `EmberJsonStructDe.expect_field_name` -- see the
-        # comment there.
+        # Same decoding as `EmberJsonStructDe.expect_field_index` -- see
+        # the comment there.
         var name = self.p[].read_string()
         self.p[].expect(`:`)
         var idx = -1

@@ -172,7 +172,9 @@ struct EmberJsonStructSer[
     var first: Bool
     var depth: Int
 
-    def serialize_field(
+    def serialize_field[
+        T: AnyType, idx: Int
+    ](
         mut self, field_name: StringSlice, v: Some[AnyType]
     ) raises SerializationError:
         if not self.first:
@@ -303,10 +305,10 @@ struct EmberJsonSerializer[
         )
 
     def begin_struct[
-        name: String
+        T: AnyType
     ](mut self, field_count: Int) raises SerializationError -> Self.StructType:
         # Unlike a name-tagged debug format, JSON does not write the struct
-        # name — `name` is intentionally unused.
+        # name — `T` is intentionally unused.
         self.out[].write("{")
         var d = self.depth
         comptime if Self.pretty:
@@ -327,7 +329,7 @@ struct EmberJsonSerializer[
         return Self.TupleType(out=self.out, first=True, depth=d)
 
     def begin_enum[
-        name: String, variant: String
+        T: AnyType, variant: String
     ](mut self, idx: UInt32) raises SerializationError -> Self.EnumType:
         # Externally tagged, matching the toy format: `{"<variant>":payload}`.
         self.out[].write("{")
