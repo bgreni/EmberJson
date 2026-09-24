@@ -252,21 +252,21 @@ def constrain_json_type[T: Copyable]():
 @always_inline
 def _handle_escape(c: Byte, mut writer: Some[Writer]):
     if c == `"`:
-        writer.write(r"\"")
+        writer.write_string(r"\"")
     elif c == `\\`:
-        writer.write(r"\\")
+        writer.write_string(r"\\")
     elif c == `\b`:
-        writer.write(r"\b")
+        writer.write_string(r"\b")
     elif c == `\f`:
-        writer.write(r"\f")
+        writer.write_string(r"\f")
     elif c == `\n`:
-        writer.write(r"\n")
+        writer.write_string(r"\n")
     elif c == `\r`:
-        writer.write(r"\r")
+        writer.write_string(r"\r")
     elif c == `\t`:
-        writer.write(r"\t")
+        writer.write_string(r"\t")
     else:
-        writer.write(r"\u00")
+        writer.write_string(r"\u00")
         _write_hex_byte(c, writer)
 
 
@@ -298,11 +298,13 @@ def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
 
     # Fast path: no escaping needed — single batched write
     if not _needs_escape(bytes, n):
-        writer.write('"', s, '"')
+        writer.write_string('"')
+        writer.write_string(s)
+        writer.write_string('"')
         return
 
     # Slow path: string contains characters that need escaping
-    writer.write('"')
+    writer.write_string('"')
     var ptr = Pointer(bytes.unsafe_ptr())
     var i = 0
     var start = 0
@@ -319,7 +321,7 @@ def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
         while bits != 0:
             var pos = Int(count_trailing_zeros(bits))
             if i + pos > start:
-                writer.write(
+                writer.write_string(
                     StringSlice(unsafe_from_utf8=bytes[start : i + pos])
                 )
             start = i + pos + 1
@@ -331,15 +333,17 @@ def write_escaped_string(s: StringSlice, mut writer: Some[Writer]):
         var c = ptr[unsafe_offset=i]
         if c == `"` or c == `\\` or c < 32:
             if i > start:
-                writer.write(StringSlice(unsafe_from_utf8=bytes[start:i]))
+                writer.write_string(
+                    StringSlice(unsafe_from_utf8=bytes[start:i])
+                )
             start = i + 1
             _handle_escape(c, writer)
         i += 1
 
     if start < n:
-        writer.write(StringSlice(unsafe_from_utf8=bytes[start:n]))
+        writer.write_string(StringSlice(unsafe_from_utf8=bytes[start:n]))
 
-    writer.write('"')
+    writer.write_string('"')
 
 
 comptime hex_chars = "0123456789abcdef".as_bytes()

@@ -1,6 +1,7 @@
 from emberjson._deserialize.parser import Parser, ParseOptions
 from emberjson import Null, Array, Object, Value, from_json
 from std.testing import assert_true, assert_equal, assert_raises, TestSuite
+from std.memory import bitcast
 
 
 def test_parse() raises:
@@ -514,6 +515,68 @@ def test_expect_value_bytes() raises:
     with assert_raises(contains="Encountered EOF when expecting 'null'"):
         var p = Parser("nul")
         _ = p.parse_null()
+
+
+def _f32_bits(s: String) raises -> UInt32:
+    return bitcast[DType.uint32](from_json[Float32](s))
+
+
+def _f16_bits(s: String) raises -> UInt16:
+    return bitcast[DType.uint16](from_json[Float16](s))
+
+
+def test_float32_subnormal_midpoints() raises:
+    # Each input's float64 rounding lands exactly on a float32 midpoint;
+    # the decimal itself sits just above (round up) or below (round down).
+    assert_equal(_f32_bits("7.0064923216240854e-46"), 0x1)
+    assert_equal(_f32_bits("7.0064923216240850e-46"), 0x0)
+    assert_equal(_f32_bits("-7.0064923216240854e-46"), 0x80000001)
+    assert_equal(_f32_bits("2.1019476964872257e-45"), 0x2)
+    assert_equal(_f32_bits("2.1019476964872255e-45"), 0x1)
+    assert_equal(_f32_bits("1.1754942807573643e-38"), 0x800000)
+    assert_equal(_f32_bits("1.17549428075736423e-38"), 0x7FFFFF)
+    # Zeros must stay on the fast path and keep their sign.
+    assert_equal(_f32_bits("0.0"), 0x0)
+    assert_equal(_f32_bits("-0.0"), 0x80000000)
+    # Deep underflow (far below the smallest subnormal) through the same
+    # slow-path guard must still land on signed zero.
+    assert_equal(_f32_bits("-1e-50"), 0x80000000)
+
+
+def test_float16_subnormal_midpoints() raises:
+    assert_equal(_f16_bits("2.9802322387695313e-08"), 0x1)
+    assert_equal(_f16_bits("2.9802322387695311e-08"), 0x0)
+    assert_equal(_f16_bits("8.9406967163085938e-08"), 0x2)
+    assert_equal(_f16_bits("8.9406967163085931e-08"), 0x1)
+    assert_equal(_f16_bits("6.1005353927612305e-05"), 0x400)
+    assert_equal(_f16_bits("6.1005353927612302e-05"), 0x3FF)
+    # Deep underflow (far below the smallest subnormal) through the same
+    # slow-path guard must still land on signed zero.
+    assert_equal(_f16_bits("-1e-10"), 0x8000)
+
+
+def test_float_overflow_boundary_midpoints() raises:
+    # Mirror of the subnormal midpoint tests at the other end of the range:
+    # the float64 intermediate for these decimals lands exactly on the
+    # float32/float16 FLT_MAX/infinity midpoint, so a plain cast
+    # double-rounds to infinity even though the correctly-rounded decimal
+    # result is finite (FLT_MAX / float16 max). Verified with exact
+    # rational arithmetic: FLT_MAX = (2 - 2^-23)*2^127, midpoint to the
+    # next (unrepresentable) value is 2^128 - 2^103; float16 max is 65504,
+    # its midpoint is 65520.
+    assert_equal(_f32_bits("3.4028235677973366e38"), 0x7F7FFFFF)
+    assert_equal(_f16_bits("65519.99999999999999"), 0x7BFF)
+
+    # Just above the float32 midpoint: the exact decimal is greater than
+    # the midpoint, so it must still raise (correctly rounds up to inf).
+    with assert_raises():
+        _ = _f32_bits("3.4028235677973367e38")
+
+    # Clearly too large for either target: still raises.
+    with assert_raises():
+        _ = _f32_bits("3.5e38")
+    with assert_raises():
+        _ = _f16_bits("65520.0001")
 
 
 def main() raises:

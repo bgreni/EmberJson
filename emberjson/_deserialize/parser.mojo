@@ -1161,23 +1161,41 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         self.data = p
 
         comptime if type != DType.float64:
-            var casted = f.cast[type]()
-            # Check if casting caused infinity where original wasn't
-            if unlikely(not isinf(f) and isinf(casted)):
-                raise DeserializationError(
-                    "float overflow", DerErrorKind.InvalidValue
-                )
+            var r = f.cast[type]()
+            # Below the target's smallest normal the midpoint bit moves up
+            # with the exponent, so the fixed-position test below misses it
+            # (2^-150 has no low bits set yet is the 0 / 2^-149 midpoint).
+            # Nonzero values that small are rare: take the exact path.
+            comptime min_normal_bits = UInt64(
+                1023 + 1 - FPUtils[type].exponent_bias()
+            ) << 52
+            var magnitude = bitcast[DType.uint64](f) & ~(UInt64(1) << 63)
+            var subnormal_boundary = (
+                magnitude != 0 and magnitude < min_normal_bits
+            )
             # Guard against double-rounding: if the float64 result lands exactly
             # on a float32/float16 midpoint, the cast may choose the wrong
             # neighbour. Re-parse with correctly-rounded big-decimal arithmetic.
+            # This also covers the FLT_MAX/infinity midpoint at the top of the
+            # range, so the overflow check below must run on the re-parsed
+            # result, not the plain cast -- otherwise a value that
+            # double-rounds up to infinity but correctly rounds down to
+            # FLT_MAX would raise incorrectly.
             comptime half_ulp_pos = 52 - FPUtils[type].mantissa_width() - 1
             comptime midpoint_bit = UInt64(1) << UInt64(half_ulp_pos)
             comptime midpoint_mask = (UInt64(1) << UInt64(half_ulp_pos + 1)) - 1
-            if unlikely(
-                (bitcast[DType.uint64](f) & midpoint_mask) == midpoint_bit
-            ):
-                return from_chars_slow[type](number_start)
-            return casted
+            var on_midpoint = (
+                bitcast[DType.uint64](f) & midpoint_mask
+            ) == midpoint_bit
+            if unlikely(subnormal_boundary or on_midpoint):
+                r = from_chars_slow[type](number_start)
+            # Check if the final (possibly re-parsed) result is infinite
+            # where the original float64 wasn't.
+            if unlikely(not isinf(f) and isinf(r)):
+                raise DeserializationError(
+                    "float overflow", DerErrorKind.InvalidValue
+                )
+            return r
 
         return f.cast[type]()
 

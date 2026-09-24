@@ -33,7 +33,8 @@ mojo = "==1.1.0"
 # Pinned to a commit so it only moves when this rev is bumped, and so the
 # nightly canary can re-solve emberserde's build environment against a new
 # compiler (`pixi update mojo emberserde`) without also pulling new commits.
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4935ac5fd6e310e5f09f94ce961086f17de41353" }
+# TEMPORARY (2026-09-23): local path while developing emberserde fixes; restore the git+rev spec before pushing.
+emberserde = { path = "../emberserde" }
 
 
 
@@ -54,8 +55,10 @@ mojo-compiler = "==1.1.0"
 # tasks. Keep all three in sync, `rev` included.
 [package.build-dependencies]
 mojo-compiler = "==1.1.0"
-emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4935ac5fd6e310e5f09f94ce961086f17de41353" }
+# TEMPORARY (2026-09-23): local path while developing emberserde fixes; restore the git+rev spec before pushing.
+emberserde = { path = "../emberserde" }
 
 [package.run-dependencies]
 mojo-compiler = "==1.1.0"
+# TEMPORARY (2026-09-23): still git+rev while [dependencies]/[package.build-dependencies] use a local path; move all three to the new emberserde rev together before pushing.
 emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "4935ac5fd6e310e5f09f94ce961086f17de41353" }
