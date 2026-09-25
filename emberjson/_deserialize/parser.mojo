@@ -32,6 +32,7 @@ from ._parser_helper import (
     significant_digits,
     unsafe_is_made_of_eight_digits_fast,
     unsafe_parse_eight_digits,
+    ingest_fraction_digits,
     largest_power,
     is_exp_char,
     pack_into_integer,
@@ -69,7 +70,6 @@ from emberjson.constants import (
     `.`,
     ` `,
     `1`,
-    MAX_NESTING_DEPTH,
 )
 from std.utils.numerics import FPUtils
 from emberserde.error import DeserializationError, DerErrorKind
@@ -137,11 +137,19 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
             default; the check runs at 20-30 GB/s (with an ASCII fast
             path) and typically costs 2-4% of a parse. Set False to skip
             it for trusted input.
+        max_depth: The deepest nesting of arrays and objects combined that
+            any parser accepts (the root container is level 1). Deeper
+            input raises `DeserializationError("Exceeded maximum nesting
+            depth", InvalidValue)`. It exists to protect the stack: the
+            `Value` and reflection parsers recurse once per level, and the
+            `Document` builder reserves a 16-byte scope per level up front.
+            Must be positive (a compile-time error otherwise).
     """
 
     var ignore_unicode: Bool
     var strict_mode: StrictOptions
     var validate_utf8: Bool
+    var max_depth: Int
     # Internal: the input is backed by a `PaddedBuffer`, so hot loops may
     # read past end-of-input into NUL padding without bounds checks. Only
     # the public entry points that copy into a PaddedBuffer set this; user
@@ -154,10 +162,12 @@ struct ParseOptions(Equatable, TrivialRegisterPassable):
         ignore_unicode: Bool = False,
         strict_mode: StrictOptions = StrictOptions.STRICT,
         validate_utf8: Bool = True,
+        max_depth: Int = 1024,
     ):
         self.ignore_unicode = ignore_unicode
         self.strict_mode = strict_mode
         self.validate_utf8 = validate_utf8
+        self.max_depth = max_depth
         self._assume_padded = False
 
     def _padded(self) -> Self:
@@ -215,10 +225,52 @@ struct StringScan[origin: ImmOrigin](TrivialRegisterPassable):
     var first_escape: Int
 
 
+# Eisel-Lemire's rare paths, kept out of line: calls are speculation
+# barriers, and inline the backend if-converts them, so every float pays for
+# the subnormal rounding and the second 128-bit product it almost never needs.
+@no_inline
+def _el_second_product(
+    i: UInt64, index: Int, mut upper: UInt64, mut lower: UInt64
+):
+    """Refines the product when its low 9 bits leave rounding undecided."""
+    var second_product = full_multiplication(
+        i, lut[POWER_OF_FIVE_128](index + 1)
+    )
+    var upper_s = UInt64(second_product >> 64)
+    lower += upper_s
+    if upper_s > lower:
+        upper += 1
+
+
+@no_inline
+def _el_subnormal(
+    out d: Float64, var mantissa: UInt64, real_exponent: Int64, negative: Bool
+):
+    """The result when the biased exponent underflows (subnormal or zero)."""
+    comptime `1 << 52` = 1 << 52
+    if -real_exponent + 1 >= 64:
+        d = select(negative, -0.0, 0.0)
+        return
+    mantissa >>= (-real_exponent + 1).cast[DType.uint64]()
+    mantissa += mantissa & 1
+    mantissa >>= 1
+    var biased = select(mantissa < `1 << 52`, Int64(0), Int64(1))
+    d = to_double(mantissa, biased.cast[DType.uint64](), negative)
+
+
+@no_inline
+def _too_deep() -> DeserializationError:
+    return DeserializationError(
+        "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
+    )
+
+
 struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
     var data: CheckedPointer[Self.origin]
     var size: Int
-    # Open containers on the recursion stack; bounded by MAX_NESTING_DEPTH.
+    # Open containers, bounded by `options.max_depth`. The reflection
+    # deserializers share one `Parser` and count their containers here too,
+    # so a `Value` or skipped field nests from its enclosing struct's depth.
     var depth: Int
 
     @implicit
@@ -255,6 +307,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             "options with `_assume_padded` require a `PaddedBuffer`:"
             " construct with `Parser(padded=...)`"
         )
+        comptime assert (
+            Self.options.max_depth > 0
+        ), "ParseOptions.max_depth must be positive"
         self.data = CheckedPointer(ptr, ptr, ptr.unsafe_offset(length))
         self.size = length
         self.depth = 0
@@ -270,6 +325,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             "`Parser(padded=...)` is reserved for `_padded()` options; use"
             " the span/string constructors otherwise"
         )
+        comptime assert (
+            Self.options.max_depth > 0
+        ), "ParseOptions.max_depth must be positive"
         # Safety: the buffer is borrowed for `Self.origin`, so viewing its
         # heap data through that origin is exactly the borrow contract.
         var p: BytePtr[
@@ -347,13 +405,17 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 DerErrorKind.InvalidValue,
             )
 
+    @always_inline
+    def enter_container(mut self) raises DeserializationError:
+        """Counts one more open container against `options.max_depth`; the
+        caller decrements `depth` when the container closes."""
+        self.depth += 1
+        if unlikely(self.depth > Self.options.max_depth):
+            raise _too_deep()
+
     def parse_array(mut self, out arr: Array) raises DeserializationError:
         self.data += 1
-        self.depth += 1
-        if unlikely(self.depth > MAX_NESTING_DEPTH):
-            raise DeserializationError(
-                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
-            )
+        self.enter_container()
         self.skip_whitespace()
 
         if unlikely(self.cur() == `]`):
@@ -397,11 +459,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
     def parse_object(mut self, out obj: Object) raises DeserializationError:
         self.data += 1
-        self.depth += 1
-        if unlikely(self.depth > MAX_NESTING_DEPTH):
-            raise DeserializationError(
-                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
-            )
+        self.enter_container()
         self.skip_whitespace()
 
         if unlikely(self.cur() == `}`):
@@ -720,13 +778,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         var lower = UInt64(first_product)
 
         if unlikely(upper & 0x1FF == 0x1FF):
-            var second_product = full_multiplication(
-                i, lut[POWER_OF_FIVE_128](index + 1)
-            )
-            var upper_s = UInt64(second_product >> 64)
-            lower += upper_s
-            if upper_s > lower:
-                upper += 1
+            _el_second_product(i, index, upper, lower)
 
         var upperbit: UInt64 = upper >> 63
         var mantissa: UInt64 = upper >> (upperbit + 9)
@@ -744,17 +796,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         comptime `1 << 52` = 1 << 52
 
         if unlikely(real_exponent <= 0):
-            if -real_exponent + 1 >= 64:
-                d = select(negative, -0.0, 0.0)
-                return
-            mantissa >>= (-real_exponent + 1).cast[DType.uint64]()
-            mantissa += mantissa & 1
-            mantissa >>= 1
-
-            real_exponent = select(mantissa < `1 << 52`, Int64(0), Int64(1))
-            return to_double(
-                mantissa, real_exponent.cast[DType.uint64](), negative
-            )
+            return _el_subnormal(mantissa, real_exponent, negative)
 
         if unlikely(
             lower == 0 and (upper & 0x1FF) == 0 and (mantissa & 3 == 1)
@@ -863,13 +905,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             p += 1
 
             var first_after_period = p
-            while (
-                padded or p.dist() >= 8
-            ) and unsafe_is_made_of_eight_digits_fast(p.p):
-                i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
-                p += 8
-            while parse_digit[padded](p, i):
-                p += 1
+            ingest_fraction_digits[padded](p, i)
             exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
                 raise DeserializationError(
@@ -1073,8 +1109,19 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             return i.cast[type]()
 
     def expect_float[
-        type: DType = DType.float64
+        type: DType = DType.float64, unchecked: Bool = False
     ](mut self) raises DeserializationError -> Scalar[type]:
+        """Parses the float at the cursor.
+
+        Parameters:
+            type: The floating-point type to produce.
+            unchecked: The caller guarantees the number's scalar run ends
+                inside the buffer (a non-number byte follows it) and that
+                8 bytes past any byte of the run are readable -- the
+                indexed deserializer knows both from the structural index.
+                The digit loops then read without bounds checks, exactly
+                as they do over a `PaddedBuffer`.
+        """
         comptime assert (
             type.is_floating_point()
         ), "Expected float, found non-float type: " + String(type)
@@ -1087,10 +1134,12 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         var i: UInt64 = 0
 
         # SWAR digit ingestion; see parse_number for the wrap rationale.
-        while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
+        while (
+            unchecked or p.dist() >= 8
+        ) and unsafe_is_made_of_eight_digits_fast(p.p):
             i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
             p += 8
-        while parse_digit(p, i):
+        while parse_digit[unchecked](p, i):
             p += 1
 
         var digit_count = ptr_dist(start_digits.p, p.p)
@@ -1109,15 +1158,11 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
         var exponent: Int64 = 0
 
-        if p.dist() > 0 and p[] == `.`:
+        if at_or_nul[unchecked](p) == `.`:
             p += 1
 
             var first_after_period = p
-            while p.dist() >= 8 and unsafe_is_made_of_eight_digits_fast(p.p):
-                i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
-                p += 8
-            while parse_digit(p, i):
-                p += 1
+            ingest_fraction_digits[unchecked](p, i)
             exponent = Int64(ptr_dist(p.p, first_after_period.p))
             if exponent == 0:
                 raise DeserializationError(
@@ -1125,7 +1170,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 )
             digit_count = ptr_dist(start_digits.p, p.p)
 
-        if p.dist() > 0 and is_exp_char(p[]):
+        if is_exp_char(at_or_nul[unchecked](p)):
             p += 1
 
             var neg_exp = p[] == `-`
@@ -1139,7 +1184,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
             var start_exp = p
             var exp_number: Int64 = 0
-            while parse_digit(p, exp_number):
+            while parse_digit[unchecked](p, exp_number):
                 p += 1
 
             if unlikely(p == start_exp):
@@ -1499,7 +1544,9 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
 
         Iterative rather than recursive so that nesting depth costs heap, not
         stack. `_closers` holds the closing byte expected at each open level,
-        which is what makes `{"a": [1,2}` an error rather than a shrug.
+        which is what makes `{"a": [1,2}` an error rather than a shrug. It is
+        still held to `options.max_depth`, counted from `depth`, so a value
+        is equally deep whether it is skipped, captured or materialized.
         """
         self._skip_ws()
         var start = self.data
@@ -1522,6 +1569,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             elif b == `t` or b == `f` or b == `n`:
                 self._expect_literal()
             elif b == `{`:
+                if unlikely(
+                    self.depth + len(closers) >= Self.options.max_depth
+                ):
+                    raise _too_deep()
                 self.data += 1
                 self._skip_ws()
                 if unlikely(not self.has_more()):
@@ -1536,6 +1587,10 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                     self._expect_key_and_colon()
                     continue
             elif b == `[`:
+                if unlikely(
+                    self.depth + len(closers) >= Self.options.max_depth
+                ):
+                    raise _too_deep()
                 self.data += 1
                 self._skip_ws()
                 if unlikely(not self.has_more()):

@@ -53,6 +53,10 @@ from emberserde.utils import Base
 # `JsonCursor`). `options` rides as a struct parameter since the
 # `Deserializer` trait has no parameter channel of its own.
 #
+# Depth: each `begin_*` counts its container on the shared `Parser`'s
+# `depth` (`enter_container`, against `options.max_depth`) and the matching
+# `end` releases it; a raise abandons the parse, so nothing unwinds.
+#
 # `expect_struct` is intentionally NOT overridden — per the trait's
 # comments it is the framework's field-matching driver (rename/alias/skip,
 # duplicate/unknown/missing-field handling, error paths); overriding it
@@ -102,6 +106,7 @@ struct EmberJsonSeqDe[
 
     def end(mut self) raises DeserializationError:
         self.p[].expect(`]`)
+        self.p[].depth -= 1
 
 
 @fieldwise_init
@@ -161,6 +166,7 @@ struct EmberJsonMapDe[
 
     def end(mut self) raises DeserializationError:
         self.p[].expect(`}`)
+        self.p[].depth -= 1
 
 
 @fieldwise_init
@@ -228,6 +234,7 @@ struct EmberJsonStructDe[
 
     def end(mut self) raises DeserializationError:
         self.p[].expect(`}`)
+        self.p[].depth -= 1
 
 
 @fieldwise_init
@@ -247,6 +254,7 @@ struct EmberJsonTupleDe[
 
     def end(mut self) raises DeserializationError:
         self.p[].expect(`]`)
+        self.p[].depth -= 1
 
 
 @fieldwise_init
@@ -265,6 +273,7 @@ struct EmberJsonEnumDe[
 
     def end(mut self) raises DeserializationError:
         self.p[].expect(`}`)
+        self.p[].depth -= 1
 
 
 @fieldwise_init
@@ -330,10 +339,12 @@ struct EmberJsonDeserializer[
     # closing brackets.
     def begin_seq(mut self) raises DeserializationError -> Self.SeqType:
         self.p[].expect_open(`[`)
+        self.p[].enter_container()
         return EmberJsonSeqDe(p=self.p, first=True)
 
     def begin_map(mut self) raises DeserializationError -> Self.MapType:
         self.p[].expect_open(`{`)
+        self.p[].enter_container()
         return EmberJsonMapDe(p=self.p, first=True, seen=Dict[String, Bool]())
 
     def begin_struct[
@@ -342,12 +353,14 @@ struct EmberJsonDeserializer[
         # Field names are read off the wire, so `T` is unused here;
         # `expect_field_index` resolves each key against it.
         self.p[].expect_open(`{`)
+        self.p[].enter_container()
         return EmberJsonStructDe(p=self.p, first=True)
 
     def begin_tuple[
         field_count: Int
     ](mut self) raises DeserializationError -> Self.TupleType:
         self.p[].expect_open(`[`)
+        self.p[].enter_container()
         return EmberJsonTupleDe(p=self.p, first=True)
 
     # Externally tagged `{"Arm":payload}`: consume up to and including the
@@ -360,6 +373,7 @@ struct EmberJsonDeserializer[
         # different-type mismatch, so it stays a deserializer-detected
         # `_invalid`.
         self.p[].expect_open(`{`)
+        self.p[].enter_container()
         if self.p[].peek() != `"`:
             raise _invalid("expected an enum tag string")
         # Same decoding as `EmberJsonStructDe.expect_field_index` -- see
@@ -452,7 +466,7 @@ struct EmberJsonDeserializer[
         return self.p[].parse_value()
 
 
-def from_json[
+def from_json_bytewalk[
     o: ImmOrigin,
     //,
     T: Movable & Deinitable,
@@ -460,6 +474,10 @@ def from_json[
 ](s: StringSlice[o], out result: T) raises DeserializationError:
     """Deserializes `s` into `T` through emberserde's framework, driven by
     `EmberJsonDeserializer` over EmberJson's hand-written `Parser`.
+
+    This is the reference path: `from_json` (`indexed.mojo`) tries the
+    structural-index deserializer first and falls back to this one for the
+    error it reports.
 
     Parameters:
         T: The type to deserialize into.

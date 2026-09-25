@@ -5,4 +5,8 @@ document ahead of parsing, letting the parser jump token-to-token instead
 of scanning bytes. See `indexer.mojo` for the entry point.
 """
 
-from .indexer import structural_index
+from .indexer import (
+    structural_index,
+    structural_index_with_flags,
+    INDEX_HAS_BACKSLASH,
+)

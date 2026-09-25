@@ -415,6 +415,48 @@ def unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
 
 
 @always_inline
+def unsafe_is_made_of_four_digits_fast(src: BytePtr) -> Bool:
+    """`unsafe_is_made_of_eight_digits_fast` for four bytes.
+
+    Safety:
+        This is only safe if there are at least 4 bytes remaining.
+    """
+    var val = src.unsafe_bitcast[UInt32]()[]
+    return (
+        (val & 0xF0F0F0F0) | (((val + 0x06060606) & 0xF0F0F0F0) >> 4)
+    ) == 0x33333333
+
+
+@always_inline
+def unsafe_parse_four_digits(src: BytePtr) -> UInt64:
+    """Safety:
+    This is only safe if there are at least 4 bytes remaining.
+    """
+    var val = UInt64(src.unsafe_bitcast[UInt32]()[])
+    val = (val & 0x0F0F0F0F) * 2561 >> 8
+    val = (val & 0x00FF00FF) * 6553601 >> 16
+    return val & 0xFFFF
+
+
+@always_inline
+def ingest_fraction_digits[padded: Bool](mut p: CheckedPointer, mut i: UInt64):
+    """Consumes a run of digits into `i`: 8 at a time, then one 4-digit
+    step, then singly (fast_float #382/#398). Fractions are where long
+    digit runs live; canada's 15-digit ones become 8 + 4 + 3. In padded
+    mode the probes may read into the NUL padding, which fails them."""
+    while (padded or p.dist() >= 8) and unsafe_is_made_of_eight_digits_fast(
+        p.p
+    ):
+        i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
+        p += 8
+    if (padded or p.dist() >= 4) and unsafe_is_made_of_four_digits_fast(p.p):
+        i = i * 10_000 + unsafe_parse_four_digits(p.p)
+        p += 4
+    while parse_digit[padded](p, i):
+        p += 1
+
+
+@always_inline
 def parse_digit[
     assume_padded: Bool = False
 ](out dig: Bool, p: CheckedPointer, mut i: Scalar):

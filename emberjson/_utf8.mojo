@@ -173,23 +173,51 @@ def _all_ascii[W: Int](cur: SIMD8[W]) -> Bool:
     return (cur & SIMD8[W](0x80)).reduce_or() == 0
 
 
-def _is_valid_utf8_simd[W: Int](ptr: Pointer[UInt8, _], n: Int) -> Bool:
+@always_inline("nodebug")
+def _step[W: Int](
+    cur: SIMD8[W],
+    mut prev_chunk: SIMD8[W],
+    mut prev_incomplete: SIMD8[W],
+    mut error: SIMD8[W],
+):
     comptime MAX_VALUE = _make_max_value[W]()
+    if _all_ascii[W](cur):
+        # All-ASCII chunk: only a dangling multi-byte sequence from the
+        # previous chunk can be wrong.
+        error |= prev_incomplete
+    else:
+        _check_chunk[W](cur, prev_chunk, error)
+    prev_incomplete = _satsub[W](cur, MAX_VALUE)
+    prev_chunk = cur
+
+
+def _is_valid_utf8_simd[W: Int](ptr: Pointer[UInt8, _], n: Int) -> Bool:
     var error = SIMD8[W](0)
     var prev_chunk = SIMD8[W](0)
     var prev_incomplete = SIMD8[W](0)
 
     var i = 0
-    while i + W <= n:
-        var cur = (ptr.unsafe_offset(i)).unsafe_load[width=W]()
-        if _all_ascii[W](cur):
-            # All-ASCII chunk: only a dangling multi-byte sequence from
-            # the previous chunk can be wrong.
+    # One ASCII test per 4 vectors (simdutf/simdjson arm64 shape). A miss
+    # replays the per-chunk body, so mixed text does no extra lookup work.
+    while i + 4 * W <= n:
+        var c0 = ptr.unsafe_offset(i).unsafe_load[width=W]()
+        var c1 = ptr.unsafe_offset(i + W).unsafe_load[width=W]()
+        var c2 = ptr.unsafe_offset(i + 2 * W).unsafe_load[width=W]()
+        var c3 = ptr.unsafe_offset(i + 3 * W).unsafe_load[width=W]()
+        if _all_ascii[W](c0 | c1 | c2 | c3):
             error |= prev_incomplete
+            # Every byte < 0x80, so nothing dangles out of this block.
+            prev_incomplete = SIMD8[W](0)
+            prev_chunk = c3
         else:
-            _check_chunk[W](cur, prev_chunk, error)
-        prev_incomplete = _satsub[W](cur, MAX_VALUE)
-        prev_chunk = cur
+            _step[W](c0, prev_chunk, prev_incomplete, error)
+            _step[W](c1, prev_chunk, prev_incomplete, error)
+            _step[W](c2, prev_chunk, prev_incomplete, error)
+            _step[W](c3, prev_chunk, prev_incomplete, error)
+        i += 4 * W
+    while i + W <= n:
+        var cur = ptr.unsafe_offset(i).unsafe_load[width=W]()
+        _step[W](cur, prev_chunk, prev_incomplete, error)
         i += W
 
     if i < n:

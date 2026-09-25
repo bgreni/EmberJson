@@ -48,9 +48,3 @@ def _to_byte[s: StaticString]() -> Byte:
     comptime assert s.byte_length() == 1, "expected one character string"
     comptime byte = s.as_bytes()[0]
     return byte
-
-
-# Maximum container nesting accepted by every parsing strategy. The tape
-# builder keeps an explicit scope stack of this size; the recursive `Value`
-# parser counts frames against it so hostile input cannot overflow the stack.
-comptime MAX_NESTING_DEPTH = 1024

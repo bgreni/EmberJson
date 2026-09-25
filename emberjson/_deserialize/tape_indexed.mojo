@@ -10,9 +10,10 @@ json_iterator,tape_builder}.h`) targeting this library's tape + arena:
     sentinel entries appended after the real structurals: they point at
     end-of-input, where the `PaddedBuffer` NUL fails every dispatch.
   * The document walk is ITERATIVE — simdjson's goto state machine
-    rendered as a state loop with an explicit scope stack (max depth
-    1024, like simdjson's DEFAULT_MAX_DEPTH) — so nesting costs no call
-    frames and the hot loop stays branch-predictable.
+    rendered as a state loop with an explicit scope stack sized by
+    `options.max_depth` (default 1024, like simdjson's DEFAULT_MAX_DEPTH)
+    — so nesting costs no call frames and the hot loop stays
+    branch-predictable.
   * Whitespace is never touched, string content spans are known before
     the string is read (both quotes of every string are structurals),
     and each token is dispatched from exactly one byte load.
@@ -63,7 +64,6 @@ from emberjson.constants import (
     ` `,
     `\\`,
     acceptable_escapes,
-    MAX_NESTING_DEPTH,
 )
 from std.collections import Array
 from std.bit import count_trailing_zeros
@@ -255,7 +255,10 @@ def _walk_tape_from_index[
     var idx = idx_start
     var idx_last = idx_start.unsafe_offset(n_structurals)
 
-    var stack = Array[_Scope, MAX_NESTING_DEPTH](uninitialized=True)
+    # ponytail: reserved up front at 16 B/level, so a huge `max_depth` costs
+    # stack even on shallow input; spill to the heap past some bound if
+    # limits far above the default ever matter.
+    var stack = Array[_Scope, options.max_depth](uninitialized=True)
     var depth = 0
 
     @__parameter
@@ -327,9 +330,9 @@ def _walk_tape_from_index[
         # could dodge the depth guard entirely.
         # `>=` here (against a not-yet-incremented `depth`) pairs with the
         # recursive parser's increment-then-`>` check in `parser.mojo`
-        # (`parse_array`/`parse_object`), so both strategies admit exactly
-        # `MAX_NESTING_DEPTH` levels.
-        if unlikely(depth >= MAX_NESTING_DEPTH):
+        # (`enter_container`), so both strategies admit exactly
+        # `options.max_depth` levels.
+        if unlikely(depth >= options.max_depth):
             raise DeserializationError(
                 "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
             )
@@ -341,7 +344,7 @@ def _walk_tape_from_index[
     @__parameter
     @always_inline
     def push_scope(is_object: Bool) raises DeserializationError:
-        if unlikely(depth >= MAX_NESTING_DEPTH):
+        if unlikely(depth >= options.max_depth):
             raise DeserializationError(
                 "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
             )

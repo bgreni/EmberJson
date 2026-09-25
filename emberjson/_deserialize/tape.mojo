@@ -378,6 +378,7 @@ def _tape_object[
     mut p: Parser[origin, options], mut sink: TapeSink
 ) raises DeserializationError:
     p.data += 1
+    p.enter_container()
     p.skip_whitespace()
 
     var open_idx = len(sink.tape)
@@ -438,6 +439,7 @@ def _tape_object[
                 )
 
     p.data += 1
+    p.depth -= 1
     p.skip_whitespace()
     sink.tape.append(_pack_word(TapeTag.OBJECT_CLOSE, UInt64(open_idx)))
     sink.tape[open_idx] = _pack_container_open(
@@ -454,6 +456,7 @@ def _tape_array[
     mut p: Parser[origin, options], mut sink: TapeSink
 ) raises DeserializationError:
     p.data += 1
+    p.enter_container()
     p.skip_whitespace()
 
     var open_idx = len(sink.tape)
@@ -492,6 +495,7 @@ def _tape_array[
                 )
 
     p.data += 1
+    p.depth -= 1
     p.skip_whitespace()
     sink.tape.append(_pack_word(TapeTag.ARRAY_CLOSE, UInt64(open_idx)))
     sink.tape[open_idx] = _pack_container_open(

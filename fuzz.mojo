@@ -8,9 +8,11 @@ from emberjson import (
     Parser,
     ParseOptions,
     Document,
+    is_valid_utf8,
 )
 from emberjson._deserialize.tape import TapeSink, _Arena, parse_document_tape
 from emberjson._deserialize.tape_indexed import parse_document_tape_indexed
+from emberjson._utf8 import _is_valid_utf8_scalar
 from emberjson.utils import PaddedBuffer
 from std.testing import assert_equal
 from std.testing.prop.strategy import Strategy, Rng
@@ -197,6 +199,10 @@ def test_parse(var s: String) raises:
         # UTF-8 validators that slicing alone cannot.
         var mutated = _mutate(s, rng)
         check_engines_agree(StringSlice(unsafe_from_utf8=Span(mutated)))
+        assert_equal(
+            is_valid_utf8(Span(mutated)),
+            _is_valid_utf8_scalar(mutated.unsafe_ptr(), len(mutated)),
+        )
     else:
         j = from_json[Value](s)
         assert_equal(String(j), s)

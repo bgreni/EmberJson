@@ -6,8 +6,9 @@ masks with the string-mask scanners to compute that chunk's structural
 bits: structural operators outside strings, every real (non-escaped)
 quote, and pseudo-structural scalar starts (the first byte of a number or
 `true`/`false`/`null`). Set bits are scattered into the caller's reusable
-`positions` buffer by a branchless 8-at-a-time `emit` that trades a small
-over-write tail for removing the per-structural mispredicted branch.
+`positions` buffer by an `emit` that writes 4 unconditional slots, then
+pairs, trading a small over-write tail for removing most of the
+per-structural mispredicted branches.
 
 Output is deferred by one chunk so cross-chunk carries settle, and the
 spurious tail produced by the final chunk's zero bytes is trimmed at the
@@ -22,6 +23,7 @@ indexed without any heap copy. `assume_padded=True` requires a
 
 from std.bit import count_trailing_zeros, pop_count
 from std.memory import unsafe_memcpy
+from std.sys.intrinsics import unlikely
 
 from emberjson.utils import BytePtr
 from .simd_ops import SimdInput
@@ -30,9 +32,58 @@ from .portable import structurals_from_masks
 from .string_mask import EscapeScanner, StringScanner
 
 
+comptime INDEX_HAS_BACKSLASH: UInt64 = 1
+"""`structural_index_with_flags` bit: the input contains a backslash."""
+
+
 def structural_index[
     assume_padded: Bool
 ](ptr: BytePtr, input_len: Int, mut positions: List[UInt32]):
+    """Fills `positions` with the offsets of every structural character.
+
+    See `_structural_index` for the contract.
+    """
+    var flags: UInt64 = 0
+    var backslashes = List[UInt32]()
+    _structural_index[assume_padded, False](
+        ptr, input_len, positions, backslashes, flags
+    )
+
+
+def structural_index_with_flags[
+    assume_padded: Bool
+](
+    ptr: BytePtr,
+    input_len: Int,
+    mut positions: List[UInt32],
+    mut backslashes: List[UInt32],
+) -> UInt64:
+    """`structural_index` that also reports where strings need decoding.
+
+    Fills `backslashes` with the ascending offset of every backslash in the
+    input, and returns an `INDEX_*` bit set (whether any backslash occurs).
+    A string span containing no listed backslash decodes to its own bytes.
+    Offsets are only scattered for chunks that contain a backslash, so the
+    common chunk pays one extra branch. Raw control bytes are NOT flagged:
+    the consumer checks the strings it takes verbatim.
+    """
+    var flags: UInt64 = 0
+    backslashes.resize(0, UInt32(0))
+    _structural_index[assume_padded, True](
+        ptr, input_len, positions, backslashes, flags
+    )
+    return flags
+
+
+def _structural_index[
+    assume_padded: Bool, with_flags: Bool
+](
+    ptr: BytePtr,
+    input_len: Int,
+    mut positions: List[UInt32],
+    mut backslashes: List[UInt32],
+    mut flags: UInt64,
+):
     """Fills `positions` with the offsets of every structural character.
 
     Structural characters are `{ } [ ] : ,`, both quotes of every string
@@ -76,6 +127,8 @@ def structural_index[
     var escape_scanner = EscapeScanner()
     var string_scanner = StringScanner()
 
+    var backslash_acc: UInt64 = 0
+
     var prev_structurals: UInt64 = 0
     var prev_scalar_carry: UInt64 = 0
     var prev_base: UInt32 = 0
@@ -91,54 +144,34 @@ def structural_index[
     def emit(base_idx: UInt32, bits: UInt64):
         """Writes the offset of each set bit into `positions`.
 
-        Branchless 8-at-a-time scatter (simdjson AVX2-kernel style): each
-        iteration writes 8 indices unconditionally, but `write_pos`
-        advances only by the true popcount. The spurious tail (<8 entries,
-        where count_trailing_zeros(0)==64) is overwritten by the next emit
-        or lands in EMIT_SLACK and is never read. This removes the
-        per-set-bit branch (one mispredict per structural character).
+        Four unconditional slots, then pairs (simdjson #2869: typical
+        JSON has 4-8 structurals per 64 bytes). Wastes 0-3 slots instead
+        of the 0-7 the old groups-of-eight did. Over-writes land past the
+        true count and are overwritten by the next emit or fall into
+        EMIT_SLACK, and are never read.
         """
         if bits == 0:
             return
         var cnt = Int(pop_count(bits))
         var b = bits
         var w = write_pos
-        var done = 0
-        while done < cnt:
-            out_ptr[unsafe_offset=w + 0] = base_idx + UInt32(
+        comptime for k in range(4):
+            out_ptr[unsafe_offset=w + k] = base_idx + UInt32(
                 count_trailing_zeros(b)
             )
             b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 1] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 2] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 3] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 4] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 5] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 6] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            out_ptr[unsafe_offset=w + 7] = base_idx + UInt32(
-                count_trailing_zeros(b)
-            )
-            b = b & (b - 1)
-            w += 8
-            done += 8
+        if unlikely(cnt > 4):
+            var done = 4
+            while done < cnt:
+                out_ptr[unsafe_offset=w + done] = base_idx + UInt32(
+                    count_trailing_zeros(b)
+                )
+                b = b & (b - 1)
+                out_ptr[unsafe_offset=w + done + 1] = base_idx + UInt32(
+                    count_trailing_zeros(b)
+                )
+                b = b & (b - 1)
+                done += 2
         write_pos += cnt
 
     for chunk_idx in range(num_chunks):
@@ -172,6 +205,16 @@ def structural_index[
         # Real quotes (non-escaped).
         var real_quotes = all_quotes & ~escaped
 
+        comptime if with_flags:
+            if unlikely(backslash != 0):
+                backslash_acc |= backslash
+                var b = backslash
+                while b != 0:
+                    backslashes.append(
+                        base_idx + UInt32(count_trailing_zeros(b))
+                    )
+                    b &= b - 1
+
         # Structural combine (shared algebra in `portable.mojo`):
         # operators outside strings, all real quotes, plus
         # pseudo-structural scalar starts (first byte of numbers, true,
@@ -195,6 +238,10 @@ def structural_index[
 
     # Flush the last chunk.
     emit(prev_base, prev_structurals)
+
+    comptime if with_flags:
+        if backslash_acc != 0:
+            flags |= INDEX_HAS_BACKSLASH
 
     # Positions are emitted in strictly ascending order, so any position
     # >= input_len — spurious structurals from the final chunk's zero
