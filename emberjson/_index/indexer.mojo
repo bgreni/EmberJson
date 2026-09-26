@@ -19,13 +19,19 @@ Unlike simdjson, the input need not be a padded copy: with
 64-byte stack buffer, so the caller's original (borrowed) input can be
 indexed without any heap copy. `assume_padded=True` requires a
 `PaddedBuffer`-backed input and loads every chunk directly.
+
+AVX2 targets run a differently shaped loop, `_structural_index_x86`
+(same contract, bit-identical output); see its docstring. aarch64 keeps
+the loop below unchanged.
 """
 
 from std.bit import count_trailing_zeros, pop_count
+from std.builtin.globals import global_constant
 from std.memory import unsafe_memcpy
-from std.sys.intrinsics import unlikely
+from std.sys.info import CompilationTarget
+from std.sys.intrinsics import likely, unlikely
 
-from emberjson.utils import BytePtr
+from emberjson.utils import BytePtr, StackArray
 from .simd_ops import SimdInput
 from .classifier import classify
 from .portable import structurals_from_masks
@@ -108,6 +114,15 @@ def _structural_index[
         positions: Caller-owned, reusable output buffer. Filled with
             structural offsets and resized to the structural count.
     """
+    comptime if _X86_STAGE1:
+        # The interpreter takes the loop below: its kernels all have
+        # portable branches, and this one reads a global table.
+        if not __is_run_in_comptime_interpreter:
+            _structural_index_x86[assume_padded, with_flags](
+                ptr, input_len, positions, backslashes, flags
+            )
+            return
+
     if input_len == 0:
         positions.resize(0, UInt32(0))
         return
@@ -248,6 +263,177 @@ def _structural_index[
     # bytes — forms a contiguous tail. Trim it.
     while (
         write_pos > 0 and Int(out_ptr[unsafe_offset=write_pos - 1]) >= input_len
+    ):
+        write_pos -= 1
+    positions.resize(write_pos, UInt32(0))
+
+
+# --- AVX2 loop ----------------------------------------------------------
+#
+# Each design choice below was measured on Zen 2 (Ryzen 7 3700X) against
+# the loop above and against the alternatives named in the docstring.
+
+comptime _X86_STAGE1 = CompilationTarget.has_avx2()
+
+
+def _make_bit_offsets() -> StackArray[UInt64, 2048]:
+    """Entry `j * 256 + b` packs, one per byte, `8 * j` plus the offset of
+    each set bit of `b`: the in-chunk offsets of mask byte `j`'s bits."""
+    var t = StackArray[UInt64, 2048](fill=0)
+    for j in range(8):
+        for b in range(256):
+            var packed: UInt64 = 0
+            var n = 0
+            for bit in range(8):
+                if (b >> bit) & 1:
+                    packed |= UInt64(8 * j + bit) << UInt64(8 * n)
+                    n += 1
+            t[j * 256 + b] = packed
+    return t^
+
+
+comptime _BIT_OFFSETS = _make_bit_offsets()
+
+
+@no_inline
+def _append_offsets(mut out: List[UInt32], base_idx: UInt32, bits: UInt64):
+    """Out of line so the hot loop carries no call on its common path."""
+    var b = bits
+    while b != 0:
+        out.append(base_idx + UInt32(count_trailing_zeros(b)))
+        b &= b - 1
+
+
+@always_inline
+def _structural_index_x86[
+    assume_padded: Bool, with_flags: Bool
+](
+    ptr: BytePtr,
+    input_len: Int,
+    mut positions: List[UInt32],
+    mut backslashes: List[UInt32],
+    mut flags: UInt64,
+):
+    """`_structural_index` for AVX2 targets: same contract and output.
+
+    The vector work is the same as the portable loop's; the differences
+    are all on the scalar side:
+
+      * Emit is a branchless table expansion: each mask byte loads its
+        bit offsets from `_BIT_OFFSETS` (already including the byte's
+        `8 * j`), widens them to eight u32 (VPMOVZXBD), adds the chunk
+        base and stores all eight, and the cursor advances by the byte's
+        popcount. That costs the same per chunk whatever the density.
+        The tzcnt/blsr scatter is a serial chain (BLSR takes 2 cycles on
+        Zen 2) with count-dependent branches, at ~3 cycles per
+        structural; the corpus averages 6-9.5 structurals per chunk.
+        Baking `8 * j` into the table (16 KiB rather than 2 KiB) saves
+        eight vector constants, which otherwise spill to the stack.
+      * No backslash in the chunk skips the escape scan: only a run
+        carried in from the previous chunk can escape anything, and only
+        its first byte (simdjson's short-circuit).
+      * The partial final chunk is peeled out of the loop, and the
+        backslash scatter is out of line, so the loop body makes no
+        calls. With a call inside, loop-carried state spilled to the
+        stack every iteration, and Zen 2 retires one store per cycle.
+
+    Tried and rejected: emitting each chunk as soon as its mask is known
+    (deferring by one chunk overlaps the stores with the next chunk's
+    vector work), and two chunks per iteration as simdjson does (a gain
+    only before the escape short-circuit).
+    """
+    if input_len == 0:
+        positions.resize(0, UInt32(0))
+        return
+
+    # A table store writes eight slots however many bits it had, so up
+    # to seven past the true count; EMIT_SLACK covers that.
+    comptime EMIT_SLACK = 8
+    if positions.capacity() < input_len + EMIT_SLACK:
+        positions.reserve(input_len + EMIT_SLACK)
+    positions.resize(unsafe_uninit_length=input_len + EMIT_SLACK)
+
+    var escape_scanner = EscapeScanner()
+    var string_scanner = StringScanner()
+    var prev_structurals: UInt64 = 0
+    var prev_scalar_carry: UInt64 = 0
+    var out_start = positions.unsafe_ptr()
+    var out = out_start
+    var offsets = (
+        global_constant[_BIT_OFFSETS]().unsafe_ptr().unsafe_bitcast[UInt8]()
+    )
+
+    @__parameter
+    @always_inline("nodebug")
+    def emit(base_idx: UInt32, bits: UInt64):
+        var base = SIMD[DType.uint32, 8](base_idx)
+        comptime for j in range(8):
+            var byte = Int((bits >> UInt64(8 * j)) & 0xFF)
+            var offs = offsets.unsafe_offset((j * 256 + byte) * 8)
+            out.unsafe_store(
+                offs.unsafe_load[width=8]().cast[DType.uint32]() + base
+            )
+            out = out.unsafe_offset(Int(pop_count(UInt8(byte))))
+
+    @__parameter
+    @always_inline("nodebug")
+    def step(input: SimdInput, base_idx: UInt32):
+        var block = classify(input)
+        var backslash = input.eq(UInt8(0x5C))
+        var all_quotes = input.eq(UInt8(0x22))
+        var escaped: UInt64
+        if likely(backslash == 0):
+            escaped = escape_scanner.next_is_escaped
+            escape_scanner.next_is_escaped = 0
+        else:
+            escaped = escape_scanner.next(backslash)
+            comptime if with_flags:
+                _append_offsets(backslashes, base_idx, backslash)
+        var in_string = string_scanner.next(all_quotes, escaped)
+        var real_quotes = all_quotes & ~escaped
+
+        var combined = structurals_from_masks(
+            block.op,
+            block.whitespace,
+            real_quotes,
+            in_string,
+            prev_scalar_carry,
+        )
+        # Deferred by one chunk, as in the portable loop. Before the
+        # first chunk prev_structurals is 0: the stores land on slots the
+        # next emit overwrites and the cursor does not move.
+        emit(base_idx - 64, prev_structurals)
+        prev_structurals = combined[0]
+        prev_scalar_carry = combined[1]
+
+    # A padded input can load its final partial chunk in place.
+    var full = (input_len + 63) // 64 if assume_padded else input_len // 64
+    for i in range(full):
+        step(SimdInput.load(ptr.unsafe_offset(i * 64)), UInt32(i * 64))
+    comptime if not assume_padded:
+        var rem = input_len - full * 64
+        if rem > 0:
+            # Stage the final partial chunk through a zeroed stack buffer
+            # so the borrowed input is never read past input_len.
+            var tail = Array[Byte, 64](fill=0)
+            unsafe_memcpy(
+                dest=tail.unsafe_ptr(),
+                src=ptr.unsafe_offset(full * 64),
+                count=rem,
+            )
+            step(SimdInput.load(tail.unsafe_ptr()), UInt32(full * 64))
+            full += 1
+    emit(UInt32(full * 64 - 64), prev_structurals)
+
+    comptime if with_flags:
+        if len(backslashes) != 0:
+            flags |= INDEX_HAS_BACKSLASH
+
+    # Same ascending-tail trim as the portable loop.
+    var write_pos = (Int(out) - Int(out_start)) // 4
+    while (
+        write_pos > 0
+        and Int(out_start[unsafe_offset=write_pos - 1]) >= input_len
     ):
         write_pos -= 1
     positions.resize(write_pos, UInt32(0))

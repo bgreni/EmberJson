@@ -38,7 +38,7 @@ from emberjson.constants import (
 )
 from std.memory.unsafe import bitcast, pack_bits
 from std.bit import count_trailing_zeros
-from std.sys.intrinsics import unlikely
+from std.sys.intrinsics import unlikely, llvm_intrinsic
 from emberserde.error import DeserializationError, DerErrorKind
 
 comptime smallest_power: Int64 = -342
@@ -412,6 +412,89 @@ def unsafe_parse_eight_digits(out val: UInt64, p: BytePtr):
     val = (val & 0x0F0F0F0F0F0F0F0F) * 2561 >> 8
     val = (val & 0x00FF00FF00FF00FF) * 6553601 >> 16
     val = (val & 0x0000FFFF0000FFFF) * 42949672960001 >> 32
+
+
+# --- x86 SSE digit runs ---------------------------------------------------
+
+comptime _U8x16 = SIMD[DType.uint8, 16]
+
+
+def _make_digit_align() -> StackArray[_U8x16, 17]:
+    """Entry n is a PSHUFB control moving lanes 0..n-1 to lanes 16-n..15
+    and zeroing the rest (control bit 7 set)."""
+    var t = StackArray[_U8x16, 17](fill=_U8x16(0))
+    for n in range(17):
+        var m = _U8x16(0x80)
+        for lane in range(16 - n, 16):
+            m[lane] = UInt8(lane - (16 - n))
+        t[n] = m
+    return t^
+
+
+comptime _DIGIT_ALIGN = _make_digit_align()
+
+comptime POW10_U64: StackArray[UInt64, 17] = [
+    1,
+    10,
+    100,
+    1_000,
+    10_000,
+    100_000,
+    1_000_000,
+    10_000_000,
+    100_000_000,
+    1_000_000_000,
+    10_000_000_000,
+    100_000_000_000,
+    1_000_000_000_000,
+    10_000_000_000_000,
+    100_000_000_000_000,
+    1_000_000_000_000_000,
+    10_000_000_000_000_000,
+]
+
+
+@always_inline
+def unsafe_parse_digit_run16(p: BytePtr) -> Tuple[UInt64, Int]:
+    """The value and length of the run of ASCII digits at `p`, up to 16.
+
+    x86 only (SSSE3 + SSE4.1; callers gate on AVX2). One 16-byte load and
+    compare find the run length, PSHUFB right-aligns the run (the zeroed
+    lanes before it read as leading zeros), and simdjson's
+    PMADDUBSW/PMADDWD/PACKUSDW/PMADDWD chain combines it. Every constant
+    is a vector, so unlike the SWAR helpers this holds no 64-bit
+    immediates in general-purpose registers.
+
+    Safety:
+        Reads 16 bytes at `p`.
+    """
+    var d = p.unsafe_load[width=16]() - _U8x16(0x30)
+    var mask = UInt32(pack_bits(d.le(_U8x16(9))))
+    var n = Int(count_trailing_zeros(~mask))
+    var aligned = llvm_intrinsic["llvm.x86.ssse3.pshuf.b.128", _U8x16](
+        d, lut[_DIGIT_ALIGN](n)
+    )
+    var pairs = llvm_intrinsic[
+        "llvm.x86.ssse3.pmadd.ub.sw.128", SIMD[DType.int16, 8]
+    ](
+        aligned,
+        SIMD[DType.int8, 16](
+            10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1
+        ),
+    )
+    var quads = llvm_intrinsic["llvm.x86.sse2.pmadd.wd", SIMD[DType.int32, 4]](
+        pairs, SIMD[DType.int16, 8](100, 1, 100, 1, 100, 1, 100, 1)
+    )
+    var packed = llvm_intrinsic[
+        "llvm.x86.sse41.packusdw", SIMD[DType.int16, 8]
+    ](quads, quads)
+    var octs = llvm_intrinsic["llvm.x86.sse2.pmadd.wd", SIMD[DType.int32, 4]](
+        packed, SIMD[DType.int16, 8](10000, 1, 10000, 1, 10000, 1, 10000, 1)
+    )
+    return (
+        UInt64(octs[0]) * 100_000_000 + UInt64(octs[1]),
+        n,
+    )
 
 
 @always_inline

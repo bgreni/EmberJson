@@ -32,11 +32,13 @@ from emberjson._deserialize._parser_helper import (
     unsafe_parse_eight_digits,
     unsafe_is_made_of_four_digits_fast,
     unsafe_parse_four_digits,
+    unsafe_parse_digit_run16,
+    POW10_U64,
     isdigit,
     pack_into_integer,
     Bits_T,
 )
-from std.sys.info import bit_width_of
+from std.sys.info import bit_width_of, CompilationTarget
 from emberjson._deserialize.tape_indexed import _TOKEN_END_OK
 from emberjson._index import structural_index_with_flags
 from emberjson.constants import (
@@ -84,6 +86,14 @@ from std.builtin.rebind import downcast
 from emberjson.simd import SIMD8_WIDTH
 from emberserde.utils import Base
 from std.collections.string.string_span import get_static_string
+
+
+# x86 reads number digits with the SSE `unsafe_parse_digit_run16`
+# instead of digit loops and SWAR probes. The SWAR constants are 64-bit
+# immediates, each held in a general-purpose register; inlined into an
+# element loop they overflow x86's 15 GPRs and the loop state spills.
+# aarch64 (31 GPRs) keeps the SWAR scan until the swap is measured there.
+comptime _SSE_DIGITS = CompilationTarget.has_avx2()
 
 
 trait RawCapture:
@@ -306,9 +316,15 @@ struct _IndexCursor[origin: ImmOrigin, options: ParseOptions](Movable):
             var digits = self.p.data.start.unsafe_offset(off + Int(neg))
             var q = digits
             var u: UInt64 = 0
-            if unsafe_is_made_of_eight_digits_fast(q):
-                u = unsafe_parse_eight_digits(q)
-                q = q.unsafe_offset(8)
+            comptime if _SSE_DIGITS:
+                if not __is_run_in_comptime_interpreter:
+                    var run = unsafe_parse_digit_run16(q)
+                    u = run[0]
+                    q = q.unsafe_offset(run[1])
+            else:
+                if unsafe_is_made_of_eight_digits_fast(q):
+                    u = unsafe_parse_eight_digits(q)
+                    q = q.unsafe_offset(8)
             while isdigit(q[]) and ptr_dist(digits, q) < 20:
                 u = u * 10 + UInt64(q[] - `0`)
                 q = q.unsafe_offset(1)
@@ -351,6 +367,11 @@ struct _IndexCursor[origin: ImmOrigin, options: ParseOptions](Movable):
             raise _declined()
         var off = self.peek_off()
         self.advance()
+        comptime if _SSE_DIGITS:
+            # The interpreter cannot run the SSE intrinsics; comptime
+            # parses take the portable scan below.
+            if not __is_run_in_comptime_interpreter:
+                return self._read_float64_sse(b, off)
         if unlikely(
             not (self.i < self.n and self.peek_off() + 8 <= self.p.size)
         ):
@@ -398,6 +419,53 @@ struct _IndexCursor[origin: ImmOrigin, options: ParseOptions](Movable):
             self.check_token_end()
             return v
         return self.p.compute_float64(exponent, i, neg)
+
+    @always_inline
+    def _read_float64_sse(
+        mut self, b: Byte, off: Int
+    ) raises DeserializationError -> Float64:
+        """`read_float64`'s scan on `_SSE_DIGITS` targets: the same
+        accepted shape and the same `compute_float64`, with the integer
+        and fraction digits each read in one `unsafe_parse_digit_run16`
+        step. Its 16-byte loads need 16 readable bytes past the next
+        token's start, rather than 8."""
+        if unlikely(
+            not (self.i < self.n and self.peek_off() + 16 <= self.p.size)
+        ):
+            self.seek(off)
+            var v = self.p.expect_float[DType.float64]()
+            self.check_token_end()
+            return v
+        var neg = b == `-`
+        var digits = self.p.data.start.unsafe_offset(off + Int(neg))
+        var q = digits
+        var i: UInt64 = 0
+        while isdigit(q[]):
+            i = i * 10 + UInt64(q[] - `0`)
+            q = q.unsafe_offset(1)
+        var int_digits = ptr_dist(digits, q)
+        var frac_digits = 0
+        if q[] == `.`:
+            var frac_run = unsafe_parse_digit_run16(q.unsafe_offset(1))
+            frac_digits = frac_run[1]
+            if unlikely(frac_digits == 0):
+                raise _declined()
+            # Wraps only past 19 digits, which declines below.
+            i = i * lut[POW10_U64](frac_digits) + frac_run[0]
+            q = q.unsafe_offset(1 + frac_digits)
+        # A 16-digit run may continue: then q is on a digit, which is not
+        # a token end.
+        if unlikely(
+            int_digits == 0
+            or (digits[] == `0` and int_digits > 1)
+            or int_digits + frac_digits > 19
+            or not lut[_TOKEN_END_OK](Int(q[]))
+        ):
+            self.seek(off)
+            var v = self.p.expect_float[DType.float64]()
+            self.check_token_end()
+            return v
+        return self.p.compute_float64(-Int64(frac_digits), i, neg)
 
     def skip_past(mut self, end_off: Int) raises DeserializationError:
         """Drops the index entries of a span a `Parser` just consumed (the
