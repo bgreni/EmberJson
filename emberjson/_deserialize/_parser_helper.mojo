@@ -5,6 +5,21 @@ from emberjson.utils import (
     ByteVec,
     StackArray,
     lut,
+    to_string,
+)
+from ._errors import (
+    unexpected_eof,
+    invalid_value,
+    plus_sign,
+    literal_eof,
+    bad_literal,
+    expected_type,
+    invalid_hex_escape,
+    bad_codepoint,
+    lone_surrogate,
+    invalid_codepoint,
+    invalid_escape,
+    control_character,
 )
 from std.memory import unsafe_memcpy
 from emberjson.simd import SIMDBool, SIMD8_WIDTH, SIMD8xT
@@ -25,6 +40,7 @@ from emberjson.constants import (
     `u`,
     `e`,
     `E`,
+    `l`,
     `.`,
     `a`,
     `A`,
@@ -35,6 +51,13 @@ from emberjson.constants import (
     `r`,
     `t`,
     `/`,
+    `,`,
+    `:`,
+    `[`,
+    `]`,
+    `{`,
+    `}`,
+    acceptable_escapes,
 )
 from std.memory.unsafe import bitcast, pack_bits
 from std.bit import count_trailing_zeros
@@ -129,6 +152,17 @@ struct StringBlock(TrivialRegisterPassable):
         )
 
     @always_inline
+    def unescaped_first(self) -> Bool:
+        """Whether an unescaped control character comes before any quote
+        or backslash in the block: then nothing earlier can fail first. A
+        backslash before it is validated first, so a string's errors are
+        reported in byte order whichever path scans it."""
+        var u = count_trailing_zeros(self.unescaped_bits)
+        return u < count_trailing_zeros(self.quote_bits) and u < (
+            count_trailing_zeros(self.bs_bits)
+        )
+
+    @always_inline
     def has_unescaped(self) -> Bool:
         return count_trailing_zeros(self.unescaped_bits) < count_trailing_zeros(
             self.quote_bits
@@ -150,6 +184,119 @@ struct StringBlock(TrivialRegisterPassable):
         return StringBlock(v.eq(`\\`), v.eq(`"`), v.lt(` `))
 
 
+def _gen_token_end_table(out t: StackArray[Bool, 256]):
+    t = StackArray[Bool, 256](fill=False)
+    # NUL is deliberately NOT in this table. It terminates a token only
+    # when it is `PaddedBuffer`'s padding rather than a byte of the
+    # input, which the table alone cannot tell apart; `_check_token_end`
+    # settles that case against the logical end-of-input.
+    t.unsafe_get(Int(` `)) = True
+    t.unsafe_get(0x09) = True
+    t.unsafe_get(0x0A) = True
+    t.unsafe_get(0x0D) = True
+    t.unsafe_get(Int(`,`)) = True
+    t.unsafe_get(Int(`:`)) = True
+    t.unsafe_get(Int(`[`)) = True
+    t.unsafe_get(Int(`]`)) = True
+    t.unsafe_get(Int(`{`)) = True
+    t.unsafe_get(Int(`}`)) = True
+    t.unsafe_get(Int(`"`)) = True
+
+
+comptime _TOKEN_END_OK: StackArray[Bool, 256] = _gen_token_end_table()
+
+
+@always_inline
+def glued(prev: Byte, b: Byte) -> Bool:
+    """Whether `b`, read right after `prev`, is glued to a number or literal
+    that `prev` ends (`12x`, `truex`). A byte-by-byte walker sees such a
+    byte where it expects a separator, an index walker as a token that does
+    not end; both report `after_value`. Numbers end in a digit, literals in
+    `e` or `l`; a string or container end is never glued."""
+    return (isdigit(prev) or prev == `e` or prev == `l`) and not lut[
+        _TOKEN_END_OK
+    ](Int(b))
+
+
+@no_inline
+def value_error(
+    p: BytePtr, remaining: Int, what: StaticString
+) -> DeserializationError:
+    """The error for the `remaining` bytes at `p`, where a `what` was
+    expected and does not open.
+
+    A complete value of another type is a `TypeMismatch`. Anything else is
+    malformed JSON, reported as the `Value` parser reports it there: the
+    end of input, a misspelled `true`/`false`/`null`, a `+`, or a byte that
+    starts no value. (A string, number or container is judged by its first
+    byte.)
+    """
+    if remaining <= 0:
+        return unexpected_eof()
+    var c = p[]
+    if c == `"` or c == `{` or c == `[` or c == `-` or isdigit(c):
+        return expected_type(what, c)
+    if c == `t`:
+        if remaining < 4:
+            return literal_eof("true")
+        var w = p.unsafe_bitcast[UInt32]()[]
+        if w != TRUE:
+            return bad_literal("true", String(to_string(w)))
+        return expected_type(what, c)
+    if c == `f`:
+        if remaining < 5:
+            return literal_eof("false")
+        var w = p.unsafe_offset(1).unsafe_bitcast[UInt32]()[]
+        if w != ALSE:
+            return bad_literal("false", String("f") + String(to_string(w)))
+        return expected_type(what, c)
+    if c == `n`:
+        if remaining < 4:
+            return literal_eof("null")
+        var w = p.unsafe_bitcast[UInt32]()[]
+        if w != NULL:
+            return bad_literal("null", String(to_string(w)))
+        return expected_type(what, c)
+    if c == `+`:
+        return plus_sign()
+    return invalid_value(c)
+
+
+@no_inline
+def check_string_body(p: BytePtr, n: Int) raises DeserializationError:
+    """Raises the first error in the `n` string-body bytes at `p`, in the
+    order `Parser.scan_string` meets them: a backslash followed by no
+    escape name, or a raw control byte. (A backslash on the last byte is
+    left to the caller, whose `n` ends before its escape name.)
+
+    For walkers whose fast checks only learn that a string is bad -- an
+    index that never closes it, a control byte somewhere inside -- so
+    they report the error the byte walk does.
+    """
+    var i = 0
+    while i < n:
+        var c = p[unsafe_offset=i]
+        if c == `\\`:
+            i += 1
+            if i < n and p[unsafe_offset=i] not in acceptable_escapes:
+                raise invalid_escape(p[unsafe_offset=i])
+        elif c < 0x20:
+            raise control_character(c)
+        i += 1
+
+
+@no_inline
+def string_error(p: BytePtr, remaining: Int) -> DeserializationError:
+    """The error for the string whose body starts at `p`, `remaining`
+    bytes before the end of input, when it holds a control byte or never
+    closes: `check_string_body`'s first error, else the end of input."""
+    try:
+        check_string_body(p, remaining)
+    except e:
+        return e^
+    return unexpected_eof()
+
+
 @always_inline
 def is_hex_digits(c: ByteVec[4]) -> Bool:
     return (
@@ -164,9 +311,7 @@ def hex_to_u32(p: BytePtr) raises DeserializationError -> UInt32:
     var bytes = p.unsafe_load[width=4]()
 
     if unlikely(not is_hex_digits(bytes)):
-        raise DeserializationError(
-            "Invalid hex digit encountered", DerErrorKind.InvalidValue
-        )
+        raise invalid_hex_escape()
 
     var v = bytes.cast[DType.uint32]()
     v = (v & 0xF) + 9 * (v >> 6)
@@ -186,16 +331,12 @@ def decode_codepoint[
     # But if this points to bytes received over the wire, it makes sense
     # unless we use _is_valid_utf8 at the beginning of where this is called
     if unlikely(p.unsafe_offset(3) >= end):
-        raise DeserializationError(
-            "Bad unicode codepoint", DerErrorKind.InvalidValue
-        )
+        raise bad_codepoint()
     var c1 = hex_to_u32(p)
     p = p.unsafe_offset(4)
 
     if unlikely(c1 >= 0xDC00 and c1 < 0xE000):
-        raise DeserializationError(
-            "Invalid unicode: lone surrogate", DerErrorKind.InvalidValue
-        )
+        raise lone_surrogate()
     # NOTE: incredibly, this is part of the JSON standard (thanks javascript...)
     # ECMA-404 2nd Edition / December 2017. Section 9:
     # To escape a code point that is not in the Basic Multilingual Plane, the
@@ -208,27 +349,21 @@ def decode_codepoint[
     if c1 >= 0xD800 and c1 < 0xDC00:
         # TODO: same as the above TODO
         if unlikely(p.unsafe_offset(5) >= end):
-            raise DeserializationError(
-                "Bad unicode codepoint", DerErrorKind.InvalidValue
-            )
+            raise bad_codepoint()
         elif unlikely(not (p[] == `\\` and p[unsafe_offset=1] == `u`)):
-            raise DeserializationError(
-                "Bad unicode codepoint", DerErrorKind.InvalidValue
-            )
+            raise bad_codepoint()
 
         p = p.unsafe_offset(2)
         var c2 = hex_to_u32(p)
 
         if unlikely(c2 < 0xDC00 or c2 >= 0xE000):
-            raise DeserializationError(
-                "Bad unicode codepoint", DerErrorKind.InvalidValue
-            )
+            raise bad_codepoint()
 
         c1 = (((c1 - 0xD800) << 10) | (c2 - 0xDC00)) | 0x10000
         p = p.unsafe_offset(4)
 
     if unlikely(c1 > 0x10FFFF):
-        raise DeserializationError("Invalid unicode", DerErrorKind.InvalidValue)
+        raise invalid_codepoint()
 
     return c1
 
@@ -274,9 +409,7 @@ def decode_escape(c: Byte) raises DeserializationError -> Byte:
     `\\u` is not one of them; callers dispatch it first."""
     var decoded = lut[_ESCAPE_DECODE](Int(c))
     if unlikely(decoded == 0):
-        raise DeserializationError(
-            "Invalid escape sequence", DerErrorKind.InvalidValue
-        )
+        raise invalid_escape(c)
     return decoded
 
 
@@ -369,6 +502,27 @@ def copy_to_string[
         return String(
             StringSlice(unsafe_from_utf8=Span(unsafe_ptr=start, length=length))
         )
+
+
+def check_escapes[
+    o1: ImmOrigin, o2: ImmOrigin, //
+](var p: BytePtr[o1], end: BytePtr[o2]) raises DeserializationError:
+    """Raises what decoding the escapes in the scanned string content
+    `[p, end)` raises in `copy_to_string` (`p` at or before the first
+    backslash), without decoding: validators accept exactly the strings
+    the parsers read. `scan_string` has already checked the escape names,
+    so only `\\u` escapes are left to fail."""
+    while True:
+        p = _next_backslash(p, end)
+        if p >= end:
+            return
+        p = p.unsafe_offset(1)
+        if p >= end:
+            return
+        var c = p[]
+        p = p.unsafe_offset(1)
+        if c == `u`:
+            _ = decode_codepoint(p, end)
 
 
 @always_inline
@@ -522,24 +676,6 @@ def unsafe_parse_four_digits(src: BytePtr) -> UInt64:
 
 
 @always_inline
-def ingest_fraction_digits[padded: Bool](mut p: CheckedPointer, mut i: UInt64):
-    """Consumes a run of digits into `i`: 8 at a time, then one 4-digit
-    step, then singly (fast_float #382/#398). Fractions are where long
-    digit runs live; canada's 15-digit ones become 8 + 4 + 3. In padded
-    mode the probes may read into the NUL padding, which fails them."""
-    while (padded or p.dist() >= 8) and unsafe_is_made_of_eight_digits_fast(
-        p.p
-    ):
-        i = i * 100_000_000 + unsafe_parse_eight_digits(p.p)
-        p += 8
-    if (padded or p.dist() >= 4) and unsafe_is_made_of_four_digits_fast(p.p):
-        i = i * 10_000 + unsafe_parse_four_digits(p.p)
-        p += 4
-    while parse_digit[padded](p, i):
-        p += 1
-
-
-@always_inline
 def parse_digit[
     assume_padded: Bool = False
 ](out dig: Bool, p: CheckedPointer, mut i: Scalar):
@@ -569,8 +705,12 @@ def at_or_nul[assume_padded: Bool = False](p: CheckedPointer) -> Byte:
 
 @always_inline
 def significant_digits(p: BytePtr, digit_count: Int) -> Int:
-    var start = p
-    while start[] == `0` or start[] == `.`:
-        start = start.unsafe_offset(1)
-
-    return digit_count - ptr_dist(p, start)
+    """`digit_count` (the digits from `p`, not counting a `.` among them)
+    less the leading zeros, which do not limit precision. Reads only
+    within those digits."""
+    var q = p
+    var n = digit_count
+    while n > 0 and (q[] == `0` or q[] == `.`):
+        n -= Int(q[] == `0`)
+        q = q.unsafe_offset(1)
+    return n

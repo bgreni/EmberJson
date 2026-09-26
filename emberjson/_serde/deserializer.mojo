@@ -1,7 +1,53 @@
-from std.collections.string.string_span import get_static_string
+"""EmberJson's reflection `Deserializer`, in simdjson On Demand's shape.
+
+`from_json` runs the SIMD stage-1 indexer over the input first, and
+`EmberJsonDeserializer` then hops token to token through the structural
+index, the way simdjson's On Demand API feeds its C++26 reflection
+deserializer: whitespace is never touched, the next token is one index load
+away, and a string's closing quote is the next index entry, so its span is
+known before it is read.
+
+Scalars are read by the hand-written `Parser`, which a read repositions
+at the token's offset. Grammar errors are the cursor's own, found on the
+index and raised through the shared `_errors` constructors, so the messages
+and `DerErrorKind`s are the ones the `Value` parser raises for the same
+input (`test/emberjson/test_error_parity.mojo`), and emberserde adds the
+paths. Nesting depth is counted on that `Parser`, container for container,
+against `options.max_depth`.
+"""
+
+from std.sys.intrinsics import unlikely, likely
+from std.collections import Set
 
 from emberjson._deserialize import Parser, ParseOptions, StrictOptions
-from emberjson._deserialize._parser_helper import copy_to_string, ptr_dist
+from emberjson._deserialize._parser_helper import (
+    copy_to_string,
+    ptr_dist,
+    isdigit,
+    pack_into_integer,
+    Bits_T,
+    _TOKEN_END_OK,
+    value_error,
+    string_error,
+    check_string_body,
+    glued,
+)
+from emberjson._deserialize._errors import (
+    unexpected_eof,
+    after_value,
+    expected_separator,
+    trailing_comma,
+    expected_key,
+    expected_colon,
+    expected_enum_tag,
+    trailing_content,
+    duplicate_key,
+    malformed_string,
+    expected_length,
+    expected_single_key,
+)
+from emberjson._deserialize._number import try_parse_int, try_parse_float64
+from emberjson._index import structural_index_with_flags
 from emberjson.constants import (
     `[`,
     `]`,
@@ -11,12 +57,17 @@ from emberjson.constants import (
     `:`,
     `,`,
     `n`,
+    `t`,
+    `f`,
+    `-`,
 )
+from emberjson.utils import BytePtr, CheckedPointer, lut
 from emberjson.value import Value
 
 from emberserde.deserialize import (
+    _prepend_field,
     BorrowingDeserializer,
-    Deserializer,
+    Deserializable,
     RawKind,
     SelfDescribingDeserializer,
     SeqDerState,
@@ -25,262 +76,926 @@ from emberserde.deserialize import (
     TupleDerState,
     EnumDerState,
     deserialize,
+    deserialize_struct,
 )
-from emberserde.error import DeserializationError, DerErrorKind
-from emberserde.field_meta import field_index
+from emberserde.error import DeserializationError
+from emberserde.field_meta import (
+    field_index,
+    wire_field_names,
+    FieldMeta,
+    static_wire_name,
+    _eq_static,
+)
+from std.reflection import reflect
+from std.builtin.rebind import downcast
+from emberjson.simd import SIMD8_WIDTH
 from emberserde.utils import Base
-
-# JSON `Deserializer` format over EmberJson's existing hand-written `Parser`
-# (`emberjson/_deserialize/parser.mojo`), ported to sit on top of
-# emberserde's format-agnostic traits (`emberserde/emberserde/deserialize/
-# __init__.mojo`). Structurally this mirrors `emberserde/test/_json_format.
-# mojo`'s `JsonDeserializer`, but drives EmberJson's own byte-walking parser
-# instead of a hand-rolled cursor. Since F16 the `Parser`'s token methods
-# (`expect`, `expect_open`, `expect_string`, `expect_int`, `expect_float`,
-# `expect_bool`, `expect_null`, `skip_value`, `read_string`, ...) declare
-# `raises DeserializationError` and pick the `DerErrorKind` at the failure
-# site, so this layer calls them directly: no try/except scaffolding, and
-# no second, external guess at what the byte at the cursor meant.
-# `_invalid`/`_mismatch` survive only for conditions THIS layer detects on
-# its own (a trailing comma, a missing enum tag, an unusable `raw_bytes`
-# request).
-#
-# Two origins, like the toy format's `Pointer[JsonCursor, origin]`, but
-# split in two because `Parser` itself is generic over the origin of the
-# input it borrows: `origin` is that input origin, `ptr_origin` is the
-# origin of the pointer to the `Parser` instance itself (sub-deserializers
-# share one `Parser` via this pointer, exactly like the toy shares one
-# `JsonCursor`). `options` rides as a struct parameter since the
-# `Deserializer` trait has no parameter channel of its own.
-#
-# Depth: each `begin_*` counts its container on the shared `Parser`'s
-# `depth` (`enter_container`, against `options.max_depth`) and the matching
-# `end` releases it; a raise abandons the parse, so nothing unwinds.
-#
-# `expect_struct` is intentionally NOT overridden — per the trait's
-# comments it is the framework's field-matching driver (rename/alias/skip,
-# duplicate/unknown/missing-field handling, error paths); overriding it
-# would silently opt out of all of that. Only `begin_struct`/`StructDerState`
-# are implemented here.
+from std.collections.string.string_span import get_static_string
 
 
-def _invalid(message: String) -> DeserializationError:
-    return DeserializationError(message, DerErrorKind.InvalidValue)
+trait RawCapture:
+    """A type whose deserialization is one `raw_bytes` capture (`Lazy`).
+    As the root it is read without a structural index (see
+    `EmberJsonCursor.__init__`)."""
+
+    pass
 
 
-def _mismatch(message: String) -> DeserializationError:
-    return DeserializationError(message, DerErrorKind.TypeMismatch)
+# The cursor's errors. Each is detected on the index and the input bytes
+# and raised through the shared `_errors` constructors, deciding between
+# them as the `Value` parser does at the same byte (the parity test holds
+# them to it). They take the cursor's address as an `Int` and return the
+# error for the caller to raise: cold calls that pass only scalars leave
+# the hot readers' registers and stack frames alone (see
+# `EmberJsonCursor.token_error`).
+
+comptime _CursorAt[origin: ImmOrigin, options: ParseOptions] = Pointer[
+    EmberJsonCursor[origin, options], ImmutAnyOrigin
+]
+
+
+@no_inline
+def _token_error[
+    origin: ImmOrigin, options: ParseOptions
+](cursor: Int, expected: Byte, close: Byte) -> DeserializationError:
+    """The error for a next token that is not the grammar token `expected`
+    (`:`, `,` or `close`), inside a container that `close` ends."""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    if c.i >= c.n:
+        return unexpected_eof()
+    var b = c.byte(c.peek_off())
+    if expected == `:`:
+        return expected_colon(b)
+    return expected_separator(close, b)
+
+
+@no_inline
+def _value_error[
+    origin: ImmOrigin, options: ParseOptions
+](cursor: Int, what: StaticString) -> DeserializationError:
+    """The error for a next token that does not open a `what`."""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    if c.i >= c.n:
+        return unexpected_eof()
+    var off = c.peek_off()
+    return value_error(c.p.data.start.unsafe_offset(off), c.p.size - off, what)
+
+
+@no_inline
+def _string_error[
+    origin: ImmOrigin, options: ParseOptions
+](cursor: Int, open: Int) -> DeserializationError:
+    """The error for the string opening at `open`, which holds a control
+    byte or which the index never closes."""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    return string_error(
+        c.p.data.start.unsafe_offset(open + 1), c.p.size - open - 1
+    )
+
+
+@no_inline
+def _field_key_error[
+    origin: ImmOrigin, options: ParseOptions
+](cursor: Int, first: Bool) -> DeserializationError:
+    """The error for an object member that `next_field_key` rejected, found
+    in the order the `Value` parser meets it: the separator, the key's
+    opening quote, the key itself (a malformed key can pair quotes
+    differently in the index: `"a\\:1` runs to the next quote), then the
+    colon."""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    var base = c.p.data.start
+    var k = c.i
+    if not first:
+        if k >= c.n:
+            return unexpected_eof()
+        var b = c.byte(c.entry_off(k))
+        if b != `,`:
+            return expected_separator(`}`, b)
+        k += 1
+        if k < c.n and c.byte(c.entry_off(k)) == `}`:
+            return trailing_comma()
+    if k >= c.n:
+        return unexpected_eof()
+    var open = c.entry_off(k)
+    if c.byte(open) != `"`:
+        return expected_key(c.byte(open))
+    if k + 1 >= c.n:
+        return string_error(base.unsafe_offset(open + 1), c.p.size - open - 1)
+    var close = c.entry_off(k + 1)
+    try:
+        check_string_body(base.unsafe_offset(open + 1), close - open - 1)
+        _ = copy_to_string[options.ignore_unicode](
+            base.unsafe_offset(open + 1), base.unsafe_offset(close)
+        )
+    except e:
+        return e^
+    if k + 2 >= c.n:
+        return unexpected_eof()
+    return expected_colon(c.byte(c.entry_off(k + 2)))
+
+
+@no_inline
+def _tuple_error[
+    origin: ImmOrigin, options: ParseOptions
+](cursor: Int, count: Int) -> DeserializationError:
+    """The error for a tuple element's separator that is not `,`: a `]`
+    ends a well-formed array too short for the tuple."""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    if c.i < c.n and c.byte(c.peek_off()) == `]`:
+        return expected_length(count)
+    return _token_error[origin, options](cursor, `,`, `]`)
+
+
+@no_inline
+def _tuple_element_error[
+    origin: ImmOrigin, options: ParseOptions
+](
+    cursor: Int, at: Int, count: Int, var e: DeserializationError
+) -> DeserializationError:
+    """The error for a tuple element that failed to read with `e` from
+    index entry `at`. A `]` there ends the array: after a `,` it is a
+    trailing comma, otherwise an array too short for the tuple."""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    if at >= c.n or c.byte(c.entry_off(at)) != `]`:
+        return e^
+    comptime if not (StrictOptions.ALLOW_TRAILING_COMMA in options.strict_mode):
+        if at > 0 and c.byte(c.entry_off(at - 1)) == `,`:
+            return trailing_comma()
+    return expected_length(count)
+
+
+@no_inline
+def _trailing_error[
+    origin: ImmOrigin, options: ParseOptions
+](cursor: Int) -> DeserializationError:
+    """The error for a token after the root value. (One glued to a root
+    scalar, `12x`, is the scalar's `check_token_end` error.)"""
+    ref c = _CursorAt[origin, options](unsafe_from_address=cursor)[]
+    var off = c.peek_off()
+    return trailing_content(c.p.data.start.unsafe_offset(off), c.p.size - off)
+
+
+@always_inline
+def _key_hash(p: BytePtr, n: Int) -> UInt64:
+    """A fast, non-cryptographic hash of the `n` bytes at `p` (in bounds)."""
+    var h = UInt64(n) * 0x9E3779B97F4A7C15
+    var i = 0
+    while i + 8 <= n:
+        h = (h ^ p.unsafe_offset(i).unsafe_bitcast[UInt64]()[]) * (
+            0xFF51AFD7ED558CCD
+        )
+        h ^= h >> 29
+        i += 8
+    var tail: UInt64 = 0
+    var shift: UInt64 = 0
+    while i < n:
+        tail |= UInt64(p[unsafe_offset=i]) << shift
+        shift += 8
+        i += 1
+    h = (h ^ tail) * 0xC4CEB9FE1A85EC53
+    return h ^ (h >> 32)
+
+
+def _names_have_control[T: AnyType]() -> Bool:
+    """Whether any name a wire key of `T` can match -- a field's wire name
+    or one of its aliases -- holds a byte below 0x20."""
+    var names = wire_field_names[T]()
+    comptime r = reflect[T]
+    comptime for i in range(r.field_count()):
+        comptime FT = r.field_types()[i]
+        comptime if conforms_to(FT, FieldMeta):
+            comptime FM = downcast[FT, FieldMeta]
+            comptime if FM.serde_extra:
+                comptime extra = FM.serde_extra.value()
+                comptime for j in range(len(extra)):
+                    names.append(String(get_static_string[extra[j]]()))
+    for name in names:
+        for b in name.as_bytes():
+            if b < 0x20:
+                return True
+    return False
+
+
+@always_inline
+def _de[
+    T: AnyType
+](mut sub: EmberJsonDeserializer) raises DeserializationError -> T:
+    """`deserialize[T]` without the dispatcher's call: a type's own
+    `deserialize` inlines as far as it is marked to (a scalar's read, an
+    empty list's check) into the state that reads it."""
+    comptime if conforms_to(T, Deserializable):
+        return T.deserialize(sub)
+    else:
+        return deserialize[T](sub)
+
+
+def _ordered_ok[T: AnyType]() -> Bool:
+    """Whether `EmberJsonDeserializer.expect_struct` may read `T` in
+    declaration order: no field is skipped or aliased and no name holds a
+    control byte, so a plain key equal to field `i`'s wire name is exactly
+    a key `field_index` resolves to `i` and `resolve_key` lets through."""
+    comptime r = reflect[T]
+    comptime for i in range(r.field_count()):
+        comptime FT = r.field_types()[i]
+        comptime if conforms_to(FT, FieldMeta):
+            comptime FM = downcast[FT, FieldMeta]
+            comptime if FM.serde_skip or FM.serde_extra:
+                return False
+    return not _names_have_control[T]()
+
+
+struct EmberJsonCursor[
+    origin: ImmOrigin, options: ParseOptions = ParseOptions()
+](Movable):
+    """Stage-1 index over the caller's (unpadded) input plus a `Parser`
+    that scalar reads reposition onto a token's offset. An
+    `EmberJsonDeserializer` reads through a pointer to one.
+
+    `peek()` is the next token's first byte and `advance()` consumes it.
+    Past the last token `peek()` is 0, which every consumer rejects before
+    advancing, and the entry index then rests on a sentinel slot, so no
+    read ever leaves the index or the input. (Holding the next token's
+    byte pre-loaded in the cursor was measured slower: the extra stores
+    sit on the same dependency chain the preload was meant to hide.)
+    """
+
+    var p: Parser[Self.origin, Self.options]
+    var positions: List[UInt32]
+    # Ascending offsets of every backslash; `bs_i` indexes the first one
+    # the (monotonic) string reads have not yet passed, `next_bs` is its
+    # offset (`Int.MAX` once none remain).
+    var backslashes: List[UInt32]
+    var bs_i: Int
+    var next_bs: Int
+    # Entry index of the next unread token; `n` is the number of real
+    # entries, and `positions[n]` is the sentinel slot.
+    var i: Int
+    var n: Int
+
+    def __init__(
+        out self: EmberJsonCursor[Self.origin, Self.options],
+        ref[Self.origin] s: String,
+    ):
+        self = Self(StringSlice(s).as_bytes())
+
+    def __init__(out self, s: StringSlice[Self.origin]):
+        self = Self(s.as_bytes())
+
+    def __init__(
+        out self, var b: Span[Byte, Self.origin], *, index: Bool = True
+    ):
+        """Indexes `b`.
+
+        An empty input is read as a lone space, which holds no token, so
+        every read raises the end-of-input error and the sentinel slot has
+        a byte to point at. (The constructor does not raise itself: a
+        typed-`raises` constructor called from a plain `raises` function
+        crashes the Mojo 1.1 compiler.)
+
+        Args:
+            b: The input.
+            index: False skips stage 1 and makes a single entry at offset
+                0, for a root that is one `raw_bytes` capture
+                (`RawCapture`): the `Parser` reads and validates the whole
+                value itself, so an index would only be skipped over.
+        """
+        if unlikely(len(b) == 0):
+            b = rebind[Span[Byte, Self.origin]](StaticString(" ").as_bytes())
+        self.p = Parser[Self.origin, Self.options](b)
+        self.positions = List[UInt32]()
+        self.backslashes = List[UInt32]()
+        self.bs_i = 0
+        if index:
+            _ = structural_index_with_flags[False](
+                self.p.data.start, self.p.size, self.positions, self.backslashes
+            )
+        else:
+            self.positions.append(0)
+        self.n = len(self.positions)
+        self.next_bs = Int(self.backslashes.unsafe_ptr()[]) if len(
+            self.backslashes
+        ) else Int.MAX
+        # The sentinel slot. Offset 0 is in bounds: the input is not empty.
+        self.positions.append(0)
+        self.i = 0
+
+    @always_inline
+    def byte(self, off: Int) -> Byte:
+        # Every index entry, the sentinel included, is `< size`.
+        return self.p.data.start[unsafe_offset=off]
+
+    @always_inline
+    def peek_off(self) -> Int:
+        """Offset of the next unread token (the sentinel's past the end)."""
+        return Int(self.positions.unsafe_ptr()[unsafe_offset=self.i])
+
+    @always_inline
+    def peek(self) -> Byte:
+        """First byte of the next unread token, or 0 past the last one."""
+        var b = self.byte(self.peek_off())
+        return b if self.i < self.n else 0
+
+    @always_inline
+    def advance(mut self):
+        """Consumes the next token. Callers first check `peek()` against a
+        non-zero byte, which fails at the sentinel, so `i` never passes
+        `n`."""
+        self.i += 1
+
+    @always_inline
+    def expect(
+        mut self, expected: Byte, close: Byte
+    ) raises DeserializationError:
+        """Consumes the next token, which must be the grammar token
+        `expected` (`:`, `,` or `close`) inside a container that `close`
+        ends."""
+        if unlikely(self.peek() != expected):
+            raise self.token_error(expected, close)
+        self.advance()
+
+    @always_inline
+    def expect_open(mut self, expected: Byte) raises DeserializationError:
+        """`expect` for the `[` or `{` that opens a value, where a different
+        complete value is a shape mismatch rather than malformed JSON."""
+        if unlikely(self.peek() != expected):
+            raise self.value_error(
+                StaticString("an array") if expected
+                == `[` else StaticString("an object")
+            )
+        self.advance()
+
+    # The error calls pass the cursor's address as an `Int`, a value every
+    # reader already holds: passed as a pointer, LLVM expands the cursor
+    # into by-value arguments, and passed as the input's bounds they stay
+    # live across the hot loops -- both for calls that almost never run.
+    @always_inline
+    def token_error(self, expected: Byte, close: Byte) -> DeserializationError:
+        return _token_error[Self.origin, Self.options](
+            Int(Pointer(to=self)), expected, close
+        )
+
+    @always_inline
+    def value_error(self, what: StaticString) -> DeserializationError:
+        return _value_error[Self.origin, Self.options](
+            Int(Pointer(to=self)), what
+        )
+
+    @always_inline
+    def string_error(self, open: Int) -> DeserializationError:
+        return _string_error[Self.origin, Self.options](
+            Int(Pointer(to=self)), open
+        )
+
+    @always_inline
+    def field_key_error(self, first: Bool) -> DeserializationError:
+        return _field_key_error[Self.origin, Self.options](
+            Int(Pointer(to=self)), first
+        )
+
+    @always_inline
+    def tuple_error(self, count: Int) -> DeserializationError:
+        return _tuple_error[Self.origin, Self.options](
+            Int(Pointer(to=self)), count
+        )
+
+    @always_inline
+    def tuple_element_error(
+        self, at: Int, count: Int, var e: DeserializationError
+    ) -> DeserializationError:
+        return _tuple_element_error[Self.origin, Self.options](
+            Int(Pointer(to=self)), at, count, e^
+        )
+
+    @always_inline
+    def trailing_error(self) -> DeserializationError:
+        return _trailing_error[Self.origin, Self.options](Int(Pointer(to=self)))
+
+    @always_inline
+    def seek(mut self, off: Int):
+        self.p.data.p = self.p.data.start.unsafe_offset(off)
+
+    @always_inline
+    def seek_next(mut self):
+        """Positions the `Parser` on the next token (not consumed), or at
+        the end of the input past the last one, where its reads raise the
+        end-of-input error."""
+        if likely(self.i < self.n):
+            self.seek(self.peek_off())
+        else:
+            self.p.data.p = self.p.data.end
+
+    @always_inline
+    def check_token_end(self) raises DeserializationError:
+        """After a number or literal: the index only marks where a scalar
+        STARTS, so `12x` is one token -- the byte after it must end it."""
+        if self.p.data.dist() <= 0:
+            return
+        var b = self.p.data.p[unsafe_offset=0]
+        if unlikely(not lut[_TOKEN_END_OK](Int(b))):
+            raise after_value(b)
+
+    @always_inline
+    def take_scalar(mut self):
+        """Consumes the next token and leaves the `Parser` on it, or at the
+        end of the input past the last token (see `seek_next`)."""
+        self.seek_next()
+        if likely(self.i < self.n):
+            self.advance()
+
+    @always_inline
+    def next_scalar_unchecked(self) -> Bool:
+        """Whether the token next in the index, if a scalar, can be scanned
+        with `unchecked=True`: its run ends before the entry after it, and
+        16 readable bytes past that entry cover every wide read. Implies
+        `i < n`, so `next_ptr()` is on a real token."""
+        return (
+            self.i + 1 < self.n
+            and Int(self.positions.unsafe_ptr()[unsafe_offset=self.i + 1]) + 16
+            <= self.p.size
+        )
+
+    @always_inline
+    def next_ptr(self) -> CheckedPointer[Self.origin]:
+        """A pointer to the next token."""
+        return CheckedPointer(
+            self.p.data.start.unsafe_offset(self.peek_off()),
+            self.p.data.start,
+            self.p.data.end,
+        )
+
+    @always_inline
+    def read_int[DT: DType](mut self) raises DeserializationError -> Scalar[DT]:
+        """Reads the integer token next in the index with `Parser.expect_int`'s
+        own `try_parse_int`, inline and unchecked away from the end of the
+        input. Everything else goes through `expect_int` itself."""
+        if likely(self.next_scalar_unchecked()):
+            var p = self.next_ptr()
+            var v = Scalar[DT]()
+            if likely(try_parse_int[DT, unchecked=True, nul_ends=False](p, v)):
+                self.advance()
+                return v
+        return self._read_int_checked[DT]()
+
+    @no_inline
+    def _read_int_checked[
+        DT: DType
+    ](mut self) raises DeserializationError -> Scalar[DT]:
+        """`read_int` near the end of the input, on a fraction or exponent,
+        or on a token that is not a number: `Parser.expect_int` itself,
+        which raises the error for the last two."""
+        self.take_scalar()
+        var v = self.p.expect_int[DT]()
+        self.check_token_end()
+        return v
+
+    @always_inline
+    def read_float64(mut self) raises DeserializationError -> Float64:
+        """Reads the Float64 token next in the index with
+        `Parser.expect_float`'s own `try_parse_float64`, inline and
+        unchecked away from the end of the input. Everything else goes
+        through `expect_float` itself."""
+        if likely(self.next_scalar_unchecked()):
+            var p = self.next_ptr()
+            var v = Float64()
+            if likely(try_parse_float64[unchecked=True, nul_ends=False](p, v)):
+                self.advance()
+                return v
+        return self.read_float_checked[DType.float64]()
+
+    @no_inline
+    def read_float_checked[
+        DT: DType
+    ](mut self) raises DeserializationError -> Scalar[DT]:
+        """`read_float64` near the end of the input, on an exponent or a
+        long mantissa, or on a token that is not a number:
+        `Parser.expect_float` itself."""
+        self.take_scalar()
+        var v = self.p.expect_float[DT]()
+        self.check_token_end()
+        return v
+
+    def skip_past(mut self, end_off: Int) raises DeserializationError:
+        """Drops the index entries of a span a `Parser` just consumed (the
+        `Parser` rests at `end_off`), then checks its end as the cursor's
+        scalar readers do: the index marks only where a scalar STARTS, so a
+        tail glued to one (`12x`) has no entry and nothing else sees it. An
+        entry right at `end_off` is a structural the next read validates,
+        so the bytes are loaded only when none is there. (A byte after a
+        string or container is left to the next read: it is only glued to
+        a scalar.)"""
+        while self.i < self.n and self.peek_off() < end_off:
+            self.advance()
+        if self.peek_off() != end_off and self.p.data.dist() > 0:
+            var b = self.p.data.p[unsafe_offset=0]
+            if unlikely(glued(self.p.data.p[unsafe_offset=-1], b)):
+                raise after_value(b)
+
+    @always_inline
+    def has_control(self, start: Int, end: Int) -> Bool:
+        """Whether `[start, end)` holds a raw control byte (< 0x20), which no
+        JSON string may contain. Checked on the strings taken verbatim --
+        the `Parser`'s scanner checks the rest -- instead of in stage 1.
+        Whole 16-byte loads while they stay inside the input (lanes past
+        `end` masked off), bytewise only at the very end of the input."""
+        var base = self.p.data.start
+        var i = start
+        while i < end and i + SIMD8_WIDTH <= self.p.size:
+            var ctrl = pack_into_integer(
+                base.unsafe_offset(i).unsafe_load[width=SIMD8_WIDTH]().lt(0x20)
+            )
+            var valid = end - i
+            if valid < SIMD8_WIDTH:
+                ctrl &= (Bits_T(1) << Bits_T(valid)) - 1
+            if ctrl != 0:
+                return True
+            i += SIMD8_WIDTH
+        while i < end:
+            if base[unsafe_offset=i] < 0x20:
+                return True
+            i += 1
+        return False
+
+    @always_inline
+    def plain(mut self, start: Int, end: Int) -> Bool:
+        """True when the string content `[start, end)` holds no backslash,
+        so it decodes to its own bytes. Strings are read in document order,
+        so every backslash below `next_bs` lies before this string: one
+        compare settles the common case."""
+        if likely(self.next_bs >= end):
+            return True
+        while self.next_bs < start:
+            self.bs_i += 1
+            self.next_bs = (
+                Int(
+                    self.backslashes.unsafe_ptr()[unsafe_offset=self.bs_i]
+                ) if self.bs_i
+                < len(self.backslashes) else Int.MAX
+            )
+        return self.next_bs >= end
+
+    @always_inline
+    def take_string_span(
+        mut self,
+    ) raises DeserializationError -> Tuple[Int, Int]:
+        """Consumes a string token, returning its opening and closing quote
+        offsets (the closing quote is the next index entry)."""
+        if unlikely(self.peek() != `"`):
+            raise self.value_error("a string")
+        var open = self.peek_off()
+        self.advance()
+        # Stage 1 emits no entry inside a string, so the entry after an
+        # opening quote is its closing quote -- unless the string never
+        # closes, in which case no entry follows at all.
+        if unlikely(self.i >= self.n):
+            raise self.string_error(open)
+        var close = self.peek_off()
+        self.advance()
+        return (open, close)
+
+    @always_inline
+    def decode_string(
+        mut self, open: Int, close: Int
+    ) raises DeserializationError -> String:
+        if self.plain(open + 1, close):
+            if unlikely(self.has_control(open + 1, close)):
+                raise self.string_error(open)
+            return copy_to_string[Self.options.ignore_unicode](
+                self.p.data.start.unsafe_offset(open + 1),
+                self.p.data.start.unsafe_offset(close),
+                False,
+            )
+        # Escapes possible: the `Parser`'s scanner validates and decodes.
+        self.seek(open)
+        var s = self.p.read_string()
+        if unlikely(ptr_dist(self.p.data.start, self.p.data.p) != close + 1):
+            raise malformed_string()
+        return s^
+
+    @always_inline
+    def read_string(mut self) raises DeserializationError -> String:
+        """Reads the string token next in the index."""
+        var span = self.take_string_span()
+        return self.decode_string(span[0], span[1])
+
+    @always_inline
+    def next_field_key(
+        mut self, mut first: Bool
+    ) raises DeserializationError -> Tuple[Int, Int]:
+        """An object's `has_next` and `"key":` in one step.
+
+        Returns the key's opening and closing quote offsets, or `(-1, -1)`
+        at the closing brace (left unconsumed). The separator, key and
+        colon are consecutive index entries, so they are read with one
+        bounds check and one cursor update; the closing quote needs no
+        test (the entry after an opening quote is always its closing
+        quote, see `take_string_span`).
+        """
+        var b = self.peek()
+        if b == `}`:
+            return (-1, -1)
+        var i = self.i
+        var e = self.positions.unsafe_ptr().unsafe_offset(i)
+        var skip = 0
+        var was_first = first
+        if not first:
+            if unlikely(b != `,`):
+                raise self.field_key_error(was_first)
+            skip = 1
+            comptime if (
+                StrictOptions.ALLOW_TRAILING_COMMA in Self.options.strict_mode
+            ):
+                if i + 1 < self.n and self.byte(Int(e[unsafe_offset=1])) == `}`:
+                    self.i = i + 1
+                    return (-1, -1)
+        first = False
+        if unlikely(i + skip + 3 > self.n):
+            raise self.field_key_error(was_first)
+        var open = Int(e[unsafe_offset=skip])
+        var close = Int(e[unsafe_offset=skip + 1])
+        if unlikely(
+            self.byte(open) != `"`
+            or self.byte(Int(e[unsafe_offset=skip + 2])) != `:`
+        ):
+            raise self.field_key_error(was_first)
+        self.i = i + skip + 3
+        return (open, close)
+
+    @always_inline
+    def resolve_key[
+        T: AnyType
+    ](mut self, open: Int, close: Int) raises DeserializationError -> Int:
+        """Resolves the key spanning `(open, close)` against `T`'s fields.
+
+        A key that matched a field equals one of `T`'s names, so it can only
+        hold a raw control byte if a name does; any other key is checked.
+        """
+        if self.plain(open + 1, close):
+            var idx = field_index[T](
+                StringSlice(
+                    unsafe_from_utf8=Span(
+                        unsafe_ptr=self.p.data.start.unsafe_offset(open + 1),
+                        length=close - open - 1,
+                    )
+                )
+            )
+            comptime if _names_have_control[T]():
+                if unlikely(self.has_control(open + 1, close)):
+                    raise self.string_error(open)
+            else:
+                if unlikely(idx < 0 and self.has_control(open + 1, close)):
+                    raise self.string_error(open)
+            return idx
+        return field_index[T](self.decode_string(open, close))
+
+    @always_inline
+    def list_next(
+        mut self, mut first: Bool, close: Byte
+    ) raises DeserializationError -> Bool:
+        """`has_next` for arrays and objects: separator and trailing-comma
+        rules are the `Parser`'s."""
+        var b = self.peek()
+        if b == close:
+            return False
+        if not first:
+            if unlikely(b != `,`):
+                raise self.token_error(`,`, close)
+            self.advance()
+            b = self.peek()
+            if b == close:
+                comptime if (
+                    StrictOptions.ALLOW_TRAILING_COMMA
+                    in Self.options.strict_mode
+                ):
+                    return False
+                else:
+                    raise trailing_comma()
+        first = False
+        return True
+
+    @always_inline
+    def entry_off(self, j: Int) -> Int:
+        return Int(self.positions.unsafe_ptr()[unsafe_offset=j])
+
+    def _entry_after_value(self, j: Int) -> Int:
+        """The index entry after the (well-formed) value whose first entry
+        is `j`. A string is two entries, its quotes; a container runs to
+        its matching close, and the quotes inside it come in pairs."""
+        var b = self.byte(self.entry_off(j))
+        if b == `"`:
+            return j + 2
+        if b != `{` and b != `[`:
+            return j + 1
+        var depth = 0
+        var k = j
+        while True:
+            var c = self.byte(self.entry_off(k))
+            if c == `"`:
+                k += 2
+                continue
+            if c == `{` or c == `[`:
+                depth += 1
+            elif c == `}` or c == `]`:
+                depth -= 1
+                if depth == 0:
+                    return k + 1
+            k += 1
+
+    @no_inline
+    def check_duplicate_key(
+        mut self, members: Int, name: String
+    ) raises DeserializationError:
+        """Raises `DuplicateField` when an earlier key of the object whose
+        members start at index entry `members` decodes to `name`, the key
+        just read (its two entries end at `i`). Called only when `name`'s
+        hash repeats, which a collision can also cause."""
+        var j = members
+        while j < self.i - 2:
+            self.seek(self.entry_off(j))
+            if self.p.read_string() == name:
+                raise duplicate_key(name)
+            # Past the key, its `:`, the value and the `,` after it.
+            j = self._entry_after_value(j + 3) + 1
+
+
+comptime _Cursor[
+    origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
+] = Pointer[EmberJsonCursor[origin, options], ptr_origin]
 
 
 @fieldwise_init
 struct EmberJsonSeqDe[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
 ](SeqDerState):
-    var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
+    var c: _Cursor[Self.origin, Self.options, Self.ptr_origin]
     var first: Bool
 
+    @always_inline
     def has_next(mut self) raises DeserializationError -> Bool:
-        self.p[].skip_whitespace()
-        if self.p[].peek() == `]`:
-            return False
-        if not self.first:
-            # A separator is required between elements (`expect` raises
-            # on anything else), and a separator followed by the closing
-            # bracket is a trailing comma -- legal only when the options
-            # say so. Mirrors `Parser.parse_array` exactly.
-            self.p[].expect(`,`)
-            if self.p[].peek() == `]`:
-                comptime if (
-                    StrictOptions.ALLOW_TRAILING_COMMA
-                    in Self.options.strict_mode
-                ):
-                    return False
-                else:
-                    raise _invalid("Illegal trailing comma")
-        self.first = False
-        return True
+        return self.c[].list_next(self.first, `]`)
 
     def expect_element[T: AnyType](mut self) raises DeserializationError -> T:
-        var sub = EmberJsonDeserializer(p=self.p)
-        return deserialize[T](sub)
+        var sub = EmberJsonDeserializer(c=self.c)
+        return _de[T](sub)
 
+    @always_inline
     def end(mut self) raises DeserializationError:
-        self.p[].expect(`]`)
-        self.p[].depth -= 1
+        self.c[].expect(`]`, `]`)
+        self.c[].p.depth -= 1
 
 
 @fieldwise_init
 struct EmberJsonMapDe[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
 ](MapDerState):
-    var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
+    var c: _Cursor[Self.origin, Self.options, Self.ptr_origin]
     var first: Bool
-    # Strict mode only: keys already seen in this object (RFC 8259 §4 lets a
-    # parser reject duplicates; `Value`/`Document` do, so `Dict` must too).
-    var seen: Dict[String, Bool]
+    # Strict mode only: hashes of the decoded keys seen so far (`"a"` and
+    # `"\u0061"` are duplicates). A repeated hash re-reads the earlier keys
+    # from the input to tell a duplicate from a collision, so each key
+    # costs one hash instead of a copied, hashed and inserted `String`.
+    var seen: Set[UInt64]
+    # Index entry of the first member, for that re-read.
+    var members: Int
 
     def has_next(mut self) raises DeserializationError -> Bool:
-        self.p[].skip_whitespace()
-        if self.p[].peek() == `}`:
-            return False
-        if not self.first:
-            # See `EmberJsonSeqDe.has_next`: required separator, trailing
-            # comma legal only under `ALLOW_TRAILING_COMMA`.
-            self.p[].expect(`,`)
-            if self.p[].peek() == `}`:
-                comptime if (
-                    StrictOptions.ALLOW_TRAILING_COMMA
-                    in Self.options.strict_mode
-                ):
-                    return False
-                else:
-                    raise _invalid("Illegal trailing comma")
-        self.first = False
-        return True
+        return self.c[].list_next(self.first, `}`)
 
     def expect_key[T: AnyType](mut self) raises DeserializationError -> T:
-        # `has_next` has already skipped whitespace and any separating
-        # comma, so the parser sits at the key token. EmberJson's `Dict`
-        # deserialize path only ever asks for `String` keys (JSON object
-        # keys are always strings), so this delegates straight through.
-        var sub = EmberJsonDeserializer(p=self.p)
+        # A key is a string whatever `T` reads it as, so anything else is
+        # malformed JSON, not a mismatch.
+        if unlikely(self.c[].peek() != `"`):
+            raise self.c[].field_key_error(True)
+        var sub = EmberJsonDeserializer(c=self.c)
         comptime if T == String and not (
             StrictOptions.ALLOW_DUPLICATE_KEYS in Self.options.strict_mode
         ):
             comptime assert conforms_to(T, Base), "unreachable: T == String"
-            var key = deserialize[T](sub)
+            var key = _de[T](sub)
             ref name = rebind[String](key)
-            if name in self.seen:
-                raise DeserializationError(
-                    "Duplicate key: " + name, DerErrorKind.DuplicateField
-                )
-            self.seen[name] = True
+            var h = _key_hash(name.as_bytes().unsafe_ptr(), name.byte_length())
+            if unlikely(h in self.seen):
+                self.c[].check_duplicate_key(self.members, name)
+            self.seen.add(h)
             return key^
         else:
-            return deserialize[T](sub)
+            return _de[T](sub)
 
     def expect_value[T: AnyType](mut self) raises DeserializationError -> T:
-        self.p[].expect(`:`)
-        var sub = EmberJsonDeserializer(p=self.p)
-        return deserialize[T](sub)
+        self.c[].expect(`:`, `}`)
+        var sub = EmberJsonDeserializer(c=self.c)
+        return _de[T](sub)
 
+    @always_inline
     def end(mut self) raises DeserializationError:
-        self.p[].expect(`}`)
-        self.p[].depth -= 1
+        self.c[].expect(`}`, `}`)
+        self.c[].p.depth -= 1
 
 
 @fieldwise_init
 struct EmberJsonStructDe[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
 ](StructDerState):
-    var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
+    var c: _Cursor[Self.origin, Self.options, Self.ptr_origin]
     var first: Bool
 
     def expect_field_index[
         T: AnyType
     ](mut self) raises DeserializationError -> Optional[Int]:
-        self.p[].skip_whitespace()
-        if self.p[].peek() == `}`:
-            # End of struct: leave the `}` for `end()` to consume.
+        var span = self.c[].next_field_key(self.first)
+        if span[0] < 0:
             return None
-        if not self.first:
-            # See `EmberJsonSeqDe.has_next`: required separator, trailing
-            # comma legal only under `ALLOW_TRAILING_COMMA`.
-            self.p[].expect(`,`)
-            if self.p[].peek() == `}`:
-                comptime if (
-                    StrictOptions.ALLOW_TRAILING_COMMA
-                    in Self.options.strict_mode
-                ):
-                    return None
-                else:
-                    raise _invalid("Illegal trailing comma")
-        self.first = False
-        # A key is a grammar position, not a value position: whatever sits
-        # here instead of a quote is malformed JSON, never "a value of the
-        # wrong type", so this stays a deserializer-detected `_invalid`.
-        if self.p[].peek() != `"`:
-            raise _invalid("expected an object key string")
-        # `scan_string` is the scanner under `read_string`, the reader
-        # `Parser.parse_object` uses for its keys. An escape-free key
-        # resolves as a slice of the input, no `String` per field; an
-        # escaped one decodes exactly as `read_string` would -- including
-        # the `ignore_unicode` opt-out -- so it matches `parse()`.
-        var scan = self.p[].scan_string()
-        self.p[].expect(`:`)
-        if scan.found_escaped:
-            return field_index[T](
-                copy_to_string[Self.options.ignore_unicode](
-                    scan.start, scan.end, True, scan.first_escape
-                )
-            )
-        return field_index[T](
-            StringSlice(
-                unsafe_from_utf8=Span(
-                    unsafe_ptr=scan.start,
-                    length=ptr_dist(scan.start, scan.end),
-                )
-            )
-        )
+        return self.c[].resolve_key[T](span[0], span[1])
 
     def expect_field_value[
         T: AnyType
     ](mut self) raises DeserializationError -> T:
-        var sub = EmberJsonDeserializer(p=self.p)
-        return deserialize[T](sub)
+        var sub = EmberJsonDeserializer(c=self.c)
+        return _de[T](sub)
 
     def skip_value(mut self) raises DeserializationError:
-        self.p[].skip_value()
+        _skip_value(self.c[])
 
+    @always_inline
     def end(mut self) raises DeserializationError:
-        self.p[].expect(`}`)
-        self.p[].depth -= 1
+        self.c[].expect(`}`, `}`)
+        self.c[].p.depth -= 1
 
 
 @fieldwise_init
 struct EmberJsonTupleDe[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
 ](TupleDerState):
-    var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
+    var c: _Cursor[Self.origin, Self.options, Self.ptr_origin]
     var first: Bool
+    # The tuple's arity.
+    var count: Int
 
+    # The array ending early or running on is well-formed JSON of the wrong
+    # length. An element is read without testing for the `]` first (tuples
+    # of scalars are hot: canada's coordinates): a `]` fails the read, and
+    # the handler tells that from a malformed element.
+
+    @always_inline
     def expect_element[T: AnyType](mut self) raises DeserializationError -> T:
-        self.p[].skip_whitespace()
         if not self.first:
-            self.p[].expect(`,`)
+            if unlikely(self.c[].peek() != `,`):
+                raise self.c[].tuple_error(self.count)
+            self.c[].advance()
         self.first = False
-        var sub = EmberJsonDeserializer(p=self.p)
-        return deserialize[T](sub)
+        var at = self.c[].i
+        var sub = EmberJsonDeserializer(c=self.c)
+        try:
+            return _de[T](sub)
+        except e:
+            raise self.c[].tuple_element_error(at, self.count, e^)
 
+    @always_inline
     def end(mut self) raises DeserializationError:
-        self.p[].expect(`]`)
-        self.p[].depth -= 1
+        if unlikely(self.c[].list_next(self.first, `]`)):
+            raise expected_length(self.count)
+        self.c[].advance()
+        self.c[].p.depth -= 1
 
 
 @fieldwise_init
 struct EmberJsonEnumDe[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
 ](EnumDerState):
-    var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
+    var c: _Cursor[Self.origin, Self.options, Self.ptr_origin]
     var idx: Int
 
     def variant_index(mut self) raises DeserializationError -> Int:
         return self.idx
 
     def expect_payload[T: AnyType](mut self) raises DeserializationError -> T:
-        var sub = EmberJsonDeserializer(p=self.p)
-        return deserialize[T](sub)
+        var sub = EmberJsonDeserializer(c=self.c)
+        return _de[T](sub)
 
+    @always_inline
     def end(mut self) raises DeserializationError:
-        self.p[].expect(`}`)
-        self.p[].depth -= 1
+        # After the payload, as after an object member: a second member
+        # is well-formed, but no enum.
+        var first = False
+        if unlikely(self.c[].list_next(first, `}`)):
+            raise expected_single_key()
+        self.c[].advance()
+        self.c[].p.depth -= 1
+
+
+def _skip_value[
+    origin: ImmOrigin, options: ParseOptions
+](mut c: EmberJsonCursor[origin, options]) raises DeserializationError:
+    """Consumes one value with the `Parser`'s validating skip."""
+    c.seek_next()
+    c.p.skip_value()
+    c.skip_past(ptr_dist(c.p.data.start, c.p.data.p))
 
 
 @fieldwise_init
 struct EmberJsonDeserializer[
     origin: ImmOrigin, options: ParseOptions, ptr_origin: MutOrigin
 ](BorrowingDeserializer, SelfDescribingDeserializer):
-    var p: Pointer[Parser[Self.origin, Self.options], Self.ptr_origin]
+    var c: _Cursor[Self.origin, Self.options, Self.ptr_origin]
 
     comptime SeqType = EmberJsonSeqDe[
         Self.origin, Self.options, Self.ptr_origin
@@ -299,185 +1014,248 @@ struct EmberJsonDeserializer[
     ]
     comptime Value = Value
 
-    # The three scalar entry points below are one call each: the `Parser`
-    # method skips whitespace, parses, and on failure decides between
-    # `TypeMismatch` (another COMPLETE value opens at the cursor) and
-    # `InvalidValue` itself -- see `Parser._other_value_opens_here`. The
-    # external classifier this layer used to run before every scalar is
-    # gone: it duplicated the parser's own lookahead and could only guess
-    # at conditions (integer overflow) the parser sees directly.
-    def expect_bool(mut self) raises DeserializationError -> Bool:
-        return self.p[].expect_bool()
+    def expect_struct[
+        T: Deinitable
+    ](mut self, out result: T) raises DeserializationError:
+        """Reads `T` in one pass when its keys arrive in declaration order,
+        as machine-written JSON's do: each key is one compare against its
+        field's wire name, with no name lookup or duplicate tracking. Any
+        other shape (reordered, missing, extra or escaped keys) rewinds to
+        the `{` and runs the framework's driver, so its semantics hold."""
+        comptime if conforms_to(T, Defaultable & Movable) and _ordered_ok[T]():
+            ref c = self.c[]
+            var i = c.i
+            var bs_i = c.bs_i
+            var next_bs = c.next_bs
+            var depth = c.p.depth
+            result = T()
+            if self._read_ordered[T](result):
+                return
+            c.i = i
+            c.bs_i = bs_i
+            c.next_bs = next_bs
+            c.p.depth = depth
+            result = self._driver_struct[T]()
+        else:
+            result = deserialize_struct[T](self)
 
+    @always_inline
+    def _read_ordered[
+        T: AnyType
+    ](mut self, mut result: T) raises DeserializationError -> Bool:
+        """Fills `result`'s fields from keys in declaration order; False
+        (at a key) when they are not. A raise is one the driver would
+        raise at the same value, having read the same keys before it, and
+        carries the same path: the failing field's declared name is
+        prepended exactly as `deserialize_struct` prepends it."""
+        comptime r = reflect[T]
+        comptime names = r.field_names()
+        self.c[].expect_open(`{`)
+        self.c[].p.enter_container()
+        var first = True
+        comptime for i in range(r.field_count()):
+            var span = self.c[].next_field_key(first)
+            var start = span[0] + 1
+            if unlikely(span[0] < 0 or not self.c[].plain(start, span[1])):
+                return False
+            comptime W = static_wire_name[T, r.field_types()[i], names[i]]()
+            if unlikely(
+                not _eq_static[W](
+                    StringSlice(
+                        unsafe_from_utf8=Span(
+                            unsafe_ptr=self.c[].p.data.start.unsafe_offset(
+                                start
+                            ),
+                            length=span[1] - start,
+                        )
+                    )
+                )
+            ):
+                return False
+            comptime assert conforms_to(
+                r.field_types()[i], Base
+            ), "field types must be Movable & Deinitable"
+            var sub = EmberJsonDeserializer(c=self.c)
+            # A handler per field, so the name to prepend is a constant and
+            # the hot path tracks nothing.
+            try:
+                r.field_ref[i](result) = _de[
+                    downcast[r.field_types()[i], Base]
+                ](sub)
+            except e:
+                comptime declared_name = names[i]
+                _prepend_field(e, declared_name)
+                raise e^
+        if unlikely(self.c[].next_field_key(first)[0] >= 0):
+            return False
+        self.c[].expect(`}`, `}`)
+        self.c[].p.depth -= 1
+        return True
+
+    @no_inline
+    def _driver_struct[
+        T: Deinitable
+    ](mut self) raises DeserializationError -> T:
+        # Out of line: only structs whose keys are out of order get here.
+        return deserialize_struct[T](self)
+
+    def expect_bool(mut self) raises DeserializationError -> Bool:
+        self.c[].take_scalar()
+        var b = self.c[].p.expect_bool()
+        self.c[].check_token_end()
+        return b
+
+    @always_inline
     def expect_number[
         DT: DType
     ](mut self) raises DeserializationError -> Scalar[DT]:
-        comptime if DT.is_floating_point():
-            return self.p[].expect_float[DT]()
+        # Float64 and integer reads inline into the reader of the field or
+        # element (a call per scalar costs more than the code); narrower
+        # floats, rare in practice, stay one out-of-line copy.
+        comptime if DT == DType.float64:
+            return rebind[Scalar[DT]](self.c[].read_float64())
+        elif DT.is_integral():
+            return self.c[].read_int[DT]()
         else:
-            return self.p[].expect_int[DT]()
+            return self._expect_narrow_float[DT]()
+
+    def _expect_narrow_float[
+        DT: DType
+    ](mut self) raises DeserializationError -> Scalar[DT]:
+        ref c = self.c[]
+        var b = c.peek()
+        if unlikely(
+            not ((isdigit(b) or b == `-`) and c.next_scalar_unchecked())
+        ):
+            return c.read_float_checked[DT]()
+        c.take_scalar()
+        var v = c.p.expect_float[DT, unchecked=True]()
+        c.check_token_end()
+        return v
 
     def expect_string(mut self) raises DeserializationError -> String:
-        return self.p[].expect_string()
+        return self.c[].read_string()
 
     def expect_optional[
         T: Base
     ](mut self) raises DeserializationError -> Optional[T]:
-        # No shape check here: `Optional` never rejects a shape on its own
-        # -- anything other than `null` is handed to `deserialize[T]`
-        # below, which does its own (possibly typed-mismatch) validation.
-        self.p[].skip_whitespace()
-        if self.p[].peek() == `n`:
-            self.p[].expect_null()
+        if self.c[].peek() == `n`:
+            self.c[].take_scalar()
+            self.c[].p.expect_null()
+            self.c[].check_token_end()
             return Optional[T]()
-        return Optional[T](deserialize[T](self))
+        return Optional[T](_de[T](self))
 
-    # `expect_open` is `expect` for a bracket standing at a VALUE position:
-    # an absent value (EOF) is a grammar failure -- there is no byte to
-    # disagree about -- while a different complete value opener is a shape
-    # mismatch. `expect` itself stays grammar-only, for `:`/`,` and the
-    # closing brackets.
+    @always_inline
     def begin_seq(mut self) raises DeserializationError -> Self.SeqType:
-        self.p[].expect_open(`[`)
-        self.p[].enter_container()
-        return EmberJsonSeqDe(p=self.p, first=True)
+        self.c[].expect_open(`[`)
+        self.c[].p.enter_container()
+        return {c = self.c, first = True}
 
     def begin_map(mut self) raises DeserializationError -> Self.MapType:
-        self.p[].expect_open(`{`)
-        self.p[].enter_container()
-        return EmberJsonMapDe(p=self.p, first=True, seen=Dict[String, Bool]())
+        self.c[].expect_open(`{`)
+        self.c[].p.enter_container()
+        return {
+            c = self.c,
+            first = True,
+            seen = Set[UInt64](),
+            members = self.c[].i,
+        }
 
     def begin_struct[
         T: AnyType
     ](mut self) raises DeserializationError -> Self.StructType:
-        # Field names are read off the wire, so `T` is unused here;
-        # `expect_field_index` resolves each key against it.
-        self.p[].expect_open(`{`)
-        self.p[].enter_container()
-        return EmberJsonStructDe(p=self.p, first=True)
+        self.c[].expect_open(`{`)
+        self.c[].p.enter_container()
+        return {c = self.c, first = True}
 
     def begin_tuple[
         field_count: Int
     ](mut self) raises DeserializationError -> Self.TupleType:
-        self.p[].expect_open(`[`)
-        self.p[].enter_container()
-        return EmberJsonTupleDe(p=self.p, first=True)
+        self.c[].expect_open(`[`)
+        self.c[].p.enter_container()
+        return {c = self.c, first = True, count = field_count}
 
-    # Externally tagged `{"Arm":payload}`: consume up to and including the
-    # `:`, resolve the arm name to an index; the closing `}` is `end`'s job.
     def begin_enum[
         T: AnyType, arm_names: List[String]
     ](mut self) raises DeserializationError -> Self.EnumType:
-        # Only the opening `{` is a shape check (`expect_open`); a missing
-        # tag string once inside an object is a grammar failure, not a
-        # different-type mismatch, so it stays a deserializer-detected
-        # `_invalid`.
-        self.p[].expect_open(`{`)
-        self.p[].enter_container()
-        if self.p[].peek() != `"`:
-            raise _invalid("expected an enum tag string")
-        # Same decoding as `EmberJsonStructDe.expect_field_index` -- see
-        # the comment there.
-        var name = self.p[].read_string()
-        self.p[].expect(`:`)
+        self.c[].expect_open(`{`)
+        self.c[].p.enter_container()
+        # A tag that is no object key is malformed JSON, as `Value` reports
+        # it; an empty object is well-formed but holds no tag.
+        ref c = self.c[]
+        if c.peek() != `"`:
+            if c.i >= c.n:
+                raise unexpected_eof()
+            if c.peek() == `}`:
+                raise expected_enum_tag(c.peek())
+            raise expected_key(c.peek())
+        var name = c.read_string()
+        c.expect(`:`, `}`)
         var idx = -1
-        # `comptime for` over the interned candidates: no per-value list.
         comptime for i in range(len(arm_names)):
             comptime an = get_static_string[arm_names[i]]()
             if idx == -1 and name == an:
                 idx = i
-        return EmberJsonEnumDe(p=self.p, idx=idx)
+        return {c = self.c, idx = idx}
 
-    # `BorrowingDeserializer`: a `comptime if` dispatch over `Parser`'s six
-    # existing byte-extractor entry points — one validated skip per kind, so
-    # a kind mismatch (e.g. `Integer` against `1.5`) fails fast here instead
-    # of deferring to whatever later tries to interpret the bytes. Each
-    # `Parser` method returns `Span[Byte, Self.origin]`; the trait erases
-    # that to `ImmUntrackedOrigin` (see `BorrowingDeserializer`'s doc
-    # comment in emberserde) and the caller re-ties it.
-    #
-    # `expect_string_bytes` is the one extractor that does not skip leading
-    # whitespace or validate the opening quote itself (its other call sites
-    # — `_expect_key_and_colon`, `_expect_validated_bytes` — already do
-    # both before calling it), so `Str` mirrors `expect_string` above and
-    # does that positioning by hand. The other five extractors already
-    # handle their own whitespace/shape validation.
-    #
-    # `_assume_padded` options mean `self.p` was built over a
-    # `PaddedBuffer` (`_padded()`, set only by the entry points that copy
-    # inputs at or above `PAD_INPUT_THRESHOLD` — see `Value.__init__(*,
-    # parse_bytes=...)` in `emberjson/value.mojo`). That buffer does not
-    # outlive the parse call, so a borrowed span into it would dangle.
-    # Refuse here, at the format layer that knows the buffer's provenance,
-    # rather than pushing the check onto every borrowing type built on
-    # `raw_bytes` — this used to be `Lazy`'s own `comptime assert` in
-    # `emberjson/lazy.mojo` before it moved here. The gate keys on the
-    # padded flag alone: every other option (`ignore_unicode`,
-    # `strict_mode`, `validate_utf8`) borrows from the caller's own buffer
-    # and is safe. `comptime if` keeps the check free outside the padded
-    # specialization's compiled code.
     def raw_bytes[
         kind: RawKind
     ](mut self) raises DeserializationError -> Span[Byte, ImmUntrackedOrigin]:
-        comptime if Self.options._assume_padded:
-            raise _invalid(
-                "raw_bytes requires an unpadded input buffer -- borrowing is"
-                " incompatible with the padded-buffer path"
-            )
+        # The `Parser`'s extractors capture and validate the span; the
+        # index entries inside it are then dropped.
+        ref c = self.c[]
+        c.seek_next()
+        var span: Span[Byte, ImmUntrackedOrigin]
         comptime if kind == RawKind.Any:
-            return rebind[Span[Byte, ImmUntrackedOrigin]](
-                self.p[].expect_value_bytes()
+            span = rebind[Span[Byte, ImmUntrackedOrigin]](
+                c.p.expect_value_bytes()
             )
         elif kind == RawKind.Integer:
-            return rebind[Span[Byte, ImmUntrackedOrigin]](
-                self.p[].expect_int_bytes()
+            span = rebind[Span[Byte, ImmUntrackedOrigin]](
+                c.p.expect_int_bytes()
             )
         elif kind == RawKind.Float:
-            return rebind[Span[Byte, ImmUntrackedOrigin]](
-                self.p[].expect_float_bytes()
+            span = rebind[Span[Byte, ImmUntrackedOrigin]](
+                c.p.expect_float_bytes()
             )
         elif kind == RawKind.Str:
-            # `expect_string_bytes` assumes its caller has already validated
-            # the opening quote (its other call sites do), so position and
-            # shape-check here. Anything but a quote at a value position
-            # where a string was requested is a kind mismatch.
-            self.p[].skip_whitespace()
-            if self.p[].peek() != `"`:
-                raise _mismatch("Expected a string")
-            return rebind[Span[Byte, ImmUntrackedOrigin]](
-                self.p[].expect_string_bytes()
+            # Anything but a quote where a string was requested is a kind
+            # mismatch. (Whitespace precedes the value only in a cursor
+            # without an index, whose one entry is offset 0.)
+            c.p.skip_whitespace()
+            if c.p.peek() != `"`:
+                raise c.p.shape_error("a string")
+            span = rebind[Span[Byte, ImmUntrackedOrigin]](
+                c.p.expect_string_bytes()
             )
         elif kind == RawKind.Seq:
-            return rebind[Span[Byte, ImmUntrackedOrigin]](
-                self.p[].expect_array_bytes()
+            span = rebind[Span[Byte, ImmUntrackedOrigin]](
+                c.p.expect_array_bytes()
             )
         else:
-            return rebind[Span[Byte, ImmUntrackedOrigin]](
-                self.p[].expect_object_bytes()
+            span = rebind[Span[Byte, ImmUntrackedOrigin]](
+                c.p.expect_object_bytes()
             )
+        c.skip_past(ptr_dist(c.p.data.start, c.p.data.p))
+        return span
 
-    # `SelfDescribingDeserializer`: `Value` (`emberjson/value.mojo`) already
-    # has a fast, hand-written recursive-descent path for "parse whatever is
-    # here" — `Parser.parse_value`, the same one `Value`'s old `from_json`
-    # called. Reusing it beats re-deriving the shape from `begin_seq`/
-    # `begin_map`/etc. token by token (as the toy `_json_format.mojo` does,
-    # for lack of a real parser to lean on).
     def deserialize_any(mut self) raises DeserializationError -> Value:
-        return self.p[].parse_value()
+        ref c = self.c[]
+        c.seek_next()
+        var v = c.p.parse_value()
+        c.skip_past(ptr_dist(c.p.data.start, c.p.data.p))
+        return v^
 
 
-def from_json_bytewalk[
+def from_json[
     o: ImmOrigin,
     //,
     T: Movable & Deinitable,
     options: ParseOptions = ParseOptions(),
 ](s: StringSlice[o], out result: T) raises DeserializationError:
     """Deserializes `s` into `T` through emberserde's framework, driven by
-    `EmberJsonDeserializer` over EmberJson's hand-written `Parser`.
-
-    This is the reference path: `from_json` (`indexed.mojo`) tries the
-    structural-index deserializer first and falls back to this one for the
-    error it reports.
+    `EmberJsonDeserializer`.
 
     Parameters:
         T: The type to deserialize into.
@@ -497,15 +1275,29 @@ def from_json_bytewalk[
         the shape of `T`, or carries non-whitespace content after the
         root value.
     """
-    # `_assume_padded` options are unconstructible from a plain slice
-    # (`Parser.__init__` asserts on it), and `validate_utf8` is the
-    # caller's to apply -- `emberjson.from_json` does, this private entry
-    # point does not.
-    var p = Parser[options=options](s)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
-    result = deserialize[T](d)
-    # `parse()` rejects content after the root value; this entry point must
-    # agree, or the two public paths accept different documents.
-    p.skip_whitespace()
-    if p.has_more():
-        raise _invalid("trailing content after top-level JSON value")
+    # `validate_utf8` is the caller's to apply: `emberjson.from_json` does,
+    # this private entry point does not.
+    result = from_json_bytes[T, options](s.as_bytes())
+
+
+def from_json_bytes[
+    o: ImmOrigin,
+    //,
+    T: Movable & Deinitable,
+    options: ParseOptions = ParseOptions(),
+](b: Span[Byte, o], out result: T) raises DeserializationError:
+    """`from_json` over bytes, such as a span `Lazy` captured."""
+    comptime if conforms_to(T, RawCapture):
+        var c = EmberJsonCursor[o, options](b, index=False)
+        var d = EmberJsonDeserializer(c=Pointer(to=c))
+        result = deserialize[T](d)
+        c.p.skip_whitespace()
+        if unlikely(c.p.has_more()):
+            raise c.p.trailing_error()
+    else:
+        var c = EmberJsonCursor[o, options](b)
+        var d = EmberJsonDeserializer(c=Pointer(to=c))
+        result = deserialize[T](d)
+        # Every structural consumed: nothing but whitespace after the root.
+        if unlikely(c.i != c.n):
+            raise c.trailing_error()

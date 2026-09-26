@@ -326,13 +326,16 @@ def test_unicode_byte_lengths() raises:
 
 def test_trailing_tokens() raises:
     with assert_raises(
-        contains="Invalid json, expected end of input, received: garbage tokens"
+        contains=(
+            "Expected end of input, received trailing content: garbage tokens"
+        )
     ):
         _ = from_json[Value]("[1, null, false] garbage tokens")
 
     with assert_raises(
         contains=(
-            'Invalid json, expected end of input, received: "trailing string"'
+            "Expected end of input, received trailing content:"
+            ' "trailing string"'
         )
     ):
         _ = from_json[Value]('{"key": null} "trailing string"')
@@ -512,7 +515,7 @@ def test_expect_value_bytes() raises:
         var p = Parser("fals")
         _ = p.parse_false()
 
-    with assert_raises(contains="Encountered EOF when expecting 'null'"):
+    with assert_raises(contains='Encountered EOF when expecting "null"'):
         var p = Parser("nul")
         _ = p.parse_null()
 

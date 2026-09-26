@@ -56,8 +56,14 @@ All JSON data is represented as this unified type.
   format-agnostic `Serializable`/`Deserializable` framework and reflection
   defaults:
   - `serializer.mojo` — `EmberJsonSerializer` + `to_json`
-  - `deserializer.mojo` — `EmberJsonDeserializer` (drives the hand-written
-    `Parser`) + `from_json`
+  - `deserializer.mojo` — `EmberJsonDeserializer` + `from_json`: walks the
+    SIMD structural index (`EmberJsonCursor`) token by token, with the
+    hand-written `Parser` reading scalars
+- **`emberjson/_deserialize/_errors.mojo`** — every parse error message.
+  Each engine (`Value`, `Document`, reflection, the `Lazy`/skip validator,
+  JSON Pointer) detects errors in its own walk and raises these shared
+  constructors; `test/emberjson/test_error_parity.mojo` checks that they
+  raise the same error for the same malformed input
 - **`emberjson/teju/`** — Teju Jagua float-to-string algorithm (large lookup tables in `tables.mojo`)
 - **`emberjson/schema.mojo`** — JSON Schema validation
 - **`emberjson/_pointer.mojo`** — RFC 6901 JSON Pointer

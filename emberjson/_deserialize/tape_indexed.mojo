@@ -46,9 +46,24 @@ from ._parser_helper import (
     Bits_T,
     is_numerical_component,
     pack_into_integer,
+    _TOKEN_END_OK,
+    string_error,
+    check_string_body,
+)
+from ._errors import (
+    after_value,
+    invalid_escape,
+    unexpected_eof,
+    invalid_value,
+    too_deep,
+    expected_key,
+    expected_colon,
+    trailing_comma,
+    expected_separator,
+    trailing_content,
 )
 from emberjson._index import structural_index
-from emberjson.utils import to_string, lut, StackArray
+from emberjson.utils import lut
 from emberjson.simd import SIMD8_WIDTH
 from emberjson.constants import (
     `"`,
@@ -68,29 +83,7 @@ from emberjson.constants import (
 from std.collections import Array
 from std.bit import count_trailing_zeros
 from std.sys.intrinsics import unlikely, likely
-from emberserde.error import DeserializationError, DerErrorKind
-
-
-def _gen_token_end_table(out t: StackArray[Bool, 256]):
-    t = StackArray[Bool, 256](fill=False)
-    # NUL is deliberately NOT in this table. It terminates a token only
-    # when it is `PaddedBuffer`'s padding rather than a byte of the
-    # input, which the table alone cannot tell apart; `_check_token_end`
-    # settles that case against the logical end-of-input.
-    t.unsafe_get(Int(` `)) = True
-    t.unsafe_get(0x09) = True
-    t.unsafe_get(0x0A) = True
-    t.unsafe_get(0x0D) = True
-    t.unsafe_get(Int(`,`)) = True
-    t.unsafe_get(Int(`:`)) = True
-    t.unsafe_get(Int(`[`)) = True
-    t.unsafe_get(Int(`]`)) = True
-    t.unsafe_get(Int(`{`)) = True
-    t.unsafe_get(Int(`}`)) = True
-    t.unsafe_get(Int(`"`)) = True
-
-
-comptime _TOKEN_END_OK: StackArray[Bool, 256] = _gen_token_end_table()
+from emberserde.error import DeserializationError
 
 
 @always_inline
@@ -108,10 +101,7 @@ def _check_token_end[
     # on the same bytes.
     if b == 0 and p.data.dist() <= 0:
         return
-    raise DeserializationError(
-        String("Invalid json value: ") + String(to_string(b)),
-        DerErrorKind.InvalidValue,
-    )
+    raise after_value(b)
 
 
 def _validate_escape_names[
@@ -128,11 +118,7 @@ def _validate_escape_names[
             if q.unsafe_offset(1) >= end:
                 break
             if unlikely((q.unsafe_offset(1))[] not in acceptable_escapes):
-                raise DeserializationError(
-                    String("Invalid escape sequence: ")
-                    + String(to_string((q.unsafe_offset(1))[])),
-                    DerErrorKind.InvalidValue,
-                )
+                raise invalid_escape((q.unsafe_offset(1))[])
             q = q.unsafe_offset(2)
             continue
         q = q.unsafe_offset(1)
@@ -146,7 +132,9 @@ def _iscan_string[
     """Validates the string content span and locates its first escape.
 
     Returns (found_escaped, first_escape offset within the span). Raises
-    on unescaped control characters, mirroring the byte-walk scanner.
+    on unescaped control characters. An escape before one may be invalid,
+    which the byte walk reports first, so a control character reports the
+    string's first error in byte order (`string_error`).
     """
     var base = p.data.start.unsafe_offset(start_off)
     var n = end_off - start_off
@@ -164,11 +152,7 @@ def _iscan_string[
             ctrl &= lanemask
             bs &= lanemask
         if unlikely(ctrl != 0):
-            raise DeserializationError(
-                String("Control characters must be escaped: ")
-                + String(String(count_trailing_zeros(ctrl))),
-                DerErrorKind.InvalidValue,
-            )
+            raise _string_error(p, start_off - 1)
         if bs != 0 and not found:
             found = True
             first = i + Int(count_trailing_zeros(bs))
@@ -178,6 +162,29 @@ def _iscan_string[
         if found:
             _validate_escape_names(p, start_off + first, end_off)
     return (found, first)
+
+
+@no_inline
+def _string_error[
+    origin: ImmOrigin, options: ParseOptions, //
+](p: Parser[origin, options], open: Int) -> DeserializationError:
+    """The first error in the string opening at `open`, for a string
+    holding a control character or one the index never closes."""
+    return string_error(p.data.start.unsafe_offset(open + 1), p.size - open - 1)
+
+
+@no_inline
+def _decode_error(
+    content: Pointer[Byte, _], n: Int, var e: DeserializationError
+) -> DeserializationError:
+    """The error for string content that failed to decode with `e`. The
+    byte walk checks every escape name before it decodes any escape, so an
+    invalid name anywhere in the string is the error it reports."""
+    try:
+        check_string_body(content, n)
+    except first:
+        return first^
+    return e^
 
 
 # One scope per open container, mirroring simdjson's
@@ -213,9 +220,7 @@ def parse_document_tape_indexed[
     structural_index[True](p.data.start, p.size, positions)
     var n_structurals = len(positions)
     if unlikely(n_structurals == 0):
-        raise DeserializationError(
-            "Invalid json value", DerErrorKind.InvalidValue
-        )
+        raise unexpected_eof()
     # Sentinels (simdjson stage-1 convention): entries past the real
     # structurals point at end-of-input, where the padding NUL fails
     # every dispatch — this is what lets `advance` skip bounds checks.
@@ -275,17 +280,20 @@ def _walk_tape_from_index[
         var close = Int(idx[])
         idx = idx.unsafe_offset(1)
         if unlikely(base[unsafe_offset=close] != `"`):
-            raise DeserializationError(
-                "Unexpected EOF", DerErrorKind.InvalidValue
-            )
+            raise _string_error(p, off)
         var scan = _iscan_string(p, off + 1, close)
-        arena_off = _arena_write[options.ignore_unicode](
-            sink.strings,
-            base.unsafe_offset(off).unsafe_offset(1),
-            base.unsafe_offset(close),
-            scan[0],
-            scan[1],
-        )
+        try:
+            arena_off = _arena_write[options.ignore_unicode](
+                sink.strings,
+                base.unsafe_offset(off).unsafe_offset(1),
+                base.unsafe_offset(close),
+                scan[0],
+                scan[1],
+            )
+        except e:
+            raise _decode_error(
+                base.unsafe_offset(off + 1), close - off - 1, e^
+            )
         sink.tape.append(_pack_word(TapeTag.STRING, UInt64(arena_off)))
 
     @__parameter
@@ -315,10 +323,10 @@ def _walk_tape_from_index[
             _ = p.parse_null()
             sink.tape.append(_pack_word(TapeTag.NULL, 0))
             _check_token_end(p)
+        elif off >= p.size:
+            raise unexpected_eof()
         else:
-            raise DeserializationError(
-                "Invalid json value", DerErrorKind.InvalidValue
-            )
+            raise invalid_value(b)
 
     @__parameter
     @always_inline
@@ -333,9 +341,7 @@ def _walk_tape_from_index[
         # (`enter_container`), so both strategies admit exactly
         # `options.max_depth` levels.
         if unlikely(depth >= options.max_depth):
-            raise DeserializationError(
-                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
-            )
+            raise too_deep()
         var open_idx = len(sink.tape)
         sink.tape.append(0)
         sink.tape.append(_pack_word(close_tag, UInt64(open_idx)))
@@ -345,9 +351,7 @@ def _walk_tape_from_index[
     @always_inline
     def push_scope(is_object: Bool) raises DeserializationError:
         if unlikely(depth >= options.max_depth):
-            raise DeserializationError(
-                "Exceeded maximum nesting depth", DerErrorKind.InvalidValue
-            )
+            raise too_deep()
         var dup_base: UInt32 = 0
         comptime if strict_dups:
             dup_base = UInt32(len(sink.key_hashes))
@@ -397,16 +401,16 @@ def _walk_tape_from_index[
             # First key of a non-empty object.
             off = advance()
             if unlikely(base[unsafe_offset=off] != `"`):
-                raise DeserializationError(
-                    "Invalid identifier", DerErrorKind.InvalidValue
-                )
+                if off >= p.size:
+                    raise unexpected_eof()
+                raise expected_key(base[unsafe_offset=off])
             visit_key(off)
             # object_field: colon then value.
             off = advance()
             if unlikely(base[unsafe_offset=off] != `:`):
-                raise DeserializationError(
-                    "Invalid identifier", DerErrorKind.InvalidValue
-                )
+                if off >= p.size:
+                    raise unexpected_eof()
+                raise expected_colon(base[unsafe_offset=off])
             stack.unsafe_get(depth - 1).count += 1
             off = advance()
             b = base[unsafe_offset=off]
@@ -438,16 +442,14 @@ def _walk_tape_from_index[
                         idx = idx.unsafe_offset(1)
                         state = _SCOPE_END
                         continue
-                    raise DeserializationError(
-                        "Illegal trailing comma", DerErrorKind.InvalidValue
-                    )
+                    raise trailing_comma()
                 state = _OBJECT_BEGIN
             elif b == `}`:
                 state = _SCOPE_END
+            elif off >= p.size:
+                raise unexpected_eof()
             else:
-                raise DeserializationError(
-                    "Expected ',' or '}'", DerErrorKind.InvalidValue
-                )
+                raise expected_separator(`}`, b)
         elif state == _ARRAY_BEGIN:
             # Next element of a non-empty array.
             stack.unsafe_get(depth - 1).count += 1
@@ -481,16 +483,14 @@ def _walk_tape_from_index[
                         idx = idx.unsafe_offset(1)
                         state = _SCOPE_END
                         continue
-                    raise DeserializationError(
-                        "Illegal trailing comma", DerErrorKind.InvalidValue
-                    )
+                    raise trailing_comma()
                 state = _ARRAY_BEGIN
             elif b == `]`:
                 state = _SCOPE_END
+            elif off >= p.size:
+                raise unexpected_eof()
             else:
-                raise DeserializationError(
-                    "Expected ',' or ']'", DerErrorKind.InvalidValue
-                )
+                raise expected_separator(`]`, b)
         else:  # _SCOPE_END
             depth -= 1
             ref scope = stack.unsafe_get(depth)
@@ -519,6 +519,6 @@ def _walk_tape_from_index[
 
     # document_end: every real structural must have been consumed.
     if unlikely(idx != idx_last):
-        raise DeserializationError(
-            "Invalid json, expected end of input", DerErrorKind.InvalidValue
+        raise trailing_content(
+            base.unsafe_offset(Int(idx[])), p.size - Int(idx[])
         )

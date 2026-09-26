@@ -1,5 +1,5 @@
 # A scalar with garbage glued to its end (`12x`, `truex`, `nullnull`) must be
-# rejected on every reflection path, exactly as the byte-walk rejects it.
+# rejected on every reflection path, as the `Value` parser rejects it.
 # Stage 1 indexes only where a scalar starts, so any path that lets a `Parser`
 # consume the scalar and then skips ahead in the index must check the token
 # end itself: unknown-field skips, `Value`/`Null` targets and `Lazy` captures.

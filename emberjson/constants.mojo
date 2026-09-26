@@ -22,6 +22,7 @@ comptime `\f` = _to_byte["\f"]()
 
 comptime `e` = _to_byte["e"]()
 comptime `E` = _to_byte["E"]()
+comptime `l` = _to_byte["l"]()
 
 comptime `a` = _to_byte["a"]()
 comptime `A` = _to_byte["A"]()

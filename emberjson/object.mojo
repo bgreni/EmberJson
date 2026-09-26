@@ -3,6 +3,7 @@ from std.collections import Dict, List
 from std.sys.intrinsics import unlikely
 from .traits import JsonValue
 from ._deserialize import Parser
+from ._deserialize._errors import duplicate_key, expected_value
 from .utils import write_escaped_string
 from std.python import PythonObject, Python
 from std.hashlib import hash
@@ -297,9 +298,7 @@ struct Object(JsonValue, Sized):
                 self._data[entry].value = item^
                 return
             else:
-                raise DeserializationError(
-                    "Duplicate key: " + key, DerErrorKind.DuplicateField
-                )
+                raise duplicate_key(key)
         self._data.append(KeyValuePair(h, key^, item^))
         index.note_append(self._data, h)
 
@@ -416,9 +415,7 @@ struct Object(JsonValue, Sized):
         ), "Object requires a self-describing deserializer"
         var v = rebind_var[Value](d.deserialize_any())
         if not v.is_object():
-            raise DeserializationError(
-                String("expected an object"), DerErrorKind.TypeMismatch
-            )
+            raise expected_value("an object")
         var obj = Self()
         swap(obj, v.object())
         return obj^

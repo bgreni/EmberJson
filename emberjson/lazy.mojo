@@ -1,17 +1,14 @@
-from ._deserialize.parser import Parser
-from ._serde.deserializer import EmberJsonDeserializer
-from ._serde.indexed import RawCapture
+from ._serde.deserializer import from_json_bytes, RawCapture
 from .value import Value
 from std.hashlib import Hasher
 
-# The free functions `serialize`/`deserialize` are aliased below because
-# `Lazy` declares methods of the same name.
+# The free function `serialize` is aliased below because `Lazy` declares a
+# method of the same name.
 from emberserde.deserialize import (
     BorrowingDeserializer,
     Deserializer,
     Deserializable,
     RawKind,
-    deserialize as _serde_deserialize,
 )
 from emberserde.serialize import (
     Serializer,
@@ -24,14 +21,6 @@ from emberserde.error import (
     SerErrorKind,
 )
 from emberserde.utils import Base
-
-
-def _deserialize_bytes[
-    T: Base, origin: ImmOrigin
-](b: Span[Byte, origin]) raises -> T:
-    var p = Parser(b)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
-    return _serde_deserialize[T](d)
 
 
 @fieldwise_init
@@ -54,7 +43,7 @@ struct Lazy[
 
     Deserializing a `Lazy` only records the `Span` covering its token (via
     `BorrowingDeserializer.raw_bytes[kind]`); no interpretation happens
-    until `get()`, which re-parses that span through a fresh `Parser`.
+    until `get()`, which re-parses that span through a fresh deserializer.
 
     `serialize` does NOT echo the captured span verbatim. emberserde's
     `Serializer` trait has no raw-passthrough hook (only
@@ -122,7 +111,7 @@ struct Lazy[
         _serde_serialize(self._checked_get(), s)
 
     def get(self) raises -> Self.T:
-        return _deserialize_bytes[Self.T](self._data)
+        return from_json_bytes[Self.T](self._data)
 
     def __getitem__(self) raises -> Self.T:
         return self.get()

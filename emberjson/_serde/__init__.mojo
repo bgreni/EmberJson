@@ -4,7 +4,8 @@ from .serializer import (
     to_json,
 )
 from .deserializer import (
+    EmberJsonCursor,
     EmberJsonDeserializer,
-    from_json_bytewalk,
+    from_json,
+    from_json_bytes,
 )
-from .indexed import IndexedDeserializer, from_json, from_json_indexed

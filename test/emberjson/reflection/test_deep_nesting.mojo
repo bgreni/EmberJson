@@ -12,7 +12,6 @@
 
 from std.testing import TestSuite, assert_true, assert_raises
 from emberjson import from_json, ParseOptions, Value, Document
-from emberjson._serde import from_json_bytewalk, from_json_indexed
 
 
 @fieldwise_init
@@ -79,10 +78,6 @@ def test_malformed_deep_list_is_an_error_not_a_crash() raises:
 def test_valid_deep_list_is_an_error_not_a_crash() raises:
     var s = _nested(12_000, '{"v":1,"kids":[]}')
     assert_true(_is_depth_error[Node](s))
-    with assert_raises():
-        _ = from_json_bytewalk[Node](s)
-    with assert_raises():
-        _ = from_json_indexed[Node](s)
 
 
 def test_reflection_default_limit_boundary() raises:
@@ -91,16 +86,8 @@ def test_reflection_default_limit_boundary() raises:
     var d1024 = _nested(512, "")
     var d1025 = "[" + _nested(512, "") + "]"
     _ = from_json[List[Node]](d1023)
-    _ = from_json_bytewalk[List[Node]](d1023)
-    _ = from_json_indexed[List[Node]](d1023)
     _ = from_json[Node](d1024)
-    _ = from_json_bytewalk[Node](d1024)
-    _ = from_json_indexed[Node](d1024)
     assert_true(_is_depth_error[List[Node]](d1025))
-    with assert_raises(contains="Exceeded maximum nesting depth"):
-        _ = from_json_bytewalk[List[Node]](d1025)
-    with assert_raises():
-        _ = from_json_indexed[List[Node]](d1025)
 
 
 comptime O16 = ParseOptions(max_depth=16)
@@ -108,27 +95,21 @@ comptime O16 = ParseOptions(max_depth=16)
 
 def test_custom_limit_reflection() raises:
     _ = from_json[Node, O16](_nested(8, ""))
-    _ = from_json_bytewalk[Node, O16](_nested(8, ""))
-    _ = from_json_indexed[Node, O16](_nested(8, ""))
-    # Keys out of order: the indexed engine's in-order read enters each
-    # `{`, then rewinds to the framework's driver, which enters it again.
+    # Keys out of order: the deserializer's in-order read enters each `{`,
+    # then rewinds to the framework's driver, which enters it again.
     var rev = String()
     for _ in range(8):
         rev += '{"kids":['
     for _ in range(8):
         rev += '],"v":1}'
-    _ = from_json_indexed[Node, O16](rev)
+    _ = from_json[Node, O16](rev)
     var d17 = "[" + _nested(8, "") + "]"
     assert_true(_is_depth_error[List[Node], O16](d17))
-    with assert_raises(contains="Exceeded maximum nesting depth"):
-        _ = from_json_bytewalk[List[Node], O16](d17)
-    with assert_raises():
-        _ = from_json_indexed[List[Node], O16](d17)
 
 
 def test_custom_limit_value_and_document() raises:
-    # Short inputs take the byte-walk builders, padded ones (>= 128 bytes)
-    # the indexed tape builder; both must honor the limit.
+    # Short inputs take the byte-walk tape builder, padded ones (>= 128
+    # bytes) the indexed one; both must honor the limit.
     var pad = String(" ") * 200
     for p in [String(""), pad]:
         var arr16 = _wrap("[", "]", 16, "") + p
@@ -152,8 +133,6 @@ def test_custom_limit_skipped_and_value_fields() raises:
     var deep = '{"a":1,"x":' + _wrap("[", "]", 16, "") + "}"
     _ = from_json[Holder, O16](ok)
     assert_true(_is_depth_error[Holder, O16](deep))
-    with assert_raises():
-        _ = from_json_indexed[Holder, O16](deep)
     _ = from_json[List[Value], O16](_wrap("[", "]", 16, ""))
     assert_true(_is_depth_error[List[Value], O16](_wrap("[", "]", 17, "")))
 

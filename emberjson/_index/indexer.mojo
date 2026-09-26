@@ -347,8 +347,11 @@ def _structural_index_x86[
         return
 
     # A table store writes eight slots however many bits it had, so up
-    # to seven past the true count; EMIT_SLACK covers that.
-    comptime EMIT_SLACK = 8
+    # to eight past the true count, which is itself up to input_len + 1:
+    # the zero fill past the input starts one more scalar at input_len
+    # when the input ends on whitespace or a structural (the trim below
+    # drops it). EMIT_SLACK covers both.
+    comptime EMIT_SLACK = 9
     if positions.capacity() < input_len + EMIT_SLACK:
         positions.reserve(input_len + EMIT_SLACK)
     positions.resize(unsafe_uninit_length=input_len + EMIT_SLACK)

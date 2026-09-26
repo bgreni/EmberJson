@@ -14,6 +14,7 @@ from std.utils._select import _select_register_value as select
 from .simd import SIMD8xT, SIMD8_WIDTH
 from std.builtin.globals import global_constant
 from emberserde.error import DeserializationError, DerErrorKind
+from emberjson._deserialize._errors import unexpected_eof
 
 comptime ByteVec = SIMD[DType.uint8, _]
 comptime ByteView = Span[Byte, _]
@@ -93,9 +94,7 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
         # itself sit in a `raises DeserializationError` (or plain `raises`)
         # context.
         if unlikely(self.dist() <= 0):
-            raise DeserializationError(
-                "Unexpected EOF", DerErrorKind.InvalidValue
-            )
+            raise unexpected_eof()
         return self.p[]
 
     @always_inline("nodebug")
@@ -105,9 +104,7 @@ struct CheckedPointer[origin: ImmOrigin](Comparable, TrivialRegisterPassable):
         Self.origin, self.p.address_space
     ] Byte:
         if unlikely(self.dist() - i <= 0):
-            raise DeserializationError(
-                "Unexpected EOF", DerErrorKind.InvalidValue
-            )
+            raise unexpected_eof()
         return self.p[unsafe_offset=i]
 
     @always_inline("nodebug")

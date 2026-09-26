@@ -6,11 +6,12 @@ from std.testing import (
 )
 
 from emberjson._serde import (
+    EmberJsonCursor,
     EmberJsonDeserializer,
     from_json,
     to_json,
 )
-from emberjson._deserialize import Parser, ParseOptions
+from emberjson._deserialize import ParseOptions
 from emberjson.lazy import (
     Lazy,
     LazyString,
@@ -20,7 +21,6 @@ from emberjson.lazy import (
     LazyValue,
 )
 from emberjson.value import Value
-from emberjson.utils import PaddedBuffer
 
 from emberserde.deserialize import (
     BorrowingDeserializer,
@@ -33,8 +33,8 @@ from emberserde.error import DeserializationError
 
 
 # Mirrors `emberserde/test/deserialize/test_borrow.mojo`'s `LazyRaw`, but
-# drives `EmberJsonDeserializer` (backed by the hand-written `Parser`)
-# instead of the toy format's cursor. Holds the raw wire bytes of one value,
+# drives `EmberJsonDeserializer` (over an `EmberJsonCursor`) instead of the
+# toy format's cursor. Holds the raw wire bytes of one value,
 # borrowed from the input, and defers any interpretation to the caller.
 @fieldwise_init
 struct LazyRaw[o: ImmOrigin, kind: RawKind](Deserializable, Movable):
@@ -63,8 +63,8 @@ struct LazyRaw[o: ImmOrigin, kind: RawKind](Deserializable, Movable):
 def _borrow[
     kind: RawKind
 ](s: String) raises DeserializationError -> LazyRaw[ImmutAnyOrigin, kind]:
-    var p = Parser(s)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
+    var c = EmberJsonCursor(s)
+    var d = EmberJsonDeserializer(c=Pointer(to=c))
     return deserialize[LazyRaw[ImmutAnyOrigin, kind]](d)
 
 
@@ -148,8 +148,8 @@ def test_borrowed_span_aliases_the_input() raises:
 def test_cursor_advances_past_borrowed_value() raises:
     # The borrow consumes the value, so a following read starts after it.
     var wire = String('["a", "b"]')
-    var p = Parser(wire)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
+    var c = EmberJsonCursor(wire)
+    var d = EmberJsonDeserializer(c=Pointer(to=c))
     var st = d.begin_seq()
     _ = st.has_next()
     var first = st.expect_element[LazyRaw[ImmutAnyOrigin, RawKind.Str]]()
@@ -166,8 +166,8 @@ def test_deferred_parse_of_borrowed_bytes() raises:
     var lz = _borrow[RawKind.Map](wire)
 
     var inner = String(lz.as_slice())
-    var inner_p = Parser(inner)
-    var d = EmberJsonDeserializer(p=Pointer(to=inner_p))
+    var inner_c = EmberJsonCursor(inner)
+    var d = EmberJsonDeserializer(c=Pointer(to=inner_c))
     var st = d.begin_map()
     _ = st.has_next()
     assert_equal(st.expect_key[String](), String("x"))
@@ -189,32 +189,11 @@ def test_conformance_relationships() raises:
     )
 
 
-def test_raw_bytes_refuses_padded_options() raises:
-    # Borrowing hands back a span into the parser's own input buffer. Under
-    # non-default options (`_padded()`), that buffer is a temporary
-    # `PaddedBuffer` copy that does not outlive the parse call -- a
-    # borrowed span into it would dangle. `raw_bytes` must refuse rather
-    # than silently handing out a soon-to-be-dangling span. This is the
-    # `comptime assert options == ParseOptions()` restriction `Lazy` used
-    # to carry itself (`emberjson/lazy.mojo`'s old `from_json`), now
-    # enforced at the format layer (`EmberJsonDeserializer.raw_bytes` in
-    # `emberjson/_serde/deserializer.mojo`) instead, since it knows the
-    # buffer's provenance and `Lazy.deserialize` -- generic over `Some[
-    # Deserializer]` -- deliberately does not.
-    var wire = String('"hi"')
-    var buf = PaddedBuffer(wire.as_bytes())
-    var p = Parser[options=ParseOptions()._padded()](padded=buf)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
-    with assert_raises():
-        _ = d.raw_bytes[RawKind.Str]()
-
-
 # ===========================================================================
 # `emberjson.lazy.Lazy` itself, driven through the
 # `BorrowingDeserializer` path (`EmberJsonDeserializer.raw_bytes`) via
-# `from_json` -- which, since Task 8 retired the `Parser`-driven
-# reflection walker, is the only capture path there is. `get()` re-parses
-# the captured span through a fresh `Parser`.
+# `from_json`, the only capture path there is. `get()` re-parses the
+# captured span through a fresh `EmberJsonCursor`.
 # ===========================================================================
 
 
@@ -334,14 +313,17 @@ def test_lazy_serialize_surfaces_get_failure() raises:
 
 
 def test_raw_bytes_allows_non_default_unpadded_options() raises:
-    # The padded refusal above is about buffer provenance, not options
-    # generally: an ordinary borrowed input parsed with non-default
-    # options is safe to borrow from. Regression coverage for the gate
-    # that refused every non-default `ParseOptions`.
+    # Borrowing is refused over a padded buffer, which does not outlive
+    # the parse -- and `EmberJsonCursor` cannot be built over one at all:
+    # `Parser` rejects `_assume_padded` options over caller memory at
+    # compile time. That is about buffer provenance, not options
+    # generally: an ordinary borrowed input parsed with non-default options
+    # is safe to borrow from. Regression coverage for the gate that refused
+    # every non-default `ParseOptions`.
     comptime opts = ParseOptions(ignore_unicode=True)
     var wire = String("5")
-    var p = Parser[options=opts](wire)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
+    var c = EmberJsonCursor[options=opts](wire)
+    var d = EmberJsonDeserializer(c=Pointer(to=c))
     var b = d.raw_bytes[RawKind.Integer]()
     assert_equal(len(b), 1)
     assert_equal(b[0], Byte(ord("5")))
