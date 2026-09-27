@@ -1,4 +1,10 @@
-from .parser import Parser, ParseOptions, StrictOptions, RawNumber
+from .parser import Parser, ParseOptions, StrictOptions
+from ._number import RawNumber
+from ._errors import (
+    duplicate_key,
+    trailing_comma,
+    unexpected_eof,
+)
 from ._parser_helper import (
     ptr_dist,
     _next_backslash,
@@ -23,7 +29,7 @@ from emberjson.constants import (
 from std.memory import unsafe_memcpy, unsafe_memcmp
 from std.memory.alloc import unsafe_alloc
 from std.sys.intrinsics import unlikely
-from emberserde.error import DeserializationError, DerErrorKind
+from emberserde.error import DeserializationError
 
 
 #######################################################
@@ -363,11 +369,7 @@ def _push_and_check_key(
         ):
             # Rule 3: the strict-mode duplicate-key raise, matching
             # `Object._append_for_parse` on the `Value` path.
-            raise DeserializationError(
-                String("Duplicate key: ")
-                + String(_arena_view(sink.strings, key_off)),
-                DerErrorKind.DuplicateField,
-            )
+            raise duplicate_key(_arena_view(sink.strings, key_off))
     sink.key_hashes.append(h)
     sink.key_offs.append(UInt32(key_off))
 
@@ -378,6 +380,7 @@ def _tape_object[
     mut p: Parser[origin, options], mut sink: TapeSink
 ) raises DeserializationError:
     p.data += 1
+    p.enter_container()
     p.skip_whitespace()
 
     var open_idx = len(sink.tape)
@@ -390,9 +393,7 @@ def _tape_object[
     else:
         while True:
             if unlikely(p.cur() != `"`):
-                raise DeserializationError(
-                    "Invalid identifier", DerErrorKind.InvalidValue
-                )
+                raise p.key_error()
             _tape_string(p, sink)
             comptime if (
                 StrictOptions.ALLOW_DUPLICATE_KEYS not in options.strict_mode
@@ -404,10 +405,7 @@ def _tape_object[
                 )
             p.skip_whitespace()
             if unlikely(p.cur() != `:`):
-                raise DeserializationError(
-                    String("Invalid identifier : ") + String(p.remaining()),
-                    DerErrorKind.InvalidValue,
-                )
+                raise p.colon_error()
             p.data += 1
             _tape_value(p, sink)
             count += 1
@@ -424,20 +422,15 @@ def _tape_object[
                     in options.strict_mode
                 ):
                     if has_comma:
-                        raise DeserializationError(
-                            "Illegal trailing comma", DerErrorKind.InvalidValue
-                        )
+                        raise trailing_comma()
                 break
             elif not has_comma:
-                raise DeserializationError(
-                    "Expected ',' or '}'", DerErrorKind.InvalidValue
-                )
+                raise p.separator_error(`}`)
             if unlikely(p.bytes_remaining() == 0):
-                raise DeserializationError(
-                    "Expected '}'", DerErrorKind.InvalidValue
-                )
+                raise unexpected_eof()
 
     p.data += 1
+    p.depth -= 1
     p.skip_whitespace()
     sink.tape.append(_pack_word(TapeTag.OBJECT_CLOSE, UInt64(open_idx)))
     sink.tape[open_idx] = _pack_container_open(
@@ -454,6 +447,7 @@ def _tape_array[
     mut p: Parser[origin, options], mut sink: TapeSink
 ) raises DeserializationError:
     p.data += 1
+    p.enter_container()
     p.skip_whitespace()
 
     var open_idx = len(sink.tape)
@@ -478,20 +472,15 @@ def _tape_array[
                     not in options.strict_mode
                 ):
                     if has_comma:
-                        raise DeserializationError(
-                            "Illegal trailing comma", DerErrorKind.InvalidValue
-                        )
+                        raise trailing_comma()
                 break
             elif unlikely(not has_comma):
-                raise DeserializationError(
-                    "Expected ',' or ']'", DerErrorKind.InvalidValue
-                )
+                raise p.separator_error(`]`)
             if unlikely(not p.has_more()):
-                raise DeserializationError(
-                    "Expected ']'", DerErrorKind.InvalidValue
-                )
+                raise unexpected_eof()
 
     p.data += 1
+    p.depth -= 1
     p.skip_whitespace()
     sink.tape.append(_pack_word(TapeTag.ARRAY_CLOSE, UInt64(open_idx)))
     sink.tape[open_idx] = _pack_container_open(
@@ -527,9 +516,7 @@ def _tape_value[
         sink.tape.append(_pack_word(TapeTag.INT64 + r.kind, 0))
         sink.tape.append(r.bits)
     else:
-        raise DeserializationError(
-            "Invalid json value", DerErrorKind.InvalidValue
-        )
+        raise p.value_start_error()
 
 
 def parse_document_tape[
@@ -544,8 +531,4 @@ def parse_document_tape[
 
     p.skip_whitespace()
     if unlikely(p.has_more()):
-        raise DeserializationError(
-            String("Invalid json, expected end of input, received: ")
-            + String(p.remaining()),
-            DerErrorKind.InvalidValue,
-        )
+        raise p.trailing_error()

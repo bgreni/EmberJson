@@ -1,6 +1,7 @@
 from std.testing import assert_equal, TestSuite
 from emberjson._serde import to_json
 from emberjson import Value, Object, Array, Null, from_json
+from emberjson import to_json_pretty, Field
 from std.hashlib import Hasher
 
 
@@ -288,6 +289,76 @@ def test_composite_dict_key_is_escaped_to_valid_json() raises:
     var got = to_json(m)
     assert_equal(got, String('{"{\\"a\\":1}":2}'))
     _ = from_json[Value](got)
+
+
+@fieldwise_init
+struct _KeyPlain(Movable):
+    var first: Int
+    var second: String
+
+
+@fieldwise_init
+struct _KeyRenamed(Movable):
+    var a: Int
+    var b: Field[Int, rename=String("bee"), default=7]
+
+
+@fieldwise_init
+struct _KeyNeedsEscape(Movable):
+    var a: Field[Int, rename=String('q"t\\s'), default=0]
+    var b: Field[Int, rename=String("tab\there"), default=0]
+
+
+@fieldwise_init
+struct _KeyMixedPlainEscaped(Movable):
+    var first: Int
+    var middle: Field[Int, rename=String('q"t'), default=0]
+    var last: Int
+
+
+@fieldwise_init
+struct _KeySkipped(Movable):
+    var gone: Field[Int, skip=True, default=0]
+    var kept: Int
+
+
+def test_struct_keys_compact() raises:
+    assert_equal(to_json(_KeyPlain(1, "x")), String('{"first":1,"second":"x"}'))
+
+
+def test_struct_renamed_key_compact() raises:
+    var v = _KeyRenamed(1, Field[Int, rename=String("bee"), default=7](2))
+    assert_equal(to_json(v), String('{"a":1,"bee":2}'))
+
+
+def test_struct_key_needing_escape_falls_back() raises:
+    var v = _KeyNeedsEscape(
+        Field[Int, rename=String('q"t\\s'), default=0](1),
+        Field[Int, rename=String("tab\there"), default=0](2),
+    )
+    assert_equal(to_json(v), String('{"q\\"t\\\\s":1,"tab\\there":2}'))
+
+
+def test_struct_mixed_plain_and_escaped_keys_compact() raises:
+    # plain, escape-needing, plain field names in a row: pins the `first`/
+    # comma handoff between the fast (comptime-literal) key path and the
+    # escaping fallback path in `EmberJsonStructSer.serialize_field`.
+    var v = _KeyMixedPlainEscaped(
+        1, Field[Int, rename=String('q"t'), default=0](2), 3
+    )
+    assert_equal(to_json(v), String('{"first":1,"q\\"t":2,"last":3}'))
+
+
+def test_struct_skipped_first_field_has_no_leading_comma() raises:
+    var v = _KeySkipped(Field[Int, skip=True, default=0](5), 3)
+    assert_equal(to_json(v), String('{"kept":3}'))
+
+
+def test_struct_pretty_keys_unchanged() raises:
+    assert_equal(
+        to_json_pretty(_KeyPlain(1, "x")),
+        String('{\n    "first": 1,\n    "second": "x"\n}'),
+    )
 
 
 def main() raises:

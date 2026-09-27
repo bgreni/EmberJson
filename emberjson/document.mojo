@@ -506,39 +506,39 @@ def _write_tape_value(doc: Document, idx: Int, mut writer: Some[Writer]) -> Int:
         write_float(bitcast[DType.float64](doc._tape[idx + 1]), writer)
         return idx + 2
     elif t == TapeTag.TRUE:
-        writer.write("true")
+        writer.write_string("true")
         return idx + 1
     elif t == TapeTag.FALSE:
-        writer.write("false")
+        writer.write_string("false")
         return idx + 1
     elif t == TapeTag.NULL:
-        writer.write("null")
+        writer.write_string("null")
         return idx + 1
     elif t == TapeTag.ARRAY_OPEN:
         var close = Int(_payload_of(word) & CLOSE_MASK) - 1
-        writer.write("[")
+        writer.write_string("[")
         var k = idx + 1
         var first = True
         while k < close:
             if not first:
-                writer.write(",")
+                writer.write_string(",")
             first = False
             k = _write_tape_value(doc, k, writer)
-        writer.write("]")
+        writer.write_string("]")
         return close + 1
     else:
         var close = Int(_payload_of(word) & CLOSE_MASK) - 1
-        writer.write("{")
+        writer.write_string("{")
         var k = idx + 1
         var first = True
         while k < close:
             if not first:
-                writer.write(",")
+                writer.write_string(",")
             first = False
             _write_arena_string(doc, Int(_payload_of(doc._tape[k])), writer)
-            writer.write(":")
+            writer.write_string(":")
             k = _write_tape_value(doc, k + 1, writer)
-        writer.write("}")
+        writer.write_string("}")
         return close + 1
 
 

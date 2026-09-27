@@ -76,7 +76,7 @@ def test_null() raises:
 
     assert_true(Value(None).is_null())
 
-    with assert_raises(contains="Encountered EOF when expecting 'null'"):
+    with assert_raises(contains='Encountered EOF when expecting "null"'):
         _ = Value(parse_string="nil")
 
 

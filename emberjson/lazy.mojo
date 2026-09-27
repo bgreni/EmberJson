@@ -1,16 +1,14 @@
-from ._deserialize.parser import Parser
-from ._serde.deserializer import EmberJsonDeserializer
+from ._serde.deserializer import from_json_bytes, RawCapture
 from .value import Value
 from std.hashlib import Hasher
 
-# The free functions `serialize`/`deserialize` are aliased below because
-# `Lazy` declares methods of the same name.
+# The free function `serialize` is aliased below because `Lazy` declares a
+# method of the same name.
 from emberserde.deserialize import (
     BorrowingDeserializer,
     Deserializer,
     Deserializable,
     RawKind,
-    deserialize as _serde_deserialize,
 )
 from emberserde.serialize import (
     Serializer,
@@ -25,14 +23,6 @@ from emberserde.error import (
 from emberserde.utils import Base
 
 
-def _deserialize_bytes[
-    T: Base, origin: ImmOrigin
-](b: Span[Byte, origin]) raises -> T:
-    var p = Parser(b)
-    var d = EmberJsonDeserializer(p=Pointer(to=p))
-    return _serde_deserialize[T](d)
-
-
 @fieldwise_init
 struct Lazy[
     T: Base,
@@ -45,6 +35,7 @@ struct Lazy[
 ](
     Deserializable,
     Hashable,
+    RawCapture,
     Serializable,
     TrivialRegisterPassable,
 ):
@@ -52,7 +43,7 @@ struct Lazy[
 
     Deserializing a `Lazy` only records the `Span` covering its token (via
     `BorrowingDeserializer.raw_bytes[kind]`); no interpretation happens
-    until `get()`, which re-parses that span through a fresh `Parser`.
+    until `get()`, which re-parses that span through a fresh deserializer.
 
     `serialize` does NOT echo the captured span verbatim. emberserde's
     `Serializer` trait has no raw-passthrough hook (only
@@ -70,6 +61,28 @@ struct Lazy[
     struct missing a required field) surfaces as a `SerializationError`
     from `serialize` (via `_checked_get`), not a crash or silent bad
     output.
+
+    Lifetime safety -- the `origin` parameter is TRUSTED, not checked:
+
+    - It must be the origin of the input actually passed to `from_json`.
+      Nothing verifies this: the span reaches `deserialize` through
+      emberserde's generic `raw_bytes` as `ImmUntrackedOrigin` (Mojo 1.1.0
+      cannot carry the input's origin through a trait) and is re-labelled
+      with whatever `origin` names. `from_json[LazyValue[ImmutAnyOrigin]]`,
+      or an origin of some other variable, compiles and leaves a dangling
+      span once the input dies; `get()` then re-parses freed memory, which
+      usually yields plausible but wrong data rather than a crash.
+    - Reassigning or appending to the source while the `Lazy` is alive is
+      NOT caught when the origin is the whole variable's (`origin_of(s)`);
+      that is a language property shared by every view, `StringSlice(s)`
+      included. Borrow from the string's interior instead, which the
+      compiler does track:
+
+      ```mojo
+      var src = s[byte=:]
+      var l = from_json[LazyValue[src.origin]](src)
+      s = other  # error: use of invalidated interior reference
+      ```
     """
 
     var _data: Span[Byte, Self.origin]
@@ -81,6 +94,8 @@ struct Lazy[
         comptime assert conforms_to(
             type_of(d), BorrowingDeserializer
         ), "Lazy requires a borrowing deserializer"
+        # Unchecked re-label of an untracked span: see "Lifetime safety" in
+        # the struct docstring.
         return Self(rebind[Span[Byte, Self.origin]](d.raw_bytes[Self.kind]()))
 
     def _checked_get(self) raises SerializationError -> Self.T:
@@ -96,7 +111,7 @@ struct Lazy[
         _serde_serialize(self._checked_get(), s)
 
     def get(self) raises -> Self.T:
-        return _deserialize_bytes[Self.T](self._data)
+        return from_json_bytes[Self.T](self._data)
 
     def __getitem__(self) raises -> Self.T:
         return self.get()

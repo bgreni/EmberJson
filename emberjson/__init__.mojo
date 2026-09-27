@@ -26,6 +26,7 @@ from ._serde import (
     DefaultIndent,
 )
 from ._serde.serializer import _is_json_whitespace
+from ._deserialize._errors import invalid_utf8
 from .jsonl import read_lines, write_lines
 from .traits import JsonValue
 from ._pointer import PointerIndex
@@ -114,7 +115,8 @@ def from_json[
     - `Document` -- the immutable tape parser: no per-node allocation,
       several times faster on document-heavy input.
     - anything else -- emberserde's reflection framework, driven by
-      `EmberJsonDeserializer` over the same hand-written `Parser`.
+      `EmberJsonDeserializer` over the SIMD structural index, with the same
+      hand-written `Parser` reading scalars and raising errors.
 
     UTF-8 is validated once here, before dispatch, so every strategy sees
     the same rule. `ParseOptions(validate_utf8=False)` skips the check for
@@ -136,9 +138,7 @@ def from_json[
     """
     comptime if options.validate_utf8:
         if not is_valid_utf8(s):
-            raise DeserializationError(
-                "Invalid UTF-8 in input", DerErrorKind.InvalidValue
-            )
+            raise invalid_utf8()
     # Validation has run; clear the flag so no branch repeats it.
     comptime checked = options._utf8_validated()
     comptime if T == Value:
@@ -159,11 +159,11 @@ def from_json[
         # a single kind suffix instead of one per re-wrap.
         result = _rebind_var[T](_parse_document_root[checked](s))
     else:
-        # NOTE: the reflection branch must stay UNPADDED. `raw_bytes`
-        # refuses `_assume_padded` because a `PaddedBuffer` is a local
-        # that does not outlive the call, so every borrowing type
-        # (`Lazy`, `LazyString`, ...) would dangle. See the spec's
-        # "Known limitation".
+        # NOTE: the reflection branch must stay UNPADDED: a `PaddedBuffer`
+        # is a local that does not outlive the call, so every borrowing
+        # type (`Lazy`, `LazyString`, ...) would dangle. `EmberJsonCursor`
+        # indexes the caller's own buffer, and its `Parser` cannot be
+        # built with `_assume_padded` options over it.
         result = _from_json[T, checked](s)
 
 

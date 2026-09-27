@@ -15,6 +15,7 @@ from std.sys.info import bit_width_of
 from std.utils.numerics import FPUtils
 from std.sys.intrinsics import unlikely
 from emberserde.error import DeserializationError, DerErrorKind
+from ._errors import plus_sign, infinite_float
 
 
 comptime MAX_DIGITS = 768
@@ -188,9 +189,7 @@ def from_chars_slow[
     comptime uint_dtype = _uint_type_of_width[bit_width_of[dtype]()]()
 
     if unlikely(first[] == `+`):
-        raise DeserializationError(
-            'Expected digit of "-", found "+"', DerErrorKind.InvalidValue
-        )
+        raise plus_sign()
 
     var negative = first[] == `-`
     first += Int(negative)
@@ -219,7 +218,7 @@ def compute_float[
         return
 
     if d.decimal_point >= 310:
-        raise DeserializationError("Infinite float", DerErrorKind.InvalidValue)
+        raise infinite_float()
 
     comptime MAX_SHIFT = 60
     comptime NUM_POWERS = 19
@@ -254,9 +253,7 @@ def compute_float[
         d <<= shift
 
         if d.decimal_point > DECIMAL_POINT_RANGE:
-            raise DeserializationError(
-                "Infinite float", DerErrorKind.InvalidValue
-            )
+            raise infinite_float()
 
         exp2 -= Int32(shift)
 
@@ -270,7 +267,7 @@ def compute_float[
         exp2 += Int32(n)
 
     if exp2 - Int32(minimum_exponent) >= Int32(infinite_power):
-        raise DeserializationError("Infinite float", DerErrorKind.InvalidValue)
+        raise infinite_float()
 
     comptime mantissa_size_in_bits = mantissa_explicit_bits + 1
     d <<= UInt64(mantissa_size_in_bits)
@@ -282,9 +279,7 @@ def compute_float[
         exp2 += 1
         mantissa = d.round()
         if exp2 - Int32(minimum_exponent) >= Int32(infinite_power):
-            raise DeserializationError(
-                "Infinite float", DerErrorKind.InvalidValue
-            )
+            raise infinite_float()
 
     answer.power2 = Int(exp2 - Int32(minimum_exponent))
     if mantissa < (UInt64(1) << UInt64(mantissa_explicit_bits)):

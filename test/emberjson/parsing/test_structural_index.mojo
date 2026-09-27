@@ -1,4 +1,8 @@
-from emberjson._index import structural_index
+from emberjson._index import (
+    structural_index,
+    structural_index_with_flags,
+    INDEX_HAS_BACKSLASH,
+)
 from emberjson.utils import PaddedBuffer
 from emberjson.constants import `{`, `}`, `[`, `]`, `:`, `,`, `"`, `\\`
 from std.testing import assert_equal, assert_true, TestSuite
@@ -72,6 +76,26 @@ def check(s: StringSlice) raises:
     )
     assert_same_positions(
         simd_index_padded(s), expected, "padded: " + String(s)
+    )
+
+    # The indexed deserializer's entry point: the same positions, plus
+    # the offset of every backslash and a flag saying whether any exist.
+    var positions = List[UInt32]()
+    var backslashes = List[UInt32]()
+    var flags = structural_index_with_flags[False](
+        s.unsafe_ptr(), s.byte_length(), positions, backslashes
+    )
+    assert_same_positions(positions, expected, "with flags: " + String(s))
+    var want_bs = List[UInt32]()
+    var bytes = s.as_bytes()
+    for i in range(len(bytes)):
+        if bytes[i] == `\\`:
+            want_bs.append(UInt32(i))
+    assert_same_positions(backslashes, want_bs, "backslashes: " + String(s))
+    assert_equal(
+        (flags & INDEX_HAS_BACKSLASH) != 0,
+        len(want_bs) != 0,
+        "backslash flag: " + String(s),
     )
 
 

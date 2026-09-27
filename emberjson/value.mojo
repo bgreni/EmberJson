@@ -9,6 +9,7 @@ from .utils import (
 from std.utils.variant import Variant
 from .traits import JsonValue
 from ._deserialize import parse_root
+from ._deserialize._errors import expected_value
 from ._utf8 import is_valid_utf8
 from std.sys.info import bit_width_of
 from .teju import write_float
@@ -80,9 +81,7 @@ struct Null(JsonValue, TrivialRegisterPassable):
         ), "Null requires a self-describing deserializer"
         var v = rebind_var[Value](d.deserialize_any())
         if not v.is_null():
-            raise DeserializationError(
-                String("expected null"), DerErrorKind.TypeMismatch
-            )
+            raise expected_value("null")
         return Null()
 
 

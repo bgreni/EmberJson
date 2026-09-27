@@ -306,5 +306,33 @@ def test_utf8_no_shuffle_pure_ascii() raises:
         )
 
 
+def test_utf8_sequences_straddling_64_byte_blocks() raises:
+    # The SIMD validator tests four vectors for ASCII at once; a multi-byte
+    # sequence (valid, truncated or overlong) must be judged the same
+    # wherever it falls relative to those 64-byte blocks.
+    from emberjson._utf8 import _is_valid_utf8_simd, _is_valid_utf8_scalar
+
+    var seqs: List[List[Byte]] = [
+        [0xC3, 0xA9],
+        [0xE2, 0x82, 0xAC],
+        [0xF0, 0x9F, 0x98, 0x80],
+        [0xE2, 0x82],
+        [0xF0, 0x9F, 0x98],
+        [0xC0, 0x80],
+        [0xED, 0xA0, 0x80],
+    ]
+    for seq in seqs:
+        for start in range(56, 200):
+            var buf = List[Byte]()
+            buf.resize(320, Byte(ord("a")))
+            for k in range(len(seq)):
+                if start + k < len(buf):
+                    buf[start + k] = seq[k]
+            var p = buf.unsafe_ptr()
+            var want = _is_valid_utf8_scalar(p, len(buf))
+            assert_equal(_is_valid_utf8_simd[16](p, len(buf)), want)
+            assert_equal(_is_valid_utf8_simd[32](p, len(buf)), want)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

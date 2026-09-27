@@ -32,6 +32,17 @@ from emberjson.value import Value
 from emberjson.utils import BytePtr
 from emberjson.constants import `{`, `}`, `[`, `]`, `,`, `"`, `:`
 from emberserde.error import DeserializationError, DerErrorKind
+from ._errors import (
+    unexpected_eof,
+    invalid_utf8,
+    expected_key,
+    expected_colon,
+    expected_separator,
+    key_not_found,
+    index_out_of_bounds,
+    invalid_array_index,
+    cannot_traverse,
+)
 from std.memory import unsafe_memcmp
 from std.sys.intrinsics import unlikely
 
@@ -41,7 +52,7 @@ def _q_byte(
     base: BytePtr, positions: List[UInt32], cur: Int
 ) raises DeserializationError -> Byte:
     if unlikely(cur >= len(positions)):
-        raise DeserializationError("Unexpected EOF", DerErrorKind.InvalidValue)
+        raise unexpected_eof()
     return base[unsafe_offset=Int(positions[cur])]
 
 
@@ -60,9 +71,7 @@ def _skip_value_positions(
         var n = len(positions)
         while depth > 0:
             if unlikely(cur >= n):
-                raise DeserializationError(
-                    "Unexpected EOF", DerErrorKind.InvalidValue
-                )
+                raise unexpected_eof()
             var c = base[unsafe_offset=Int(positions[cur])]
             depth += (
                 Int(c == `{`) + Int(c == `[`) - Int(c == `}`) - Int(c == `]`)
@@ -144,9 +153,7 @@ def _parse_pointer_impl[
 ](s: StringSlice, path: PointerIndex) raises DeserializationError -> Value:
     comptime if options.validate_utf8:
         if not is_valid_utf8(s):
-            raise DeserializationError(
-                "Invalid UTF-8 in input", DerErrorKind.InvalidValue
-            )
+            raise invalid_utf8()
     # An empty pointer addresses the whole document: parse it normally
     # (full validation, no index needed).
     if len(path.tokens) == 0:
@@ -157,9 +164,7 @@ def _parse_pointer_impl[
     var positions = List[UInt32]()
     structural_index[False](base, s.byte_length(), positions)
     if unlikely(len(positions) == 0):
-        raise DeserializationError(
-            "Invalid json value", DerErrorKind.InvalidValue
-        )
+        raise unexpected_eof()
 
     var cur = 0
     for ti in range(len(path.tokens)):
@@ -177,24 +182,17 @@ def _parse_pointer_impl[
             while True:
                 var kb = _q_byte(base, positions, cur)
                 if kb == `}`:
-                    raise DeserializationError(
-                        "Key not found: " + needle, DerErrorKind.InvalidValue
-                    )
+                    raise key_not_found(needle)
                 if unlikely(kb != `"`):
-                    raise DeserializationError(
-                        "Invalid identifier", DerErrorKind.InvalidValue
-                    )
+                    raise expected_key(kb)
                 var k_start = Int(positions[cur]) + 1
                 if unlikely(_q_byte(base, positions, cur + 1) != `"`):
-                    raise DeserializationError(
-                        "Unexpected EOF", DerErrorKind.InvalidValue
-                    )
+                    raise unexpected_eof()
                 var k_end = Int(positions[cur + 1])
                 cur += 2
-                if unlikely(_q_byte(base, positions, cur) != `:`):
-                    raise DeserializationError(
-                        "Invalid identifier", DerErrorKind.InvalidValue
-                    )
+                var colon = _q_byte(base, positions, cur)
+                if unlikely(colon != `:`):
+                    raise expected_colon(colon)
                 cur += 1
                 if _key_matches(base, k_start, k_end, needle):
                     break
@@ -203,57 +201,36 @@ def _parse_pointer_impl[
                 if after == `,`:
                     cur += 1
                 elif after == `}`:
-                    raise DeserializationError(
-                        "Key not found: " + needle, DerErrorKind.InvalidValue
-                    )
+                    raise key_not_found(needle)
                 else:
-                    raise DeserializationError(
-                        "Expected ',' or '}'", DerErrorKind.InvalidValue
-                    )
+                    raise expected_separator(`}`, after)
         elif b == `[`:
             if not token.isa[Int]():
-                raise DeserializationError(
-                    "Invalid array index: " + token[String],
-                    DerErrorKind.InvalidValue,
-                )
+                raise invalid_array_index(token[String])
             var remaining = token[Int]
             cur += 1
             if _q_byte(base, positions, cur) == `]`:
-                raise DeserializationError(
-                    "Index out of bounds", DerErrorKind.InvalidValue
-                )
+                raise index_out_of_bounds()
             while remaining > 0:
                 cur = _skip_value_positions(base, positions, cur)
                 var after = _q_byte(base, positions, cur)
                 if after == `,`:
                     cur += 1
                 elif after == `]`:
-                    raise DeserializationError(
-                        "Index out of bounds", DerErrorKind.InvalidValue
-                    )
+                    raise index_out_of_bounds()
                 else:
-                    raise DeserializationError(
-                        "Expected ',' or ']'", DerErrorKind.InvalidValue
-                    )
+                    raise expected_separator(`]`, after)
                 remaining -= 1
         else:
             if token.isa[String]():
-                raise DeserializationError(
-                    "Primitive value cannot be traversed with key: "
-                    + token[String],
-                    DerErrorKind.InvalidValue,
-                )
-            raise DeserializationError(
-                "Primitive value cannot be traversed with index: "
-                + String(token[Int]),
-                DerErrorKind.InvalidValue,
-            )
+                raise cannot_traverse(token[String], by_key=True)
+            raise cannot_traverse(String(token[Int]), by_key=False)
 
     # Materialize (and fully validate) just the target subtree. `cur` runs
     # one past the end when the pointer's last token was matched by the final
     # `"key":` of a truncated document, so guard it like `_q_byte` does.
     if unlikely(cur >= len(positions)):
-        raise DeserializationError("Unexpected EOF", DerErrorKind.InvalidValue)
+        raise unexpected_eof()
     var off = Int(positions[cur])
     var p = Parser[options=options](
         ptr=base.unsafe_offset(off), length=s.byte_length() - off

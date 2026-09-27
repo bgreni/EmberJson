@@ -24,7 +24,6 @@ from std.benchmark import (
 )
 from emberjson._index import structural_index
 from emberjson.utils import PaddedBuffer
-from emberjson._serde import from_json as _from_json
 from std.python import Python
 from std.sys import argv
 from std.pathlib import Path
@@ -618,7 +617,7 @@ def benchmark_batch_deserialize[
     @always_inline
     def do() raises {imm docs}:
         for doc in docs:
-            var a = _from_json[T](doc)
+            var a = from_json[T](doc)
             keep(a)
 
     b.iter(do)
@@ -816,7 +815,7 @@ def benchmark_deserialize_with_reflection[
 ](mut b: Bencher, s: String) raises:
     @always_inline
     def do() raises {imm s}:
-        var a = _from_json[T](s)
+        var a = from_json[T](s)
         keep(a)
 
     b.iter(do)
