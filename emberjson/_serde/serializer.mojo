@@ -193,7 +193,9 @@ struct EmberJsonStructSer[
         comptime NAME = static_wire_name[
             T, r.field_types()[idx], r.field_names()[idx]
         ]()
-        assert field_name == NAME, "serialize_field: field_name must be the resolved wire name"
+        assert (
+            field_name == NAME
+        ), "serialize_field: field_name must be the resolved wire name"
         comptime if not Self.pretty and _is_plain_key(NAME):
             # The whole `"name":` (and `,"name":`) token is a comptime
             # literal: one write instead of a separator, an escape scan

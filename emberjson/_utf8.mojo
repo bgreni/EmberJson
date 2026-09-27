@@ -174,7 +174,9 @@ def _all_ascii[W: Int](cur: SIMD8[W]) -> Bool:
 
 
 @always_inline("nodebug")
-def _step[W: Int](
+def _step[
+    W: Int
+](
     cur: SIMD8[W],
     mut prev_chunk: SIMD8[W],
     mut prev_incomplete: SIMD8[W],
