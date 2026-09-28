@@ -8,5 +8,7 @@ of scanning bytes. See `indexer.mojo` for the entry point.
 from .indexer import (
     structural_index,
     structural_index_with_flags,
+    structural_index_into,
     INDEX_HAS_BACKSLASH,
+    INDEX_SLACK,
 )

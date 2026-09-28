@@ -347,5 +347,27 @@ def test_simd_bool_round_trips_through_json() raises:
     assert_equal(from_json[SIMD[DType.bool, 1]](to_json(v)), v)
 
 
+def test_index_storage_boundary() raises:
+    # Around the size where the cursor's index moves from inline storage
+    # to the heap, with the densest index there is (every non-space byte
+    # a structural), the same documents parse the same, and a truncated
+    # one is still rejected.
+    for size in range(1000, 1040):
+        var k = (size - 1) // 2
+        var s = String("[")
+        for i in range(k):
+            s += "1," if i < k - 1 else "1"
+        s += "]"
+        while s.byte_length() < size:
+            s += " "
+        var v = from_json[List[Int]](s)
+        assert_equal(len(v), k)
+        assert_equal(v[k - 1], 1)
+        assert_true(
+            not try_from_json[List[Int]](String(s[byte = 0 : 2 * k])),
+            String("accepted a truncated document of ", size, " bytes"),
+        )
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
