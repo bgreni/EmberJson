@@ -373,6 +373,45 @@ def test_mutations_across_parsers() raises:
     assert_true(cases > 1000)
 
 
+@fieldwise_init
+struct Skipper(Defaultable, Movable):
+    var a: Optional[Int64]
+
+    def __init__(out self):
+        self.a = None
+
+
+def test_mutations_through_skipped_field() raises:
+    # Reflection skips an unknown field's value on the structural index;
+    # it agrees with `Value` on every mutation of these documents written
+    # as that value, accepted or not, except for the limits a skip does not
+    # check (as a `Lazy` capture). Padded past the index's inline capacity
+    # as well, so both index stores are walked.
+    var docs: List[String] = [
+        '{"a":[1,-2.5e3,true,null],"b":{"c":"x\\n\\u00e9"},"d":[]}',
+        '[{"k":"\\uD834\\uDD1E"},[0.5,[false]],"",{}]',
+    ]
+    var pad = String()
+    for _ in range(1100):
+        pad += " "
+    var cases = 0
+    for doc in docs:
+        for m in _mutations(doc):
+            for input in [
+                String('{"z":', m, "}"),
+                String('{"z":', m, ',"a":1}'),
+                String('{"z":', m, pad, "}"),
+            ]:
+                var want = _outcome[Value, ParseOptions()](input)
+                if not (
+                    want.startswith("DuplicateField")
+                    or want.endswith("Infinite float")
+                ):
+                    _same[Skipper, ParseOptions()](input, want, "skip")
+                cases += 1
+    assert_true(cases > 1000)
+
+
 def _kind[T: Movable & Deinitable](json: String) -> String:
     try:
         _ = from_json[T](StringSlice(json))

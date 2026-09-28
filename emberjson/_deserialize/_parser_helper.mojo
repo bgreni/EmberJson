@@ -492,16 +492,46 @@ def copy_to_string[
     comptime if not ignore_unicode:
         if found_escaped:
             return decode_escaped()
-        else:
-            return String(
-                StringSlice(
-                    unsafe_from_utf8=Span(unsafe_ptr=start, length=length)
-                )
+    # A sized copy: `String(StringSlice)` resolves to the variadic `Writable`
+    # constructor, which measures, then writes through a staging buffer.
+    var s = String(unsafe_uninit_length=length)
+    # Fresh and unique, so its buffer (inline or heap) is ours to write.
+    _copy_bytes(s.unsafe_ptr().unsafe_mut_cast[True](), start, length)
+    return s^
+
+
+@always_inline
+def _copy_bytes[o: MutOrigin](dst: Pointer[Byte, o], src: BytePtr, n: Int):
+    """Copies `n` bytes with overlapping moves that stay inside both ranges.
+    Most JSON strings are short, and `unsafe_memcpy` moves 17 to 31 bytes a
+    byte at a time."""
+    if n >= 16:
+        if n > 64:
+            unsafe_memcpy(dest=dst, src=src, count=n)
+            return
+        var i = 0
+        while i + 16 < n:
+            dst.unsafe_offset(i).unsafe_store(
+                src.unsafe_offset(i).unsafe_load[width=16]()
             )
-    else:
-        return String(
-            StringSlice(unsafe_from_utf8=Span(unsafe_ptr=start, length=length))
+            i += 16
+        dst.unsafe_offset(n - 16).unsafe_store(
+            src.unsafe_offset(n - 16).unsafe_load[width=16]()
         )
+    elif n >= 8:
+        dst.unsafe_store(src.unsafe_load[width=8]())
+        dst.unsafe_offset(n - 8).unsafe_store(
+            src.unsafe_offset(n - 8).unsafe_load[width=8]()
+        )
+    elif n >= 4:
+        dst.unsafe_store(src.unsafe_load[width=4]())
+        dst.unsafe_offset(n - 4).unsafe_store(
+            src.unsafe_offset(n - 4).unsafe_load[width=4]()
+        )
+    elif n > 0:
+        dst[unsafe_offset=0] = src[unsafe_offset=0]
+        dst[unsafe_offset=n >> 1] = src[unsafe_offset=n >> 1]
+        dst[unsafe_offset=n - 1] = src[unsafe_offset=n - 1]
 
 
 def check_escapes[

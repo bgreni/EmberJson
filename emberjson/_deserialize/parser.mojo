@@ -6,6 +6,7 @@ from emberjson.utils import (
     PAD_INPUT_THRESHOLD,
     to_string,
     is_space,
+    StackArray,
 )
 from std.math import isinf
 from emberjson.simd import SIMD8_WIDTH, SIMD8xT
@@ -957,15 +958,34 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         would accept mismatched brackets, missing commas, bare `nope` and
         `1.2.3`, and hand those straight back out.
 
-        Iterative rather than recursive so that nesting depth costs heap, not
-        stack. `_closers` holds the closing byte expected at each open level,
-        which is what makes `{"a": [1,2}` an error rather than a shrug. It is
-        still held to `options.max_depth`, counted from `depth`, so a value
-        is equally deep whether it is skipped, captured or materialized.
+        Iterative rather than recursive, with one bit per open level: set
+        for an object, so the closing byte each level expects is known,
+        which is what makes `{"a": [1,2}` an error rather than a shrug. It
+        is held to `options.max_depth`, counted from `depth`, so a value is
+        equally deep whether it is skipped, captured or materialized, and
+        that bound sizes the bit stack (128 bytes at the default depth).
         """
         self._skip_ws()
         var start = self.data
-        var closers = List[Byte](capacity=16)
+        comptime WORDS = max(1, (Self.options.max_depth + 63) // 64)
+        var objects = StackArray[UInt64, WORDS](fill=0)
+        var open = 0
+
+        @always_inline
+        def push(is_object: Bool) {mut objects, mut open}:
+            var bit = UInt64(1) << UInt64(open & 63)
+            if is_object:
+                objects.unsafe_get(open >> 6) |= bit
+            else:
+                objects.unsafe_get(open >> 6) &= ~bit
+            open += 1
+
+        @always_inline
+        def closer() {imm objects, imm open} -> Byte:
+            var top = open - 1
+            if (objects.unsafe_get(top >> 6) >> UInt64(top & 63)) & 1:
+                return `}`
+            return `]`
 
         while True:
             self._skip_ws()
@@ -981,9 +1001,7 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
             elif b == `t` or b == `f` or b == `n`:
                 self._expect_literal()
             elif b == `{`:
-                if unlikely(
-                    self.depth + len(closers) >= Self.options.max_depth
-                ):
+                if unlikely(self.depth + open >= Self.options.max_depth):
                     raise too_deep()
                 self.data += 1
                 self._skip_ws()
@@ -992,13 +1010,11 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 if self.data[] == `}`:
                     self.data += 1
                 else:
-                    closers.append(`}`)
+                    push(True)
                     self._expect_key_and_colon()
                     continue
             elif b == `[`:
-                if unlikely(
-                    self.depth + len(closers) >= Self.options.max_depth
-                ):
+                if unlikely(self.depth + open >= Self.options.max_depth):
                     raise too_deep()
                 self.data += 1
                 self._skip_ws()
@@ -1007,14 +1023,14 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 if self.data[] == `]`:
                     self.data += 1
                 else:
-                    closers.append(`]`)
+                    push(False)
                     continue
             else:
                 raise invalid_value(b)
 
             # --- a value completed: close out every container it finished ----
             while True:
-                if len(closers) == 0:
+                if open == 0:
                     return Span(
                         unsafe_ptr=start.p,
                         length=ptr_dist(start.p, self.data.p),
@@ -1024,30 +1040,30 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
                 if unlikely(not self.has_more()):
                     raise unexpected_eof()
 
-                var closer = closers[len(closers) - 1]
+                var close = closer()
                 var c = self.data[]
-                if c == closer:
+                if c == close:
                     self.data += 1
-                    _ = closers.pop()
+                    open -= 1
                     continue
 
                 if unlikely(c != `,`):
-                    raise self.separator_error(closer)
+                    raise self.separator_error(close)
 
                 self.data += 1
                 self._skip_ws()
-                if self.has_more() and self.data[] == closer:
+                if self.has_more() and self.data[] == close:
                     comptime if (
                         StrictOptions.ALLOW_TRAILING_COMMA
                         in Self.options.strict_mode
                     ):
                         self.data += 1
-                        _ = closers.pop()
+                        open -= 1
                         continue
                     else:
                         raise trailing_comma()
 
-                if closer == `}`:
+                if close == `}`:
                     self._expect_key_and_colon()
                 break
 

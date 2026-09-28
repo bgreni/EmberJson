@@ -42,6 +42,12 @@ comptime INDEX_HAS_BACKSLASH: UInt64 = 1
 """`structural_index_with_flags` bit: the input contains a backslash."""
 
 
+comptime INDEX_SLACK = 9
+"""Slots past `input_len` that `structural_index_into`'s buffer needs: the
+emit loops over-write up to 8 slots past the true count, which is itself up
+to `input_len + 1` before the tail trim."""
+
+
 def structural_index[
     assume_padded: Bool
 ](ptr: BytePtr, input_len: Int, mut positions: List[UInt32]):
@@ -51,7 +57,7 @@ def structural_index[
     """
     var flags: UInt64 = 0
     var backslashes = List[UInt32]()
-    _structural_index[assume_padded, False](
+    _index_list[assume_padded, False](
         ptr, input_len, positions, backslashes, flags
     )
 
@@ -75,13 +81,32 @@ def structural_index_with_flags[
     """
     var flags: UInt64 = 0
     backslashes.resize(0, UInt32(0))
-    _structural_index[assume_padded, True](
+    _index_list[assume_padded, True](
         ptr, input_len, positions, backslashes, flags
     )
     return flags
 
 
-def _structural_index[
+def structural_index_into[
+    assume_padded: Bool, o: MutOrigin
+](
+    ptr: BytePtr,
+    input_len: Int,
+    dest: Pointer[UInt32, o],
+    mut backslashes: List[UInt32],
+) -> Int:
+    """`structural_index_with_flags` into `dest`, caller storage of at least
+    `input_len + INDEX_SLACK` slots, such as a stack buffer for a small
+    input. Returns the structural count."""
+    var flags: UInt64 = 0
+    backslashes.resize(0, UInt32(0))
+    return _structural_index[assume_padded, True](
+        ptr, input_len, dest, backslashes, flags
+    )
+
+
+@always_inline
+def _index_list[
     assume_padded: Bool, with_flags: Bool
 ](
     ptr: BytePtr,
@@ -90,17 +115,35 @@ def _structural_index[
     mut backslashes: List[UInt32],
     mut flags: UInt64,
 ):
-    """Fills `positions` with the offsets of every structural character.
+    """`_structural_index` into `positions`, a reusable buffer: it is only
+    (re)allocated when its capacity cannot hold the worst case (capacity-
+    based, because it is resized down to the structural count on exit, so
+    a warm buffer has a small length but a large capacity)."""
+    if positions.capacity() < input_len + INDEX_SLACK:
+        positions.reserve(input_len + INDEX_SLACK)
+    # Length must cover the raw-pointer write phase.
+    positions.resize(unsafe_uninit_length=input_len + INDEX_SLACK)
+    var n = _structural_index[assume_padded, with_flags](
+        ptr, input_len, positions.unsafe_ptr(), backslashes, flags
+    )
+    positions.resize(n, UInt32(0))
+
+
+def _structural_index[
+    assume_padded: Bool, with_flags: Bool, o: MutOrigin
+](
+    ptr: BytePtr,
+    input_len: Int,
+    out_ptr: Pointer[UInt32, o],
+    mut backslashes: List[UInt32],
+    mut flags: UInt64,
+) -> Int:
+    """Writes the offsets of every structural character to `out_ptr`,
+    which has room for `input_len + INDEX_SLACK`, and returns their count.
 
     Structural characters are `{ } [ ] : ,`, both quotes of every string
     (in-string and escaped quotes are masked out), and the first byte of
     every scalar token. Positions are strictly ascending.
-
-    The buffer is reused across calls: it is only (re)allocated when its
-    capacity cannot hold the worst case of one structural per input byte
-    (capacity-based, because this function resizes `positions` down to the
-    structural count on exit, so a warm buffer has a small length but a
-    large capacity).
 
     Parameters:
         assume_padded: The input is backed by a `PaddedBuffer` and whole
@@ -111,31 +154,18 @@ def _structural_index[
     Args:
         ptr: Start of the JSON input.
         input_len: Length of the JSON input in bytes.
-        positions: Caller-owned, reusable output buffer. Filled with
-            structural offsets and resized to the structural count.
+        out_ptr: The output buffer.
     """
     comptime if _X86_STAGE1:
         # The interpreter takes the loop below: its kernels all have
         # portable branches, and this one reads a global table.
         if not __is_run_in_comptime_interpreter:
-            _structural_index_x86[assume_padded, with_flags](
-                ptr, input_len, positions, backslashes, flags
+            return _structural_index_x86[assume_padded, with_flags](
+                ptr, input_len, out_ptr, backslashes, flags
             )
-            return
 
     if input_len == 0:
-        positions.resize(0, UInt32(0))
-        return
-
-    # Worst case is one structural per byte. The branchless 8-at-a-time
-    # emit can over-write up to 7 entries past the true count, so the
-    # buffer carries EMIT_SLACK extra slots; those over-writes are never
-    # read.
-    comptime EMIT_SLACK = 8
-    if positions.capacity() < input_len + EMIT_SLACK:
-        positions.reserve(input_len + EMIT_SLACK)
-    # Length must cover the raw-pointer write phase.
-    positions.resize(unsafe_uninit_length=input_len + EMIT_SLACK)
+        return 0
 
     var num_chunks = (input_len + 63) // 64
 
@@ -148,10 +178,6 @@ def _structural_index[
     var prev_scalar_carry: UInt64 = 0
     var prev_base: UInt32 = 0
 
-    # Deliberately an `Pointer`: the emit loop writes up to 7 slots past
-    # the true structural count (covered by `EMIT_SLACK`), so it wants raw
-    # offset indexing rather than the bounds-tracked `Pointer` `List` vends.
-    var out_ptr: Pointer[UInt32, origin_of(positions)] = positions.unsafe_ptr()
     var write_pos = 0
 
     @__parameter
@@ -163,7 +189,7 @@ def _structural_index[
         JSON has 4-8 structurals per 64 bytes). Wastes 0-3 slots instead
         of the 0-7 the old groups-of-eight did. Over-writes land past the
         true count and are overwritten by the next emit or fall into
-        EMIT_SLACK, and are never read.
+        INDEX_SLACK, and are never read.
         """
         if bits == 0:
             return
@@ -265,7 +291,7 @@ def _structural_index[
         write_pos > 0 and Int(out_ptr[unsafe_offset=write_pos - 1]) >= input_len
     ):
         write_pos -= 1
-    positions.resize(write_pos, UInt32(0))
+    return write_pos
 
 
 # --- AVX2 loop ----------------------------------------------------------
@@ -306,14 +332,14 @@ def _append_offsets(mut out: List[UInt32], base_idx: UInt32, bits: UInt64):
 
 @always_inline
 def _structural_index_x86[
-    assume_padded: Bool, with_flags: Bool
+    assume_padded: Bool, with_flags: Bool, o: MutOrigin
 ](
     ptr: BytePtr,
     input_len: Int,
-    mut positions: List[UInt32],
+    out_start: Pointer[UInt32, o],
     mut backslashes: List[UInt32],
     mut flags: UInt64,
-):
+) -> Int:
     """`_structural_index` for AVX2 targets: same contract and output.
 
     The vector work is the same as the portable loop's; the differences
@@ -343,24 +369,17 @@ def _structural_index_x86[
     only before the escape short-circuit).
     """
     if input_len == 0:
-        positions.resize(0, UInt32(0))
-        return
+        return 0
 
     # A table store writes eight slots however many bits it had, so up
     # to eight past the true count, which is itself up to input_len + 1:
     # the zero fill past the input starts one more scalar at input_len
     # when the input ends on whitespace or a structural (the trim below
-    # drops it). EMIT_SLACK covers both.
-    comptime EMIT_SLACK = 9
-    if positions.capacity() < input_len + EMIT_SLACK:
-        positions.reserve(input_len + EMIT_SLACK)
-    positions.resize(unsafe_uninit_length=input_len + EMIT_SLACK)
-
+    # drops it). INDEX_SLACK covers both.
     var escape_scanner = EscapeScanner()
     var string_scanner = StringScanner()
     var prev_structurals: UInt64 = 0
     var prev_scalar_carry: UInt64 = 0
-    var out_start = positions.unsafe_ptr()
     var out = out_start
     var offsets = (
         global_constant[_BIT_OFFSETS]().unsafe_ptr().unsafe_bitcast[UInt8]()
@@ -439,4 +458,4 @@ def _structural_index_x86[
         and Int(out_start[unsafe_offset=write_pos - 1]) >= input_len
     ):
         write_pos -= 1
-    positions.resize(write_pos, UInt32(0))
+    return write_pos

@@ -45,9 +45,15 @@ from emberjson._deserialize._errors import (
     malformed_string,
     expected_length,
     expected_single_key,
+    too_deep,
+    invalid_value,
 )
 from emberjson._deserialize._number import try_parse_int, try_parse_float64
-from emberjson._index import structural_index_with_flags
+from emberjson._index import (
+    structural_index_with_flags,
+    structural_index_into,
+    INDEX_SLACK,
+)
 from emberjson.constants import (
     `[`,
     `]`,
@@ -60,8 +66,9 @@ from emberjson.constants import (
     `t`,
     `f`,
     `-`,
+    `+`,
 )
-from emberjson.utils import BytePtr, CheckedPointer, lut
+from emberjson.utils import BytePtr, CheckedPointer, lut, StackArray
 from emberjson.value import Value
 
 from emberserde.deserialize import (
@@ -285,6 +292,12 @@ def _de[
         return deserialize[T](sub)
 
 
+comptime _INLINE_INDEX = 1024
+"""Index slots a cursor holds inline: an input shorter than this by
+`INDEX_SLACK` is indexed without a heap allocation (small documents are
+where one costs most, relative to the parse)."""
+
+
 struct EmberJsonCursor[
     origin: ImmOrigin, options: ParseOptions = ParseOptions()
 ](Movable):
@@ -301,7 +314,10 @@ struct EmberJsonCursor[
     """
 
     var p: Parser[Self.origin, Self.options]
+    # The index lives in `small` when `inline`, else in `positions`.
+    var small: Array[UInt32, _INLINE_INDEX]
     var positions: List[UInt32]
+    var inline: Bool
     # Ascending offsets of every backslash; `bs_i` indexes the first one
     # the (monotonic) string reads have not yet passed, `next_bs` is its
     # offset (`Int.MAX` once none remain).
@@ -343,21 +359,36 @@ struct EmberJsonCursor[
         if unlikely(len(b) == 0):
             b = rebind[Span[Byte, Self.origin]](StaticString(" ").as_bytes())
         self.p = Parser[Self.origin, Self.options](b)
+        self.small = Array[UInt32, _INLINE_INDEX](uninitialized=True)
         self.positions = List[UInt32]()
         self.backslashes = List[UInt32]()
         self.bs_i = 0
-        if index:
+        self.inline = not index or self.p.size + INDEX_SLACK <= _INLINE_INDEX
+        if not index:
+            self.small[0] = 0
+            self.n = 1
+        elif self.inline:
+            self.n = structural_index_into[False](
+                self.p.data.start,
+                self.p.size,
+                self.small.unsafe_ptr(),
+                self.backslashes,
+            )
+        else:
             _ = structural_index_with_flags[False](
                 self.p.data.start, self.p.size, self.positions, self.backslashes
             )
-        else:
-            self.positions.append(0)
-        self.n = len(self.positions)
+            self.n = len(self.positions)
         self.next_bs = Int(self.backslashes.unsafe_ptr()[]) if len(
             self.backslashes
         ) else Int.MAX
-        # The sentinel slot. Offset 0 is in bounds: the input is not empty.
-        self.positions.append(0)
+        # The sentinel slot (the count is at most the input's length, so
+        # an inline index has room). Offset 0 is in bounds: the input is
+        # not empty.
+        if self.inline:
+            self.small.unsafe_ptr()[unsafe_offset=self.n] = 0
+        else:
+            self.positions.append(0)
         self.i = 0
 
     @always_inline
@@ -366,9 +397,16 @@ struct EmberJsonCursor[
         return self.p.data.start[unsafe_offset=off]
 
     @always_inline
+    def entry_off(self, j: Int) -> Int:
+        """Offset of index entry `j` (`j <= n`)."""
+        if self.inline:
+            return Int(self.small.unsafe_ptr()[unsafe_offset=j])
+        return Int(self.positions.unsafe_ptr()[unsafe_offset=j])
+
+    @always_inline
     def peek_off(self) -> Int:
         """Offset of the next unread token (the sentinel's past the end)."""
-        return Int(self.positions.unsafe_ptr()[unsafe_offset=self.i])
+        return self.entry_off(self.i)
 
     @always_inline
     def peek(self) -> Byte:
@@ -491,8 +529,7 @@ struct EmberJsonCursor[
         `i < n`, so `next_ptr()` is on a real token."""
         return (
             self.i + 1 < self.n
-            and Int(self.positions.unsafe_ptr()[unsafe_offset=self.i + 1]) + 16
-            <= self.p.size
+            and self.entry_off(self.i + 1) + 16 <= self.p.size
         )
 
     @always_inline
@@ -653,6 +690,88 @@ struct EmberJsonCursor[
         return s^
 
     @always_inline
+    def check_string(
+        mut self, open: Int, close: Int
+    ) raises DeserializationError:
+        """Validates the string spanning `(open, close)` as `decode_string`
+        reads it, without materializing it."""
+        if self.plain(open + 1, close):
+            if unlikely(self.has_control(open + 1, close)):
+                raise self.string_error(open)
+            return
+        self.seek(open)
+        _ = self.p.expect_string_bytes()
+        if unlikely(ptr_dist(self.p.data.start, self.p.data.p) != close + 1):
+            raise malformed_string()
+
+    def skip_value(mut self) raises DeserializationError:
+        """Consumes one value, validated as the readers validate what they
+        read -- grammar, strings, number and literal syntax, depth -- but
+        token to token along the index, never over the bytes between.
+
+        Iterative, with one bit per open level (set for an object), held
+        to `options.max_depth` counted from the `Parser`'s `depth`."""
+        comptime WORDS = max(1, (Self.options.max_depth + 63) // 64)
+        var objects = StackArray[UInt64, WORDS](fill=0)
+        var open = 0
+        while True:
+            # --- one value ---
+            var b = self.peek()
+            if b == `"`:
+                var span = self.take_string_span()
+                self.check_string(span[0], span[1])
+            elif b == `{` or b == `[`:
+                if unlikely(self.p.depth + open >= Self.options.max_depth):
+                    raise too_deep()
+                self.advance()
+                var first = True
+                if b == `{`:
+                    var key = self.next_field_key(first)
+                    if key[0] >= 0:
+                        self.check_string(key[0], key[1])
+                        objects.unsafe_get(open >> 6) |= UInt64(1) << UInt64(
+                            open & 63
+                        )
+                        open += 1
+                        continue
+                elif self.list_next(first, `]`):
+                    objects.unsafe_get(open >> 6) &= ~(
+                        UInt64(1) << UInt64(open & 63)
+                    )
+                    open += 1
+                    continue
+                # Empty: `list_next`/`next_field_key` left the close.
+                self.advance()
+            elif b == `-` or isdigit(b) or b == `+`:
+                self.take_scalar()
+                self.p._validate_number()
+                self.check_token_end()
+            elif b == `t` or b == `f` or b == `n`:
+                self.take_scalar()
+                self.p._expect_literal()
+                self.check_token_end()
+            elif self.i >= self.n:
+                raise unexpected_eof()
+            else:
+                raise invalid_value(b)
+
+            # --- a value completed: close every container it finished ---
+            while True:
+                if open == 0:
+                    return
+                var top = open - 1
+                var first = False
+                if (objects.unsafe_get(top >> 6) >> UInt64(top & 63)) & 1:
+                    var key = self.next_field_key(first)
+                    if key[0] >= 0:
+                        self.check_string(key[0], key[1])
+                        break
+                elif self.list_next(first, `]`):
+                    break
+                self.advance()
+                open -= 1
+
+    @always_inline
     def read_string(mut self) raises DeserializationError -> String:
         """Reads the string token next in the index."""
         var span = self.take_string_span()
@@ -675,7 +794,6 @@ struct EmberJsonCursor[
         if b == `}`:
             return (-1, -1)
         var i = self.i
-        var e = self.positions.unsafe_ptr().unsafe_offset(i)
         var skip = 0
         var was_first = first
         if not first:
@@ -685,17 +803,17 @@ struct EmberJsonCursor[
             comptime if (
                 StrictOptions.ALLOW_TRAILING_COMMA in Self.options.strict_mode
             ):
-                if i + 1 < self.n and self.byte(Int(e[unsafe_offset=1])) == `}`:
+                if i + 1 < self.n and self.byte(self.entry_off(i + 1)) == `}`:
                     self.i = i + 1
                     return (-1, -1)
         first = False
         if unlikely(i + skip + 3 > self.n):
             raise self.field_key_error(was_first)
-        var open = Int(e[unsafe_offset=skip])
-        var close = Int(e[unsafe_offset=skip + 1])
+        var open = self.entry_off(i + skip)
+        var close = self.entry_off(i + skip + 1)
         if unlikely(
             self.byte(open) != `"`
-            or self.byte(Int(e[unsafe_offset=skip + 2])) != `:`
+            or self.byte(self.entry_off(i + skip + 2)) != `:`
         ):
             raise self.field_key_error(was_first)
         self.i = i + skip + 3
@@ -752,10 +870,6 @@ struct EmberJsonCursor[
                     raise trailing_comma()
         first = False
         return True
-
-    @always_inline
-    def entry_off(self, j: Int) -> Int:
-        return Int(self.positions.unsafe_ptr()[unsafe_offset=j])
 
     def _entry_after_value(self, j: Int) -> Int:
         """The index entry after the (well-formed) value whose first entry
@@ -887,6 +1001,7 @@ struct EmberJsonStructDe[
             return None
         return self.c[].resolve_key[T](span[0], span[1])
 
+    @always_inline
     def expect_field_value[
         T: AnyType
     ](mut self) raises DeserializationError -> T:
@@ -894,7 +1009,7 @@ struct EmberJsonStructDe[
         return _de[T](sub)
 
     def skip_value(mut self) raises DeserializationError:
-        _skip_value(self.c[])
+        self.c[].skip_value()
 
     @always_inline
     def end(mut self) raises DeserializationError:
@@ -961,15 +1076,6 @@ struct EmberJsonEnumDe[
             raise expected_single_key()
         self.c[].advance()
         self.c[].p.depth -= 1
-
-
-def _skip_value[
-    origin: ImmOrigin, options: ParseOptions
-](mut c: EmberJsonCursor[origin, options]) raises DeserializationError:
-    """Consumes one value with the `Parser`'s validating skip."""
-    c.seek_next()
-    c.p.skip_value()
-    c.skip_past(ptr_dist(c.p.data.start, c.p.data.p))
 
 
 @fieldwise_init
