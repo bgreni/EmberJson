@@ -257,7 +257,7 @@ def test_struct_keys() raises:
 
 
 def test_struct_reordered() raises:
-    # Keys out of declaration order take the framework's driver.
+    # Keys out of declaration order.
     _check[Pair]('{"b":1 "a":2}')
     _check[Pair]('{"b":1,}')
     _check[Pair]('{"b":1,"a":2')

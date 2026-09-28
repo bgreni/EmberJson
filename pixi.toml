@@ -27,6 +27,7 @@ gen_jsonl = "mojo -D ASSERT=all -D GEN_JSONL fuzz.mojo"
 gen_large = "python tools/gen_large_datasets.py"
 check_lock_compilers = "python tools/check_lock_compilers.py"
 float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
+demo = { cmd = "mojo -I . reflection_demo.mojo" }
 
 [dependencies]
 mojo = "==1.1.0"

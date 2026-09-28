@@ -65,7 +65,6 @@ from emberjson.utils import BytePtr, CheckedPointer, lut
 from emberjson.value import Value
 
 from emberserde.deserialize import (
-    _prepend_field,
     BorrowingDeserializer,
     Deserializable,
     RawKind,
@@ -76,15 +75,12 @@ from emberserde.deserialize import (
     TupleDerState,
     EnumDerState,
     deserialize,
-    deserialize_struct,
 )
 from emberserde.error import DeserializationError
 from emberserde.field_meta import (
     field_index,
     wire_field_names,
     FieldMeta,
-    static_wire_name,
-    _eq_static,
 )
 from std.reflection import reflect
 from std.builtin.rebind import downcast
@@ -287,21 +283,6 @@ def _de[
         return T.deserialize(sub)
     else:
         return deserialize[T](sub)
-
-
-def _ordered_ok[T: AnyType]() -> Bool:
-    """Whether `EmberJsonDeserializer.expect_struct` may read `T` in
-    declaration order: no field is skipped or aliased and no name holds a
-    control byte, so a plain key equal to field `i`'s wire name is exactly
-    a key `field_index` resolves to `i` and `resolve_key` lets through."""
-    comptime r = reflect[T]
-    comptime for i in range(r.field_count()):
-        comptime FT = r.field_types()[i]
-        comptime if conforms_to(FT, FieldMeta):
-            comptime FM = downcast[FT, FieldMeta]
-            comptime if FM.serde_skip or FM.serde_extra:
-                return False
-    return not _names_have_control[T]()
 
 
 struct EmberJsonCursor[
@@ -1013,91 +994,6 @@ struct EmberJsonDeserializer[
         Self.origin, Self.options, Self.ptr_origin
     ]
     comptime Value = Value
-
-    def expect_struct[
-        T: Deinitable
-    ](mut self, out result: T) raises DeserializationError:
-        """Reads `T` in one pass when its keys arrive in declaration order,
-        as machine-written JSON's do: each key is one compare against its
-        field's wire name, with no name lookup or duplicate tracking. Any
-        other shape (reordered, missing, extra or escaped keys) rewinds to
-        the `{` and runs the framework's driver, so its semantics hold."""
-        comptime if conforms_to(T, Defaultable & Movable) and _ordered_ok[T]():
-            ref c = self.c[]
-            var i = c.i
-            var bs_i = c.bs_i
-            var next_bs = c.next_bs
-            var depth = c.p.depth
-            result = T()
-            if self._read_ordered[T](result):
-                return
-            c.i = i
-            c.bs_i = bs_i
-            c.next_bs = next_bs
-            c.p.depth = depth
-            result = self._driver_struct[T]()
-        else:
-            result = deserialize_struct[T](self)
-
-    @always_inline
-    def _read_ordered[
-        T: AnyType
-    ](mut self, mut result: T) raises DeserializationError -> Bool:
-        """Fills `result`'s fields from keys in declaration order; False
-        (at a key) when they are not. A raise is one the driver would
-        raise at the same value, having read the same keys before it, and
-        carries the same path: the failing field's declared name is
-        prepended exactly as `deserialize_struct` prepends it."""
-        comptime r = reflect[T]
-        comptime names = r.field_names()
-        self.c[].expect_open(`{`)
-        self.c[].p.enter_container()
-        var first = True
-        comptime for i in range(r.field_count()):
-            var span = self.c[].next_field_key(first)
-            var start = span[0] + 1
-            if unlikely(span[0] < 0 or not self.c[].plain(start, span[1])):
-                return False
-            comptime W = static_wire_name[T, r.field_types()[i], names[i]]()
-            if unlikely(
-                not _eq_static[W](
-                    StringSlice(
-                        unsafe_from_utf8=Span(
-                            unsafe_ptr=self.c[].p.data.start.unsafe_offset(
-                                start
-                            ),
-                            length=span[1] - start,
-                        )
-                    )
-                )
-            ):
-                return False
-            comptime assert conforms_to(
-                r.field_types()[i], Base
-            ), "field types must be Movable & Deinitable"
-            var sub = EmberJsonDeserializer(c=self.c)
-            # A handler per field, so the name to prepend is a constant and
-            # the hot path tracks nothing.
-            try:
-                r.field_ref[i](result) = _de[
-                    downcast[r.field_types()[i], Base]
-                ](sub)
-            except e:
-                comptime declared_name = names[i]
-                _prepend_field(e, declared_name)
-                raise e^
-        if unlikely(self.c[].next_field_key(first)[0] >= 0):
-            return False
-        self.c[].expect(`}`, `}`)
-        self.c[].p.depth -= 1
-        return True
-
-    @no_inline
-    def _driver_struct[
-        T: Deinitable
-    ](mut self) raises DeserializationError -> T:
-        # Out of line: only structs whose keys are out of order get here.
-        return deserialize_struct[T](self)
 
     def expect_bool(mut self) raises DeserializationError -> Bool:
         self.c[].take_scalar()

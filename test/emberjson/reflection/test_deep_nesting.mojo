@@ -95,8 +95,7 @@ comptime O16 = ParseOptions(max_depth=16)
 
 def test_custom_limit_reflection() raises:
     _ = from_json[Node, O16](_nested(8, ""))
-    # Keys out of order: the deserializer's in-order read enters each `{`,
-    # then rewinds to the framework's driver, which enters it again.
+    # Keys out of declaration order.
     var rev = String()
     for _ in range(8):
         rev += '{"kids":['
@@ -105,6 +104,18 @@ def test_custom_limit_reflection() raises:
     _ = from_json[Node, O16](rev)
     var d17 = "[" + _nested(8, "") + "]"
     assert_true(_is_depth_error[List[Node], O16](d17))
+
+
+def test_late_key_mismatch_is_linear() raises:
+    # An unknown key after `kids` once made an in-order fast path read the
+    # whole subtree, rewind, and read it again: 2^depth work. 40 levels
+    # would never finish.
+    var s = String()
+    for _ in range(40):
+        s += '{"v":1,"kids":['
+    for _ in range(40):
+        s += '],"x":0}'
+    _ = from_json[Node](s)
 
 
 def test_custom_limit_value_and_document() raises:
