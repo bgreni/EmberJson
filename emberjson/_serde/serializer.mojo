@@ -14,7 +14,6 @@ from emberjson.utils import write_escaped_string
 from emberjson.constants import `"`, `\\`
 from std.collections.string.string_span import get_static_string
 from std.format._utils import _FlushingWriteBuffer
-from std.reflection import reflect
 
 # JSON `Serializer` format over an arbitrary `Writer`, ported to sit on top
 # of emberserde's format-agnostic traits (`emberserde/emberserde/serialize/
@@ -189,10 +188,7 @@ struct EmberJsonStructSer[
     ](
         mut self, field_name: StringSlice, v: Some[AnyType]
     ) raises SerializationError:
-        comptime r = reflect[T]
-        comptime NAME = static_wire_name[
-            T, r.field_types()[idx], r.field_names()[idx]
-        ]()
+        comptime NAME = static_wire_name[T, idx]()
         assert (
             field_name == NAME
         ), "serialize_field: field_name must be the resolved wire name"

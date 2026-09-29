@@ -65,7 +65,9 @@ All JSON data is represented as this unified type.
   constructors; `test/emberjson/test_error_parity.mojo` checks that they
   raise the same error for the same malformed input
 - **`emberjson/teju/`** — Teju Jagua float-to-string algorithm (large lookup tables in `tables.mojo`)
-- **`emberjson/schema.mojo`** — JSON Schema validation
+- **`emberjson/schema.mojo`** — the `coerce_*` functions for emberserde's
+  `Transform`; field validation, clamping and redaction are emberserde
+  annotations (`@__annotation(Range(0, 10))`), re-exported from `emberjson`
 - **`emberjson/_pointer.mojo`** — RFC 6901 JSON Pointer
 - **`emberjson/patch/`** — RFC 6902 JSON Patch
 - **`emberjson/lazy.mojo`** — lazy/deferred parsing

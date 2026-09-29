@@ -84,13 +84,13 @@ from emberserde.deserialize import (
     deserialize,
 )
 from emberserde.error import DeserializationError
+from emberserde.field import Alias
 from emberserde.field_meta import (
+    field_annotations,
     field_index,
     wire_field_names,
-    FieldMeta,
 )
 from std.reflection import reflect
-from std.builtin.rebind import downcast
 from emberjson.simd import SIMD8_WIDTH
 from emberserde.utils import Base
 from std.collections.string.string_span import get_static_string
@@ -263,15 +263,13 @@ def _names_have_control[T: AnyType]() -> Bool:
     """Whether any name a wire key of `T` can match -- a field's wire name
     or one of its aliases -- holds a byte below 0x20."""
     var names = wire_field_names[T]()
-    comptime r = reflect[T]
-    comptime for i in range(r.field_count()):
-        comptime FT = r.field_types()[i]
-        comptime if conforms_to(FT, FieldMeta):
-            comptime FM = downcast[FT, FieldMeta]
-            comptime if FM.serde_extra:
-                comptime extra = FM.serde_extra.value()
-                comptime for j in range(len(extra)):
-                    names.append(String(get_static_string[extra[j]]()))
+    comptime for i in range(reflect[T].field_count()):
+        comptime anns = field_annotations[T, i]
+        comptime Ts = type_of(anns).Ts
+        comptime for j in range(Ts.length):
+            comptime if Ts[j] == Alias:
+                comptime al = rebind[Alias](anns[j]).name
+                names.append(String(al))
     for name in names:
         for b in name.as_bytes():
             if b < 0x20:

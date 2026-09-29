@@ -1,7 +1,7 @@
 from std.testing import assert_equal, TestSuite
 from emberjson._serde import to_json
 from emberjson import Value, Object, Array, Null, from_json
-from emberjson import to_json_pretty, Field
+from emberjson import to_json_pretty, Rename, Skip
 from std.hashlib import Hasher
 
 
@@ -300,25 +300,34 @@ struct _KeyPlain(Movable):
 @fieldwise_init
 struct _KeyRenamed(Movable):
     var a: Int
-    var b: Field[Int, rename=String("bee"), default=7]
+
+    @__annotation(Rename("bee"))
+    var b: Int
 
 
 @fieldwise_init
 struct _KeyNeedsEscape(Movable):
-    var a: Field[Int, rename=String('q"t\\s'), default=0]
-    var b: Field[Int, rename=String("tab\there"), default=0]
+    @__annotation(Rename('q"t\\s'))
+    var a: Int
+
+    @__annotation(Rename("tab\there"))
+    var b: Int
 
 
 @fieldwise_init
 struct _KeyMixedPlainEscaped(Movable):
     var first: Int
-    var middle: Field[Int, rename=String('q"t'), default=0]
+
+    @__annotation(Rename('q"t'))
+    var middle: Int
+
     var last: Int
 
 
 @fieldwise_init
 struct _KeySkipped(Movable):
-    var gone: Field[Int, skip=True, default=0]
+    @__annotation(Skip())
+    var gone: Int
     var kept: Int
 
 
@@ -327,15 +336,12 @@ def test_struct_keys_compact() raises:
 
 
 def test_struct_renamed_key_compact() raises:
-    var v = _KeyRenamed(1, Field[Int, rename=String("bee"), default=7](2))
+    var v = _KeyRenamed(1, 2)
     assert_equal(to_json(v), String('{"a":1,"bee":2}'))
 
 
 def test_struct_key_needing_escape_falls_back() raises:
-    var v = _KeyNeedsEscape(
-        Field[Int, rename=String('q"t\\s'), default=0](1),
-        Field[Int, rename=String("tab\there"), default=0](2),
-    )
+    var v = _KeyNeedsEscape(1, 2)
     assert_equal(to_json(v), String('{"q\\"t\\\\s":1,"tab\\there":2}'))
 
 
@@ -343,14 +349,12 @@ def test_struct_mixed_plain_and_escaped_keys_compact() raises:
     # plain, escape-needing, plain field names in a row: pins the `first`/
     # comma handoff between the fast (comptime-literal) key path and the
     # escaping fallback path in `EmberJsonStructSer.serialize_field`.
-    var v = _KeyMixedPlainEscaped(
-        1, Field[Int, rename=String('q"t'), default=0](2), 3
-    )
+    var v = _KeyMixedPlainEscaped(1, 2, 3)
     assert_equal(to_json(v), String('{"first":1,"q\\"t":2,"last":3}'))
 
 
 def test_struct_skipped_first_field_has_no_leading_comma() raises:
-    var v = _KeySkipped(Field[Int, skip=True, default=0](5), 3)
+    var v = _KeySkipped(5, 3)
     assert_equal(to_json(v), String('{"kept":3}'))
 
 

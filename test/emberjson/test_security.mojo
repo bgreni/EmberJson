@@ -10,7 +10,7 @@ from emberjson import (
     to_json,
     minify,
     PointerIndex,
-    CoerceString,
+    coerce_string,
 )
 from emberjson._pointer import resolve_pointer, parse_int
 from emberjson._serde import from_json as _serde_from_json
@@ -135,16 +135,16 @@ def test_h3_leading_plus_in_number() raises:
 
 
 # ===========================================================================
-# [L-3] CoerceString converts JSON null to the string "null"
-# Callers expecting CoerceString to always return meaningful user data may be
+# [L-3] coerce_string converts JSON null to the string "null"
+# Callers expecting coerce_string to always return meaningful user data may be
 # surprised; null should raise or produce an Optional.
 # ===========================================================================
 
 
 def test_l3_coerce_string_null() raises:
-    var cs = from_json[CoerceString]("null")
+    var cs = coerce_string(from_json[Value]("null"))
     # Documents the current buggy value; correct behaviour would be to raise.
-    assert_equal(cs.value, "null")
+    assert_equal(cs, "null")
 
 
 # ===========================================================================
