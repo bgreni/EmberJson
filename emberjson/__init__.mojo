@@ -53,38 +53,36 @@ from ._deserialize.query import parse_pointer, try_parse_pointer
 from ._utf8 import is_valid_utf8
 
 from .schema import (
-    Range,
-    ExclusiveRange,
-    Size,
-    NonEmpty,
-    StartsWith,
-    EndsWith,
-    OneOf,
-    AnyOf,
-    NoneOf,
-    Enum,
-    AllOf,
-    Eq,
-    Ne,
-    Not,
-    Unique,
-    Validated,
-    Validator,
-    Secret,
-    Clamp,
-    Coerce,
-    CoerceInt,
-    CoerceUInt,
-    CoerceFloat,
-    CoerceString,
-    Default,
-    Transform,
-    MultipleOf,
+    coerce_int,
+    coerce_uint,
+    coerce_float,
+    coerce_string,
 )
 
-# `Default` is now emberserde's `Field[T, default=...]`; re-export the
-# upstream names so the wrapper can be spelled either way.
-from emberserde import Defaulted, Field
+# emberserde's field annotations and checks, so
+# `@__annotation(Rename("b"), Range(0, 10))` needs only the `emberjson`
+# import.
+from emberserde import (
+    Alias,
+    AnyOf,
+    Default,
+    Enum,
+    Eq,
+    FieldCheck,
+    NonEmpty,
+    NoneOf,
+    Not,
+    OneOf,
+    Range,
+    Rename,
+    SerializeWith,
+    Size,
+    Skip,
+    Transform,
+    Unique,
+    Validate,
+    clamp,
+)
 
 # Typed errors that the public API (`from_json`, `try_from_json`,
 # `to_json`, `to_json_pretty`) raises instead of a bare `Error` (see the

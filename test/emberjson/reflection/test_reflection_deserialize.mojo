@@ -210,8 +210,9 @@ def test_unexpected() raises:
         var b = from_json[Baz]('{"c": 230}')
 
 
+@__annotation(DenyUnknownFields())
 @fieldwise_init
-struct StrictBaz(DenyUnknownFields, Movable):
+struct StrictBaz(Movable):
     var a: Int
     var b: Int
 
@@ -226,8 +227,8 @@ def test_unexpected_keys() raises:
     # BEHAVIOR CHANGE (Task 8). This used to assert that ANY wire key with
     # no matching field is rejected -- the deleted walker's
     # `raise Error("Unexpected field: ", ...)`. emberserde's `expect_struct`
-    # skips an unbound key unless the target type conforms to
-    # `DenyUnknownFields` (see the test above), so the same input now
+    # skips an unbound key unless the target type is annotated with
+    # `DenyUnknownFields()` (see the test above), so the same input now
     # deserializes cleanly and every declared field still binds correctly.
     # The three `extra_*` keys below (scalar, array-with-nested-object, and
     # deeply nested object) are kept because skipping them exercises

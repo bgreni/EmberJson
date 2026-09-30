@@ -329,8 +329,8 @@ def main() raises:
 
 A wire field matching no declared struct field is **skipped** by default. It
 is still fully validated on the way past — skipping is a real parse, not a
-blind hop — but it no longer fails the deserialization. Conform the struct
-to `DenyUnknownFields` to reject it instead:
+blind hop — but it no longer fails the deserialization. Annotate the struct
+with `DenyUnknownFields()` to reject it instead:
 
 ```mojo
 from emberjson import from_json
@@ -345,8 +345,9 @@ struct Loose(Defaultable, Movable):
         self.x = 0
 
 
+@__annotation(DenyUnknownFields())
 @fieldwise_init
-struct Strict(DenyUnknownFields, Defaultable, Movable):
+struct Strict(Defaultable, Movable):
     var x: Int
 
     def __init__(out self):
@@ -490,42 +491,49 @@ format, not only JSON.
 
 #### Wire-level field control
 
-`Field[T, ...]` attaches wire metadata to a single field: a different wire
-name (`rename`), extra accepted names (`extra_names`), a fallback for an
-absent key (`default`), or exclusion from the wire entirely (`skip`).
-`Defaulted`, `Rename` and `Skip` are aliases for the common single-knob
-cases. Read the payload back with `[]`.
+emberserde's field annotations attach wire metadata to a single field with
+`@__annotation(...)`: a different wire name (`Rename`), an extra accepted name
+(`Alias`, repeat for more), a fallback for an absent key (`Default`), exclusion
+from the wire entirely (`Skip`), or a `def(T) -> Bool` check run after the read
+(`Validate`, failure raises `InvalidValue`). The field keeps its own type, so
+there is nothing to unwrap.
 
 ```mojo
-from emberjson import from_json, to_json, Field, Defaulted
+from emberjson import from_json, to_json, Default, Rename, Skip
 
 
-# `Defaultable` because the payloads have non-trivial destructors: the
+# `Defaultable` because the fields have non-trivial destructors: the
 # framework only claims an unwritten struct in place when every field is
 # trivially destructible, otherwise it wants a real default to fill in.
 @fieldwise_init
 struct Config(Defaultable, Movable):
-    var host: Field[String, rename="hostname"]
-    var port: Defaulted[Int, 8080]
-    var cache: Field[String, skip=True]
+    @__annotation(Rename("hostname"))
+    var host: String
+
+    @__annotation(Default(8080))
+    var port: Int
+
+    @__annotation(Skip())
+    var cache: String
 
     def __init__(out self):
         self.host = {}
-        self.port = {}
+        self.port = 0
         self.cache = {}
 
 
 def main() raises:
     var c = from_json[Config]('{"hostname": "localhost"}')
-    print(c.host[])          # prints localhost
-    print(c.port[])          # prints 8080 -- the key was absent
+    print(c.host)            # prints localhost
+    print(c.port)            # prints 8080 -- the key was absent
     print(to_json(c))        # prints {"hostname":"localhost","port":8080}
 ```
 
-> `default` fires on an **absent key** only. An explicit `null` is a present
-> value and is parsed as `T`. Wrap the payload in `Optional` —
-> `Defaulted[Optional[Int], Optional[Int](42)]` — when `null` should be
-> tolerated too.
+> `Default` fires on an **absent key** only. An explicit `null` is a present
+> value and is parsed as `T`. Make the field `Optional` —
+> `@__annotation(Default(Optional[Int](42))) var n: Optional[Int]` — when
+> `null` should be tolerated too. The default's type must match the field's
+> exactly (`Default(Int64(3))` on an `Int64`).
 
 ### Mixing eager and lazy fields
 
@@ -552,177 +560,146 @@ print(e.payload.get())       # parses just this subtree, now
 
 ### Schema Validation
 
-EmberJson provides compile-time schema validation types that enforce constraints during both construction and deserialization. Validators wrap a value and raise on constraint violations. All validators integrate with `to_json`/`from_json` and can be used as struct field types.
-
-Access the validated value with `[]`:
-
-```mojo
-from emberjson import *
-
-var port = Range[Int, 1, 65535](8080)
-print(port[])  # prints 8080
-
-var port2 = from_json[Range[Int, 1, 65535]]("443")
-print(port2[])  # prints 443
-```
-
-#### Validators
-
-| Validator | Description | Example |
-| ----------- | ------------- | ------- |
-| `Range[T, min, max]` | Inclusive range (`min <= value <= max`) | `Range[Int, 0, 100]` |
-| `ExclusiveRange[T, min, max]` | Exclusive range (`min < value < max`) | `ExclusiveRange[Float64, 0.0, 1.0]` |
-| `Size[T, min, max]` | Length/size constraint | `Size[String, 1, 255]` |
-| `NonEmpty[T]` | Non-empty check | `NonEmpty[List[Int]]` |
-| `StartsWith[prefix]` | String prefix check | `StartsWith["https://"]` |
-| `EndsWith[suffix]` | String suffix check | `EndsWith[".json"]` |
-| `Eq[value]` | Equality check | `Eq[42]` |
-| `Ne[value]` | Inequality check | `Ne["forbidden"]` |
-| `MultipleOf[base]` | Divisibility check | `MultipleOf[Int64(10)]` |
-| `Unique[T]` | All elements unique | `Unique[List[Int]]` |
-| `Enum[*values]` | Set membership (element type is inferred) | `Enum["red", "green", "blue"]` |
+Field validation comes from emberserde's annotations, re-exported by
+`emberjson`. Checks run on struct fields during `from_json`. A failure raises
+`DeserializationError` with kind `InvalidValue`, the check's message, and the
+field's path. Fields keep their own types.
 
 ```mojo
 from emberjson import *
 
-# Validate on deserialization
-var name = from_json[NonEmpty[String]]('"Alice"')
 
-# Validate on construction
-var score = Range[Float64, 0.0, 100.0](95.5)
+# A check on the struct itself relates fields; it runs once every field is
+# read.
+@__annotation(
+    Validate(
+        lambda (c: Cfg) -> Bool: c.env != "prod" or c.level != 0,
+        "prod needs a level",
+    )
+)
+@fieldwise_init
+struct Cfg(Defaultable, Movable):
+    @__annotation(Range(1, 65535, msg="bad port"))
+    var port: Int
 
-# Enum-style validation (the element type is inferred from the values)
-comptime Color = Enum["red", "green", "blue"]
-var c = from_json[Color]('"red"')
-print(c[])  # prints red
+    @__annotation(NonEmpty(), Size(1, 64))
+    var host: String
+
+    @__annotation(Enum["dev", "prod"]())
+    var env: String
+
+    @__annotation(AnyOf(Eq(0), Range(10, 20)))
+    var level: Int
+
+    def __init__(out self):
+        self.port = 0
+        self.host = String()
+        self.env = String()
+        self.level = 0
+
+
+def main() raises:
+    var cfg = from_json[Cfg]('{"port": 8080, "host": "localhost", "env": "prod", "level": 15}')
+    print(cfg.port)  # prints 8080
+    try:
+        _ = from_json[Cfg]('{"port": 0, "host": "h", "env": "dev", "level": 0}')
+    except e:
+        print(e)  # prints at .port: bad port (InvalidValue)
 ```
 
-#### Composing Validators
+| Check | Passes when | Default message |
+| --- | --- | --- |
+| `Validate(f)` | `f(value)` is `True` | Validation failed |
+| `Range(min, max)` | `min <= value <= max` | Value out of range |
+| `Eq(value)` | equal to `value` | Value is not equal |
+| `Enum[a, b, ...]()` | equal to one of the listed values | Value not in options |
+| `Size(min, max)` | length within bounds (`String` counts bytes) | Value out of size range |
+| `NonEmpty()` | length above zero | Value must not be empty |
+| `Unique()` | no two elements equal | Values are not unique |
+| `Not(check)` | `check` fails | Expected validator to fail |
+| `AnyOf(c1, c2, ...)` | at least one check passes | Value not in options |
+| `OneOf(c1, c2, ...)` | exactly one check passes | Value must match exactly one option |
+| `NoneOf(c1, c2, ...)` | no check passes | Value matched a rejected validator |
 
-Combine validators for complex constraints:
+Every check takes an optional trailing `msg`, as in
+`Range(1, 65535, msg="bad port")` or `Validate(f, "must be even")`. Several
+checks on one field must all pass, and run in order. A check carrying a value
+(`Validate`, `Range`, `Eq`, `Enum`) must match the field's type exactly:
+`Range(Int64(0), Int64(10))` on an `Int64`. A value filled in by `Default` for
+a missing key is not checked. `Unique` compares every pair, so it is O(n²);
+on untrusted input bound the length first, as in
+`@__annotation(Size(0, 1000), Unique())` (checks run in order). To write your
+own check, conform to `FieldCheck` (see emberserde's README).
 
-```mojo
-from emberjson import *
-
-# AllOf: ALL validators must pass
-var v = from_json[
-    AllOf[String, Size[String, 3, 7], StartsWith["a"]]
-]('"astring"')
-
-# OneOf: EXACTLY one validator must pass
-var o = from_json[
-    OneOf[String, Eq["red"], Eq["green"], Eq["blue"]]
-]('"red"')
-
-# AnyOf: AT LEAST one validator must pass
-var a = from_json[
-    AnyOf[Int, Eq[1], Eq[2], Range[Int, 10, 20]]
-]("15")
-
-# NoneOf: NO validators must pass
-var n = from_json[
-    NoneOf[Int, Range[Int, 0, 5], Eq[100]]
-]("7")
-
-# Not: invert any validator
-var x = from_json[Not[Int, Range[Int, 0, 10]]]("15")
-```
+> Checks only run on struct fields while deserializing. Top-level values,
+> collection elements and values you build yourself are not checked. A check
+> on an `Optional` field fails to compile; write a `Validate` over the
+> `Optional` instead.
 
 #### Data Transformers
 
-Transformers modify values during deserialization or serialization:
+`Transform(f)` reads the wire value as `f`'s argument type and stores
+`f(value)` in the field. It runs on read only: the field is written back as
+its own type. `coerce_int`, `coerce_uint`, `coerce_float` and `coerce_string`
+pair with it to accept a number, a numeric string and so on; they take a
+`Value`, so your own `def(Value) raises -> T` works the same way.
+`Transform(clamp[lo, hi])` pulls an out-of-range value into range instead of
+rejecting it. `SerializeWith(f)` is the write-side twin: the field is read as
+sent and written as `f(value)`, which is how to redact a secret.
 
 ```mojo
 from emberjson import *
 
-# Default: use a fallback value when the field is missing from the object.
-# `Default[T, d]` is emberserde's `Field[T, default=d]`, so the fallback
-# fires on an ABSENT KEY only -- an explicit `null` is a present value and
-# is parsed as `T` (see the struct example below). Wrap the payload in
-# `Optional` when `null` should be tolerated too:
-#   Defaulted[Optional[Int], Optional[Int](42)]
-var d = from_json[Default[Int, 42]]("7")
-print(d[])  # prints 7
 
-# Secret: deserializes normally, serializes as "********"
-var pw = from_json[Secret[String]]('"my_password"')
-print(pw[])         # prints my_password
-print(to_json(pw))  # prints "********"
-
-# Clamp: constrains value to a range instead of rejecting
-var c = from_json[Clamp[Int, 0, 100]]("150")
-print(c[])  # prints 100 (clamped to max)
-
-# CoerceInt/CoerceFloat/CoerceString: type coercion from JSON
-var i = from_json[CoerceInt]('"123"')
-print(i[])  # prints 123 (coerced from string)
-
-# Transform: apply a function during deserialization
 def date_to_epoch(s: String) -> Int:
     if s == "2024-01-01":
         return 1704067200
     return 0
 
-var epoch = from_json[Transform[String, Int, date_to_epoch]]('"2024-01-01"')
-print(epoch[])  # prints 1704067200
-```
 
-#### Using Validators in Structs
+def redact(s: String) -> String:
+    return "********"
 
-Validators work as struct field types, enforcing constraints during deserialization:
-
-```mojo
-from emberjson import *
-
-struct Config(Movable):
-    var port: Range[Int, 1, 65535]
-    var retries: Range[Int, 0, 10]
-    var timeout: Default[Int, 30]
-
-def main() raises:
-    var cfg = from_json[Config]('{"port": 8080, "retries": 3}')
-    print(cfg.port[])      # prints 8080
-    print(cfg.retries[])   # prints 3
-    print(cfg.timeout[])   # prints 30 (default, since missing from JSON)
-    print(to_json(cfg))    # prints {"port":8080,"retries":3,"timeout":30}
-```
-
-> **Current limitation:** a validator field whose wrapped type has a
-> non-trivial destructor (e.g. `NonEmpty[String]`, `Secret[String]`) cannot
-> be used as a struct field yet. Deserializing such a struct requires it to
-> be `Defaultable`, but validators only expose a raising constructor, so a
-> non-raising `__init__` cannot build one. Validators wrapping trivially
-> destructible types (`Int`, `Float64`, `Bool`, …) work as shown above, and
-> `from_json[NonEmpty[String]](...)` works fine on its own.
-
-#### Cross-Field Validation
-
-Validate relationships between fields of a struct:
-
-```mojo
-from emberjson import *
-from emberjson.schema import CrossFieldValidator
 
 @fieldwise_init
-struct DateRange(Defaultable, Movable):
-    var start: Int
-    var end: Int
+struct Event(Defaultable, Movable):
+    @__annotation(Transform(date_to_epoch))
+    var epoch: Int
+
+    @__annotation(Transform(coerce_int))  # 5, 5.0 and "5" all bind 5
+    var retries: Int64
+
+    @__annotation(SerializeWith(redact))  # read as sent, written as "********"
+    var password: String
+
+    @__annotation(Transform(clamp[0, 100]))  # clamped instead of rejected
+    var volume: Int
 
     def __init__(out self):
-        self.start = 0
-        self.end = 0
+        self.epoch = 0
+        self.retries = 0
+        self.password = String()
+        self.volume = 0
 
-def validate_order(start: Int, end: Int) raises:
-    if start >= end:
-        raise Error("start must be before end")
 
 def main() raises:
-    var dr = from_json[
-        CrossFieldValidator[DateRange, "start", "end", validate_order]
-    ]('{"start": 1, "end": 10}')
-    print(dr[].start)  # prints 1
-    print(dr[].end)    # prints 10
+    var e = from_json[Event]('{"epoch": "2024-01-01", "retries": "3", "password": "hunter2", "volume": 150}')
+    print(e.epoch)       # prints 1704067200
+    print(e.retries)     # prints 3
+    print(e.password)    # prints hunter2
+    print(e.volume)      # prints 100
+    print(to_json(e))
+    # prints {"epoch":1704067200,"retries":3,"password":"********","volume":100}
 ```
+
+> **Coming from the wrapper validators?** `Range[Int, 0, 10]` fields become
+> `@__annotation(Range(0, 10))` on a plain `Int`, and `field[]` becomes
+> `field`. `AllOf` becomes several annotations on one field; `Ne(x)` becomes
+> `Not(Eq(x))`; `ExclusiveRange`, `StartsWith`, `EndsWith` and `MultipleOf`
+> become `Validate(f, msg)`; `CoerceInt` becomes `Transform(coerce_int)`;
+> `Clamp[T, lo, hi]` becomes `Transform(clamp[lo, hi])`; `Secret[T]` becomes
+> `SerializeWith(f)` with a redacting `f`; `CrossFieldValidator` becomes a
+> `Validate` annotation on the struct itself.
 
 ### JSON Pointer
 

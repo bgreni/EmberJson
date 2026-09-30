@@ -25,6 +25,7 @@ AVX2 targets run a differently shaped loop, `_structural_index_x86`
 the loop below unchanged.
 """
 
+from std.benchmark import keep
 from std.bit import count_trailing_zeros, pop_count
 from std.builtin.globals import global_constant
 from std.memory import unsafe_memcpy
@@ -267,6 +268,16 @@ def _structural_index[
             in_string,
             prev_scalar_carry,
         )
+
+        # Workaround: pin this chunk's mask work above the deferred emit.
+        # Since Mojo 1.2.0.dev2026092421 (42b67ce908 raises `range` loops
+        # to `hlcf.for`) the optimizer sinks `combined` below `emit`'s
+        # serial `b &= b - 1` loop, undoing the one-chunk deferral below:
+        # +27% on dense input (Stage1CitmCatalogMinify). `keep` is an empty
+        # asm that reads `combined`, so the work can't move past it. Remove
+        # once the compiler stops sinking work past inner loops.
+        if not __is_run_in_comptime_interpreter:
+            keep(combined[0])
 
         # Deferred output: write the PREVIOUS chunk's structurals so
         # cross-chunk carries have settled.

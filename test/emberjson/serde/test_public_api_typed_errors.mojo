@@ -80,8 +80,9 @@ struct OneField(Copyable, Defaultable, Movable):
         self.known = 0
 
 
+@__annotation(DenyUnknownFields())
 @fieldwise_init
-struct StrictPoint(Copyable, Defaultable, DenyUnknownFields, Movable):
+struct StrictPoint(Copyable, Defaultable, Movable):
     var x: Int
     var y: Int
 
@@ -216,7 +217,7 @@ def test_deserialize_ignores_unknown_field_by_default() raises:
     # emberserde framework `deserialize` now rides
     # (`expect_struct` in `emberserde/deserialize/__init__.mojo`) skips an
     # unbound key instead, and only rejects it when the target type opts in
-    # by conforming to `DenyUnknownFields` -- see the next test. This pins
+    # with `@__annotation(DenyUnknownFields())` -- see the next test. This pins
     # the new default rather than leaving it implicit.
     var p = from_json[Point]('{"x":1,"y":2,"z":3}')
     assert_equal(p.x, 1)
@@ -224,8 +225,8 @@ def test_deserialize_ignores_unknown_field_by_default() raises:
 
 
 def test_deserialize_unknown_field_reports_unknown_field_kind() raises:
-    # The opt-in half of the behavior change above: a type conforming to
-    # `DenyUnknownFields` still gets the old rejection, now with a real
+    # The opt-in half of the behavior change above: a type annotated with
+    # `DenyUnknownFields()` still gets the old rejection, now with a real
     # `UnknownField` kind rather than one reverse-engineered from message
     # text.
     var kind = DerErrorKind.Custom

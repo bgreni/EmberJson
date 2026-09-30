@@ -1,11 +1,11 @@
 [workspace]
 authors = ["Brian Grenier <grenierb96@gmail.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max/", "https://repo.prefix.dev/modular-community"]
+channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 preview = ["pixi-build"]
 description = "A json library for Mojo"
 name = "emberjson"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
-version = "0.4.0"
+version = "0.5.0"
 license = "Apache-2.0"
 license-file = "LICENSE"
 homepage = "https://github.com/bgreni/EmberJson"
@@ -30,30 +30,33 @@ float_round_trip = { cmd = "mojo -D ASSERT=all -I . test_float_roundtrip.mojo" }
 demo = { cmd = "mojo -I . reflection_demo.mojo" }
 
 [dependencies]
-mojo = "==1.1.0"
-emberserde = "==0.1.0"
+# Pinned to a commit so it only moves when this rev is bumped, and so the
+# nightly canary can re-solve emberserde's build environment against a new
+# compiler (`pixi update mojo emberserde`) without also pulling new commits.
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "8a5cde9bb7e838cf1e8e6b753c5594ed612f2aa9" }
+mojo = ">=1.2.0.dev2026092805,<2"
 
 
 
 [package]
 name = "emberjson"
-version = "0.4.0"
+version = "0.5.0"
 
 [package.build]
 backend = { name = "pixi-build-mojo", version = ">=0.2.6,<0.3" }
 
 [package.host-dependencies]
-mojo-compiler = "==1.1.0"
+mojo-compiler = ">=1.2.0.dev2026092805,<2"
 
 # The library imports emberserde throughout (`__init__`, `value`, `object`,
 # `array`, `lazy`, `schema`, `traits`, `_serde/`), so `mojo precompile`
 # needs its `.mojoc` next to the compiler (build env) and consumers need it
 # at run time -- the workspace [dependencies] entry above only covers dev
-# tasks. Keep all three in sync.
+# tasks. Keep all three in sync, `rev` included.
 [package.build-dependencies]
-mojo-compiler = "==1.1.0"
-emberserde = "==0.1.0"
+mojo-compiler = ">=1.2.0.dev2026092805,<2"
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "8a5cde9bb7e838cf1e8e6b753c5594ed612f2aa9" }
 
 [package.run-dependencies]
-mojo-compiler = "==1.1.0"
-emberserde = "==0.1.0"
+mojo-compiler = ">=1.2.0.dev2026092805,<2"
+emberserde = { git = "https://github.com/bgreni/EmberSerde.git", rev = "8a5cde9bb7e838cf1e8e6b753c5594ed612f2aa9" }
