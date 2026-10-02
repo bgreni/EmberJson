@@ -4,14 +4,13 @@
 # each case also runs through
 #   - `Document`, whose tape builder walks bytes below
 #     `PAD_INPUT_THRESHOLD` and the structural index above it;
-#   - a `Lazy` root, captured by the `Parser`'s validating skip;
 #   - reflection into a type that matches the input's shape, which walks
 #     the structural index and reads scalars inline away from the end of
 #     the input;
 # as written, padded with leading whitespace, padded with trailing
 # whitespace (both past the threshold), and as a field (`{"v": ...`), where
-# reflection reads it through a struct and a `Lazy` field. (Reflection also
-# prepends the field path, which is not compared.) The field is followed by
+# reflection reads it through a struct. (Reflection also prepends the field
+# path, which is not compared.) The field is followed by
 # `#`, which no token can take in, rather than by `}`, which could complete
 # a truncated input into a value the target rejects for its shape (`{` into
 # `{}`, a struct missing its fields).
@@ -19,8 +18,13 @@
 # Only malformed JSON is compared, read as the type it is written as: a
 # value of another type is a `TypeMismatch` that only reflection raises,
 # judged by its first byte (`12x` read as a list is a mismatch).
+#
+# A `Lazy` capture counts an array's or object's brackets and validates
+# nothing inside (simdjson On Demand's "validate what you use"), so it is
+# held to `Value`'s verdict, not its error: captured as the root or as a
+# field and then read with `get()`, every malformed input is rejected.
 
-from std.testing import assert_equal, assert_true, TestSuite
+from std.testing import assert_equal, assert_false, assert_true, TestSuite
 from std.collections import Dict
 from std.utils import Variant
 from emberjson import from_json, Value, Document, ParseOptions
@@ -72,15 +76,32 @@ def _same[
     )
 
 
-def _check[
-    T: Base, options: ParseOptions = ParseOptions(), grammar: Bool = True
-](json: String) raises:
-    """`json` is malformed, and every engine rejects it as `Value` does.
+def _lazy_read[options: ParseOptions](json: String, field: Bool) raises:
+    """Captures `json` in a `Lazy` (the root, or `WrapLazy`'s field) and
+    reads it with `get()`."""
+    if field:
+        _ = from_json[WrapLazy[ImmutAnyOrigin], options](
+            StringSlice(json)
+        ).v.get()
+    else:
+        _ = from_json[LazyValue[ImmutAnyOrigin], options](
+            StringSlice(json)
+        ).get()
 
-    `grammar=False`: `json` breaks a limit of materializing a value (a
-    number out of range, a duplicate key), not the grammar. A `Lazy`
-    capture checks only the grammar, and the limit when it is read, so it
-    is left out."""
+
+def _lazy_accepts[options: ParseOptions](json: String, field: Bool) -> Bool:
+    try:
+        _lazy_read[options](json, field)
+    except:
+        return False
+    return True
+
+
+def _check[
+    T: Base, options: ParseOptions = ParseOptions()
+](json: String) raises:
+    """`json` is malformed, and every engine rejects it as `Value` does
+    (`Lazy` in verdict only)."""
     var pad = String()
     for _ in range(PAD_INPUT_THRESHOLD + 8):
         pad += " "
@@ -88,8 +109,10 @@ def _check[
         var want = _outcome[Value, options](input)
         assert_true(want != "accepted", String("Value accepts: ", repr(input)))
         _same[Document, options](input, want, "Document")
-        comptime if grammar:
-            _same[LazyValue[ImmutAnyOrigin], options](input, want, "Lazy")
+        assert_false(
+            _lazy_accepts[options](input, False),
+            String("Lazy accepts: ", repr(input)),
+        )
         _same[T, options](input, want, "reflection")
 
         var field = String('{"v": ', input, "#")
@@ -97,8 +120,10 @@ def _check[
         assert_true(want != "accepted", String("Value accepts: ", repr(field)))
         _same[Document, options](field, want, "Document")
         _same[Wrap[T], options](field, want, "reflection")
-        comptime if grammar:
-            _same[WrapLazy[ImmutAnyOrigin], options](field, want, "Lazy field")
+        assert_false(
+            _lazy_accepts[options](field, True),
+            String("Lazy field accepts: ", repr(field)),
+        )
 
 
 def test_empty() raises:
@@ -157,8 +182,8 @@ def test_numbers() raises:
     comptime F = List[Float64]
     _check[F]("[1.5x]")
     _check[F]("[1.5e+-3]")
-    _check[F, grammar=False]("[1e999]")
-    _check[F, grammar=False]("[-1e999]")
+    _check[F]("[1e999]")
+    _check[F]("[-1e999]")
     _check[F]("[.5]")
     _check[F]("[1.5")
     _check[F]("[1.5,]")
@@ -292,8 +317,8 @@ def test_maps() raises:
     _check[M]('{"a":1,2:3}')
     _check[M]('{"a\x01":1}')
     _check[M]('{"a\\q":1}')
-    _check[M, grammar=False]('{"a":1,"a":2}')
-    _check[M, grammar=False]('{"\\u0061":1,"a":2}')
+    _check[M]('{"a":1,"a":2}')
+    _check[M]('{"\\u0061":1,"a":2}')
 
 
 def test_tuples() raises:
@@ -347,8 +372,8 @@ def _mutations(s: String) -> List[String]:
 
 def test_mutations_across_parsers() raises:
     # The parsers that read any JSON agree on every mutation of these
-    # documents, accepted or not: `Document` exactly, a `Lazy` capture
-    # wherever no materializing limit is involved (see `_check`).
+    # documents, accepted or not: `Document` exactly, a `Lazy` capture and
+    # its `get()` in verdict (see the top of the file).
     var docs: List[String] = [
         '{"a":[1,-2.5e3,true,null],"b":{"c":"x\\n\\u00e9"},"d":[]}',
         '[{"k":"\\uD834\\uDD1E"},[0.5,[false]],"",{}]',
@@ -362,13 +387,11 @@ def test_mutations_across_parsers() raises:
             for input in [m, pad + m, m + pad]:
                 var want = _outcome[Value, ParseOptions()](input)
                 _same[Document, ParseOptions()](input, want, "Document")
-                if not (
-                    want.startswith("DuplicateField")
-                    or want.endswith("Infinite float")
-                ):
-                    _same[LazyValue[ImmutAnyOrigin], ParseOptions()](
-                        input, want, "Lazy"
-                    )
+                assert_equal(
+                    _lazy_accepts[ParseOptions()](input, False),
+                    want == "accepted",
+                    String("Lazy differs from Value on: ", repr(input)),
+                )
                 cases += 1
     assert_true(cases > 1000)
 
@@ -385,7 +408,7 @@ def test_mutations_through_skipped_field() raises:
     # Reflection skips an unknown field's value on the structural index;
     # it agrees with `Value` on every mutation of these documents written
     # as that value, accepted or not, except for the limits a skip does not
-    # check (as a `Lazy` capture). Padded past the index's inline capacity
+    # check. Padded past the index's inline capacity
     # as well, so both index stores are walked.
     var docs: List[String] = [
         '{"a":[1,-2.5e3,true,null],"b":{"c":"x\\n\\u00e9"},"d":[]}',

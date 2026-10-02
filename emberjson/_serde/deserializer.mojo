@@ -96,14 +96,6 @@ from emberserde.utils import Base
 from std.collections.string.string_span import get_static_string
 
 
-trait RawCapture:
-    """A type whose deserialization is one `raw_bytes` capture (`Lazy`).
-    As the root it is read without a structural index (see
-    `EmberJsonCursor.__init__`)."""
-
-    pass
-
-
 # The cursor's errors. Each is detected on the index and the input bytes
 # and raised through the shared `_errors` constructors, deciding between
 # them as the `Value` parser does at the same byte (the parity test holds
@@ -336,9 +328,7 @@ struct EmberJsonCursor[
     def __init__(out self, s: StringSlice[Self.origin]):
         self = Self(s.as_bytes())
 
-    def __init__(
-        out self, var b: Span[Byte, Self.origin], *, index: Bool = True
-    ):
+    def __init__(out self, var b: Span[Byte, Self.origin]):
         """Indexes `b`.
 
         An empty input is read as a lone space, which holds no token, so
@@ -346,13 +336,6 @@ struct EmberJsonCursor[
         a byte to point at. (The constructor does not raise itself: a
         typed-`raises` constructor called from a plain `raises` function
         crashes the Mojo 1.1 compiler.)
-
-        Args:
-            b: The input.
-            index: False skips stage 1 and makes a single entry at offset
-                0, for a root that is one `raw_bytes` capture
-                (`RawCapture`): the `Parser` reads and validates the whole
-                value itself, so an index would only be skipped over.
         """
         if unlikely(len(b) == 0):
             b = rebind[Span[Byte, Self.origin]](StaticString(" ").as_bytes())
@@ -361,11 +344,8 @@ struct EmberJsonCursor[
         self.positions = List[UInt32]()
         self.backslashes = List[UInt32]()
         self.bs_i = 0
-        self.inline = not index or self.p.size + INDEX_SLACK <= _INLINE_INDEX
-        if not index:
-            self.small[0] = 0
-            self.n = 1
-        elif self.inline:
+        self.inline = self.p.size + INDEX_SLACK <= _INLINE_INDEX
+        if self.inline:
             self.n = structural_index_into[False](
                 self.p.data.start,
                 self.p.size,
@@ -701,6 +681,31 @@ struct EmberJsonCursor[
         _ = self.p.expect_string_bytes()
         if unlikely(ptr_dist(self.p.data.start, self.p.data.p) != close + 1):
             raise malformed_string()
+
+    def skip_container(
+        mut self,
+    ) raises DeserializationError -> Span[Byte, Self.origin]:
+        """Consumes the array or object opening at the next token and
+        returns its bytes, found by counting brackets along the index as
+        simdjson On Demand's `skip_child` does. Nothing inside is validated
+        -- not even that the brackets match -- beyond `options.max_depth`:
+        `Lazy.get()` validates the span when it reads it."""
+        var start = self.peek_off()
+        var depth = 0
+        while self.i < self.n:
+            # `[` and `]` are `{` and `}` with bit 5 clear, and no other
+            # byte maps onto either.
+            var b = self.byte(self.peek_off()) | 0x20
+            self.advance()
+            depth += Int(b == `{`) - Int(b == `}`)
+            if depth == 0:
+                return Span(
+                    unsafe_ptr=self.p.data.start.unsafe_offset(start),
+                    length=self.entry_off(self.i - 1) + 1 - start,
+                )
+            if unlikely(self.p.depth + depth > Self.options.max_depth):
+                raise too_deep()
+        raise unexpected_eof()
 
     def skip_value(mut self) raises DeserializationError:
         """Consumes one value, validated as the readers validate what they
@@ -1202,16 +1207,27 @@ struct EmberJsonDeserializer[
     def raw_bytes[
         kind: RawKind
     ](mut self) raises DeserializationError -> Span[Byte, ImmUntrackedOrigin]:
-        # The `Parser`'s extractors capture and validate the span; the
-        # index entries inside it are then dropped.
+        # A container is captured by its brackets alone (`skip_container`);
+        # a scalar, one token, by the `Parser`'s extractors, which validate
+        # it, and its index entry is then dropped.
         ref c = self.c[]
+        comptime if (
+            kind == RawKind.Any or kind == RawKind.Map or kind == RawKind.Seq
+        ):
+            var b = c.peek()
+            comptime if kind == RawKind.Map:
+                if unlikely(b != `{`):
+                    raise c.value_error("an object")
+            elif kind == RawKind.Seq:
+                if unlikely(b != `[`):
+                    raise c.value_error("an array")
+            if b == `{` or b == `[`:
+                return rebind[Span[Byte, ImmUntrackedOrigin]](
+                    c.skip_container()
+                )
         c.seek_next()
         var span: Span[Byte, ImmUntrackedOrigin]
-        comptime if kind == RawKind.Any:
-            span = rebind[Span[Byte, ImmUntrackedOrigin]](
-                c.p.expect_value_bytes()
-            )
-        elif kind == RawKind.Integer:
+        comptime if kind == RawKind.Integer:
             span = rebind[Span[Byte, ImmUntrackedOrigin]](
                 c.p.expect_int_bytes()
             )
@@ -1221,21 +1237,16 @@ struct EmberJsonDeserializer[
             )
         elif kind == RawKind.Str:
             # Anything but a quote where a string was requested is a kind
-            # mismatch. (Whitespace precedes the value only in a cursor
-            # without an index, whose one entry is offset 0.)
-            c.p.skip_whitespace()
+            # mismatch.
             if c.p.peek() != `"`:
                 raise c.p.shape_error("a string")
             span = rebind[Span[Byte, ImmUntrackedOrigin]](
                 c.p.expect_string_bytes()
             )
-        elif kind == RawKind.Seq:
-            span = rebind[Span[Byte, ImmUntrackedOrigin]](
-                c.p.expect_array_bytes()
-            )
         else:
+            # `Any` on a scalar (every `Map`/`Seq` returned above).
             span = rebind[Span[Byte, ImmUntrackedOrigin]](
-                c.p.expect_object_bytes()
+                c.p.expect_value_bytes()
             )
         c.skip_past(ptr_dist(c.p.data.start, c.p.data.p))
         return span
@@ -1287,17 +1298,9 @@ def from_json_bytes[
     options: ParseOptions = ParseOptions(),
 ](b: Span[Byte, o], out result: T) raises DeserializationError:
     """`from_json` over bytes, such as a span `Lazy` captured."""
-    comptime if conforms_to(T, RawCapture):
-        var c = EmberJsonCursor[o, options](b, index=False)
-        var d = EmberJsonDeserializer(c=Pointer(to=c))
-        result = deserialize[T](d)
-        c.p.skip_whitespace()
-        if unlikely(c.p.has_more()):
-            raise c.p.trailing_error()
-    else:
-        var c = EmberJsonCursor[o, options](b)
-        var d = EmberJsonDeserializer(c=Pointer(to=c))
-        result = deserialize[T](d)
-        # Every structural consumed: nothing but whitespace after the root.
-        if unlikely(c.i != c.n):
-            raise c.trailing_error()
+    var c = EmberJsonCursor[o, options](b)
+    var d = EmberJsonDeserializer(c=Pointer(to=c))
+    result = deserialize[T](d)
+    # Every structural consumed: nothing but whitespace after the root.
+    if unlikely(c.i != c.n):
+        raise c.trailing_error()

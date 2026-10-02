@@ -366,21 +366,6 @@ def test_reject_comment() raises:
         _ = from_json[Value](s)
 
 
-def test_expect_object_bytes() raises:
-    var s = String('{"a": 1, "b": {"c": 2}}')
-    var p = Parser(s)
-    var span = p.expect_object_bytes()
-    var span_len = len(span)
-    # Correct length is full string
-    assert_equal(span_len, s.byte_length())
-
-    # Nested check
-    var s2 = String('{"a": 1}trailing')
-    var p2 = Parser(s2)
-    var span2 = p2.expect_object_bytes()
-    assert_equal(len(span2), String('{"a": 1}').byte_length())
-
-
 def test_expect_int_bytes() raises:
     var json = String(
         "12345, -67890, 1234567890123456789, -9876543210987654321"

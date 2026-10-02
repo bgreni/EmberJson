@@ -540,8 +540,10 @@ def main() raises:
 Any deserialized struct can defer expensive subtrees by declaring fields
 as `Lazy` wrappers (`LazyValue`, `LazyString`, `LazyInt`, `LazyFloat`,
 or `Lazy[YourType, origin]`): during `from_json` those fields only
-record their byte span (grammar-validated, so re-serialization is safe),
-and materialize when you call `.get()`. The struct is parameterized on
+record their byte span, and materialize when you call `.get()`. Like
+simdjson's On Demand API, a lazy array or object is captured by counting
+its brackets, so malformed content inside it is reported by `.get()`, not
+by `from_json`. The struct is parameterized on
 the input's origin, which lets the compiler guarantee the spans cannot
 outlive the source string.
 

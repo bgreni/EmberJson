@@ -1,4 +1,4 @@
-from ._serde.deserializer import from_json_bytes, RawCapture
+from ._serde.deserializer import from_json_bytes
 from .value import Value
 from std.hashlib import Hasher
 
@@ -35,7 +35,6 @@ struct Lazy[
 ](
     Deserializable,
     Hashable,
-    RawCapture,
     Serializable,
     TrivialRegisterPassable,
 ):
@@ -45,20 +44,26 @@ struct Lazy[
     `BorrowingDeserializer.raw_bytes[kind]`); no interpretation happens
     until `get()`, which re-parses that span through a fresh deserializer.
 
+    Validation is simdjson On Demand's "validate what you use": an array or
+    object is captured by counting its brackets along the structural index,
+    so only UTF-8 (checked once by `emberjson.from_json`) and nesting depth
+    are enforced at capture. Malformed content inside it -- `[1 2]`, a bad
+    escape, mismatched brackets -- is raised by `get()`, not `from_json`. A
+    scalar is a single token and is validated as it is captured.
+
     `serialize` does NOT echo the captured span verbatim. emberserde's
     `Serializer` trait has no raw-passthrough hook (only
     `BorrowingDeserializer` does, as `raw_bytes`), so it materializes
-    through `get()` (the span is already grammar-validated at capture
-    time) and re-serializes that value through the pipeline. That
+    through `get()` and re-serializes that value through the pipeline. That
     re-encoding is only semantically equivalent to the source wire text,
     not byte-identical: whitespace is normalized to compact form, floats
     lose trailing zeros/exponent spelling, object key order can change,
     etc. See `test_serialize_reencodes_rather_than_echoing` in
     `test/emberjson/serde/test_borrow_lazy.mojo` for a pinned example.
 
-    `get()` failing (the captured span parses as the right *shape* --
-    `kind` validates only that much -- but not as a valid `T`, e.g. a
-    struct missing a required field) surfaces as a `SerializationError`
+    `get()` failing (the captured span is malformed, or well-formed but
+    not a valid `T`, e.g. a struct missing a required field) surfaces as a
+    `SerializationError`
     from `serialize` (via `_checked_get`), not a crash or silent bad
     output.
 

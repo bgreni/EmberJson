@@ -1098,22 +1098,6 @@ struct Parser[origin: ImmOrigin, options: ParseOptions = ParseOptions()]:
         self._validate_number()
         return Span(unsafe_ptr=start.p, length=ptr_dist(start.p, self.data.p))
 
-    def expect_object_bytes(
-        mut self,
-    ) raises DeserializationError -> Span[Byte, Self.origin]:
-        self.skip_whitespace()
-        if unlikely(not self.has_more() or self.data[] != `{`):
-            raise self.shape_error("an object")
-        return self._expect_validated_bytes()
-
-    def expect_array_bytes(
-        mut self,
-    ) raises DeserializationError -> Span[Byte, Self.origin]:
-        self.skip_whitespace()
-        if unlikely(not self.has_more() or self.data[] != `[`):
-            raise self.shape_error("an array")
-        return self._expect_validated_bytes()
-
 
 def parse_root[
     options: ParseOptions = ParseOptions()

@@ -1,6 +1,5 @@
 from emberjson import (
     from_json,
-    try_from_json,
     to_json,
     LazyValue,
     LazyString,
@@ -9,7 +8,6 @@ from emberjson import (
 from std.testing import (
     assert_equal,
     assert_true,
-    assert_false,
     assert_raises,
     TestSuite,
 )
@@ -51,14 +49,16 @@ def test_mixed_lazy_fields() raises:
     assert_true('"id":7' in out)
 
 
-def test_lazy_subtree_validated_at_capture() raises:
-    # The lazy subtree is grammar-validated when its span is captured,
-    # even though it is not materialized: malformed content fails the
-    # deserialize call itself, not a later .get().
+def test_lazy_subtree_validated_on_get() raises:
+    # A lazy object or array is captured by counting its brackets, so
+    # malformed content inside it passes `from_json` and is reported by
+    # `.get()` (simdjson On Demand's "validate what you use").
     var bad = String(
         '{"id": 1, "flag": false, "heavy": {"a": nope}, "note": "x"}'
     )
-    assert_false(Bool(try_from_json[Mixed[origin_of(bad)]](bad)))
+    var m = from_json[Mixed[origin_of(bad)]](bad)
+    with assert_raises():
+        _ = m.heavy.get()
 
 
 def test_field_order_independent() raises:

@@ -60,10 +60,12 @@ All JSON data is represented as this unified type.
     SIMD structural index (`EmberJsonCursor`) token by token, with the
     hand-written `Parser` reading scalars
 - **`emberjson/_deserialize/_errors.mojo`** — every parse error message.
-  Each engine (`Value`, `Document`, reflection, the `Lazy`/skip validator,
+  Each engine (`Value`, `Document`, reflection, the skip validator,
   JSON Pointer) detects errors in its own walk and raises these shared
   constructors; `test/emberjson/test_error_parity.mojo` checks that they
-  raise the same error for the same malformed input
+  raise the same error for the same malformed input. A `Lazy` array/object
+  capture only counts brackets (simdjson On Demand style), so it is held to
+  the same verdict once `.get()` runs, not the same error
 - **`emberjson/teju/`** — Teju Jagua float-to-string algorithm (large lookup tables in `tables.mojo`)
 - **`emberjson/schema.mojo`** — the `coerce_*` functions for emberserde's
   `Transform`; field validation, clamping and redaction are emberserde
