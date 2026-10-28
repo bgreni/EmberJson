@@ -151,11 +151,17 @@ def _structural_index[
             64-byte chunks may always be loaded. Otherwise the final
             partial chunk is staged through a zeroed stack buffer and the
             input is never read past `input_len`.
+        with_flags: Fill `backslashes` and `flags`, as
+            `structural_index_with_flags` documents. Otherwise both are
+            left untouched.
+        o: Origin of `out_ptr`.
 
     Args:
         ptr: Start of the JSON input.
         input_len: Length of the JSON input in bytes.
         out_ptr: The output buffer.
+        backslashes: Receives the offset of every backslash, ascending.
+        flags: Receives the `INDEX_*` bits.
     """
     comptime if _X86_STAGE1:
         # The interpreter takes the loop below: its kernels all have

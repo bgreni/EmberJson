@@ -6,7 +6,7 @@ from ._deserialize import Parser
 from ._deserialize._errors import duplicate_key, expected_value
 from .utils import write_escaped_string
 from std.python import PythonObject, Python
-from std.hashlib import hash
+from std.hash import hash
 
 from emberserde.serialize import Serializer
 from emberserde.deserialize import Deserializer, SelfDescribingDeserializer

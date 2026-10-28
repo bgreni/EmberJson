@@ -189,7 +189,7 @@ def test_nested_structs() raises:
     var p = Person("Homer", 39, addr^, tags^)
 
     assert_equal(
-        to_json(p^),
+        to_json(p),
         (
             '{"name":"Homer","age":39,"address":{"street":"123 Main'
             ' St","city":"Springfield","zip":62704},"tags":["safety","inspector"]}'
@@ -226,17 +226,17 @@ def test_deep_hierarchy() raises:
         ' St","city":"Emp'
         ' City","zip":54321},"tags":["dev"]}]}},"founded_year":1990}'
     )
-    assert_equal(to_json(company^), expected)
+    assert_equal(to_json(company), expected)
 
 
 def test_wrappers() raises:
     var w_int = IntWrapper(123, "an integer")
-    assert_equal(to_json(w_int^), '{"value":123,"description":"an integer"}')
+    assert_equal(to_json(w_int), '{"value":123,"description":"an integer"}')
 
     var addr = Address("Row", "London", 123)
     var w_addr = AddressWrapper(addr^, "an address")
     assert_equal(
-        to_json(w_addr^),
+        to_json(w_addr),
         (
             '{"value":{"street":"Row","city":"London","zip":123},"description":"an'
             ' address"}'
@@ -247,12 +247,12 @@ def test_wrappers() raises:
 def test_optional_fields() raises:
     var m1 = MaybeFields(10, String("foo"), Address("A", "B", 1))
     assert_equal(
-        to_json(m1^),
+        to_json(m1),
         '{"f1":10,"f2":"foo","f3":{"street":"A","city":"B","zip":1}}',
     )
 
     var m2 = MaybeFields(None, None, None)
-    assert_equal(to_json(m2^), '{"f1":null,"f2":null,"f3":null}')
+    assert_equal(to_json(m2), '{"f1":null,"f2":null,"f3":null}')
 
 
 def test_deep_recursion() raises:
@@ -266,7 +266,7 @@ def test_deep_recursion() raises:
     var n1 = DeepNode(1, c1^)
 
     assert_equal(
-        to_json(n1^),
+        to_json(n1),
         '{"val":1,"children":[{"val":2,"children":[{"val":3,"children":[]}]}]}',
     )
 

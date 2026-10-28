@@ -163,15 +163,15 @@ def _mutations(s: String) -> List[String]:
     for i in range(n):
         var d = List[Byte](b[:i])
         d.extend(b[i + 1 :])
-        out.append(String(unsafe_from_utf8=d^))
+        out.append(String(unsafe_from_utf8=d))
         for k in range(len(extra)):
             var r = List[Byte](b)
             r[i] = extra[k]
-            out.append(String(unsafe_from_utf8=r^))
+            out.append(String(unsafe_from_utf8=r))
             var ins = List[Byte](b[:i])
             ins.append(extra[k])
             ins.extend(b[i:])
-            out.append(String(unsafe_from_utf8=ins^))
+            out.append(String(unsafe_from_utf8=ins))
     return out^
 
 

@@ -2,7 +2,7 @@ from std.testing import assert_equal, TestSuite
 from emberjson._serde import to_json
 from emberjson import Value, Object, Array, Null, from_json
 from emberjson import to_json_pretty, Rename, Skip
-from std.hashlib import Hasher
+from std.hash import Hasher
 
 
 @fieldwise_init

@@ -232,6 +232,7 @@ def _scan_integer_part[
             past three digits, and the fraction's wide read then starts
             sooner. Only the speed differs, never what is accepted.
         sse: See `ingest_digits`.
+        validate_only: See `scan_number`.
     """
     var start = p.p
     var neg = p.unsafe_get() == `-`

@@ -266,8 +266,8 @@ def value_error(
 def check_string_body(p: BytePtr, n: Int) raises DeserializationError:
     """Raises the first error in the `n` string-body bytes at `p`, in the
     order `Parser.scan_string` meets them: a backslash followed by no
-    escape name, or a raw control byte. (A backslash on the last byte is
-    left to the caller, whose `n` ends before its escape name.)
+    escape name, or a raw control byte. A backslash on the last byte is
+    left to the caller, whose `n` ends before its escape name.
 
     For walkers whose fast checks only learn that a string is bad -- an
     index that never closes it, a control byte somewhere inside -- so
@@ -487,7 +487,7 @@ def copy_to_string[
                         handle_unicode_codepoint(p, dest, end)
                     else:
                         dest.append(decode_escape(c))
-        return String(unsafe_from_utf8=dest^)
+        return String(unsafe_from_utf8=dest)
 
     comptime if not ignore_unicode:
         if found_escaped:

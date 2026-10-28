@@ -576,9 +576,9 @@ struct EmberJsonCursor[
         scalar readers do: the index marks only where a scalar STARTS, so a
         tail glued to one (`12x`) has no entry and nothing else sees it. An
         entry right at `end_off` is a structural the next read validates,
-        so the bytes are loaded only when none is there. (A byte after a
+        so the bytes are loaded only when none is there. A byte after a
         string or container is left to the next read: it is only glued to
-        a scalar.)"""
+        a scalar."""
         while self.i < self.n and self.peek_off() < end_off:
             self.advance()
         if self.peek_off() != end_off and self.p.data.dist() > 0:
